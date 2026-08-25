@@ -7,17 +7,22 @@ const defaultSettings = {
   storeName: "Kashvi Fashions",
   upiId: "",
   whatsapp: "",
+  whatsappNo: "",
   originPincode: "533001",
+  defaultCourier: "India Post (Registered Parcel)",
   logoUrl: "",
+  instagramUrl: "",
+  facebookUrl: "",
+  youtubeUrl: "",
   deliveryCharge: 0
 };
 
 export default function App() {
   const [view, setView] = useState(
-  window.location.pathname.toLowerCase() === "/kfmama"
-    ? "admin"
-    : "store"
-);
+    window.location.pathname.toLowerCase() === "/kfmama"
+      ? "admin"
+      : "store"
+  );
   const [page, setPage] = useState("dashboard");
   const [notice, setNotice] = useState("");
 
@@ -30,14 +35,7 @@ export default function App() {
   const [units, setUnits] = useState([]);
   const [pincodes, setPincodes] = useState([]);
   const [banners, setBanners] = useState([]);
-  const [settings, setSettings] = useState(() => {
-    try {
-      const saved = localStorage.getItem("kashvi_settings");
-      return saved ? JSON.parse(saved) : defaultSettings;
-    } catch {
-      return defaultSettings;
-    }
-  });
+  const [settings, setSettings] = useState(defaultSettings);
 
   const notify = text => {
     setNotice(text);
@@ -45,27 +43,50 @@ export default function App() {
   };
 
   useEffect(() => {
-    try {
-      localStorage.setItem("kashvi_settings", JSON.stringify(settings));
-    } catch (e) {
-      console.error("Storage sync error", e);
-    }
-  }, [settings]);
-
-  useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Settings Table
-        const { data: setRes } = await supabase.from("settings").select("*").eq("id", 1).maybeSingle();
-        if (setRes) {
-  setSettings(prev => ({
-    ...prev,
-    ...setRes
-  }));
-}
+        // 1. Settings from Database (Checks store_settings or settings table)
+        // Settings directly from dedicated store_settings table
+const { data: setRes } = await supabase
+  .from("store_settings")
+  .select("*")
+  .eq("id", "main_settings")
+  .maybeSingle();
+
+if (setRes) {
+  const raw = setRes.data || {};
+  setSettings({
+    ...defaultSettings,
+    ...raw,
+    storeName: setRes.store_name || raw.storeName || "Kashvi Fashions",
+    upiId: setRes.upi_id || raw.upiId || "",
+    whatsapp: setRes.whatsapp_no || raw.whatsapp || "",
+    whatsappNo: setRes.whatsapp_no || raw.whatsappNo || "",
+    originPincode: setRes.origin_pincode || raw.originPincode || "533001",
+    defaultCourier: setRes.default_courier || raw.defaultCourier || "India Post (Registered Parcel)",
+    logoUrl: setRes.logo_url || raw.logoUrl || "",
+    instagramUrl: setRes.instagram_url || raw.instagramUrl || "",
+    facebookUrl: setRes.facebook_url || raw.facebookUrl || "",
+    youtubeUrl: setRes.youtube_url || raw.youtubeUrl || ""
+  });
+} else {
+          // Fallback check to legacy settings table if store_settings is empty
+          const { data: legacySet } = await supabase.from("settings").select("*").maybeSingle();
+          if (legacySet) {
+            setSettings(prev => ({
+              ...prev,
+              ...legacySet,
+              ...(legacySet.data || {})
+            }));
+          }
+        }
 
         // 2. Products Table
-        const { data: p } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+        const { data: p } = await supabase
+          .from("products")
+          .select("*")
+          .order("created_at", { ascending: false });
+
         if (p) {
           setProducts(
             p.map(item => {
@@ -112,7 +133,7 @@ export default function App() {
         const { data: u } = await supabase.from("units").select("*");
         if (u) setUnits(u);
 
-        // 6. Pincodes Table (Fetch with high range & format mapping)
+        // 6. Pincodes Table
         const { data: pin, error: pinErr } = await supabase
           .from("pincodes")
           .select("*")
@@ -137,6 +158,7 @@ export default function App() {
         console.error("Data load error:", err);
       }
     };
+
     fetchData();
   }, []);
 
@@ -168,9 +190,9 @@ export default function App() {
           setSettings={setSettings}
           notify={notify}
           onStore={() => {
-  window.history.pushState({}, "", "/");
-  setView("store");
-}}
+            window.history.pushState({}, "", "/");
+            setView("store");
+          }}
         />
       ) : (
         <StorefrontLayout
@@ -183,9 +205,9 @@ export default function App() {
           pincodes={pincodes}
           notify={notify}
           onAdmin={() => {
-  window.history.pushState({}, "", "/kfmama");
-  setView("admin");
-}}
+            window.history.pushState({}, "", "/kfmama");
+            setView("admin");
+          }}
         />
       )}
 

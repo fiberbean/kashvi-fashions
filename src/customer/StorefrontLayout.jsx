@@ -3,6 +3,8 @@ import "./Storefront.css";
 import { supabase } from "../lib/supabase";
 import { sendAutomatedEmail } from "../lib/emailService";
 import KFUPISystem from "./KFUPISystem";
+import CartDrawer from "./CartDrawer";
+import { CartProvider, useCart } from "../context/CartContext";
 
 const money = value => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 const makeId = prefix => `${prefix}${Date.now().toString().slice(-8)}`;
@@ -65,7 +67,31 @@ const shippingCategory = (destination, originPincode) => {
   return "Other States";
 };
 
-export default function StorefrontLayout({
+export default function StorefrontLayout(props) {
+  const [customerSession, setCustomerSession] = useState(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setCustomerSession(data?.session?.user || null);
+    });
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setCustomerSession(session?.user || null);
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, []);
+
+  return (
+    <CartProvider currentCustomer={customerSession} notify={props.notify}>
+      <StorefrontContent {...props} sessionCustomer={customerSession} />
+    </CartProvider>
+  );
+}
+
+function StorefrontContent({
   products = [],
   categories = [],
   banners = [],
@@ -74,9 +100,11 @@ export default function StorefrontLayout({
   setOrders = () => {},
   pincodes = [],
   notify = () => {},
-  onAdmin = () => {}
+  sessionCustomer
 }) {
-  const [cart, setCart] = useState([]);
+  const { cart, clearCart, addItemsToCart, cartCount, subtotal } = useCart();
+
+  const [toastAlert, setToastAlert] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("All");
@@ -85,7 +113,6 @@ export default function StorefrontLayout({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paymentSubmitted, setPaymentSubmitted] = useState(false);
   const [submittedOrderId, setSubmittedOrderId] = useState("");
-  const [paymentStep, setPaymentStep] = useState(false);
   const [activePendingOrder, setActivePendingOrder] = useState(null);
   const [orderInitiating, setOrderInitiating] = useState(false);
 
@@ -95,15 +122,36 @@ export default function StorefrontLayout({
   const [pincodeError, setPincodeError] = useState(false);
 
   // CUSTOMER PROFILE & AUTH
-  const [customer, setCustomer] = useState(null);
+  const [customer, setCustomer] = useState(sessionCustomer);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [myOrdersModal, setMyOrdersModal] = useState(false);
   const [inspectCustomerOrder, setInspectCustomerOrder] = useState(null);
   const [addressesModal, setAddressesModal] = useState(false);
   const [profileModal, setProfileModal] = useState(false);
 
-  // SAVED ADDRESSES
+  // LOGO PERSISTENCE STATE
+  const [storeLogoUrl, setStoreLogoUrl] = useState(() => {
+    return (
+      settings?.logoUrl ||
+      settings?.data?.logoUrl ||
+      settings?.logo ||
+      localStorage.getItem("kashvi_store_logo") ||
+      ""
+    );
+  });
+
+  useEffect(() => {
+    const propLogo = settings?.logoUrl || settings?.data?.logoUrl || settings?.logo;
+    if (propLogo) {
+      setStoreLogoUrl(propLogo);
+      localStorage.setItem("kashvi_store_logo", propLogo);
+    }
+  }, [settings]);
+
+  // SAVED ADDRESSES & CHECKOUT SELECTION STATE
   const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+  const [isAddingNewAddress, setIsAddingNewAddress] = useState(false);
   const [newAddressForm, setNewAddressForm] = useState({ name: "", phone: "", address: "", pincode: "", city: "", state: "" });
 
   const [accountOpen, setAccountOpen] = useState(false);
@@ -155,38 +203,41 @@ export default function StorefrontLayout({
     try {
       const localStored = localStorage.getItem(`addresses_${user.id}`);
       if (localStored) {
-        setSavedAddresses(JSON.parse(localStored));
+        const parsed = JSON.parse(localStored);
+        setSavedAddresses(parsed);
+        if (parsed.length > 0) {
+          setSelectedAddressId(parsed[0].id);
+          setForm({
+            name: parsed[0].name,
+            phone: parsed[0].phone,
+            address: parsed[0].address,
+            pincode: parsed[0].pincode,
+            email: user.email || ""
+          });
+          setIsAddingNewAddress(false);
+        } else {
+          setIsAddingNewAddress(true);
+        }
+      } else {
+        setIsAddingNewAddress(true);
       }
     } catch (err) {
       console.warn("Addresses local load:", err);
+      setIsAddingNewAddress(true);
     }
   };
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (data?.session?.user) {
-        setCustomer(data.session.user);
-        loadCustomerData(data.session.user);
-      }
-    };
-    getSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      const u = session?.user || null;
-      setCustomer(u);
-      if (u) loadCustomerData(u);
-    });
-
-    return () => {
-      authListener?.subscription?.unsubscribe();
-    };
-  }, []);
+    if (sessionCustomer) {
+      setCustomer(sessionCustomer);
+      loadCustomerData(sessionCustomer);
+    }
+  }, [sessionCustomer]);
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", address: "", pincode: "" });
 
   useEffect(() => {
-    if (customer) {
+    if (customer && isAddingNewAddress) {
       setForm(prev => ({
         ...prev,
         name: prev.name || customer.user_metadata?.full_name || customer.user_metadata?.name || "",
@@ -194,7 +245,7 @@ export default function StorefrontLayout({
         phone: prev.phone || customer.user_metadata?.mobile || customer.phone || ""
       }));
     }
-  }, [customer]);
+  }, [customer, isAddingNewAddress]);
 
   useEffect(() => {
     const cleanPin = String(form.pincode || "").trim();
@@ -256,10 +307,8 @@ export default function StorefrontLayout({
 
   const zone = shippingCategory(liveDestination, settings.originPincode);
   const totalWeight = cart.reduce((sum, item) => sum + weightGrams(item), 0);
-  const subtotal = cart.reduce((sum, item) => sum + Number(item.price) * Number(item.qty), 0);
   const shipping = liveDestination ? shippingRate(totalWeight || 1, zone) : 0;
   const total = subtotal + shipping;
-  const cartCount = cart.reduce((sum, item) => sum + Number(item.qty || 0), 0);
 
   const filtered = products.filter(
     p =>
@@ -272,27 +321,8 @@ export default function StorefrontLayout({
         p.description?.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const addItemsToCart = (itemsToAdd, actionType = "continue") => {
-    if (!itemsToAdd || !itemsToAdd.length) return;
-
-    setCart(prevList => {
-      let updated = [...prevList];
-      itemsToAdd.forEach(newItem => {
-        const idx = updated.findIndex(
-          x => x.productId === newItem.productId && x.size === newItem.size && x.colour === newItem.colour
-        );
-        if (idx >= 0) {
-          updated[idx] = { ...updated[idx], qty: updated[idx].qty + newItem.qty };
-        } else {
-          updated.push(newItem);
-        }
-      });
-      return updated;
-    });
-
-    setSelectedProduct(null);
-
-    if (actionType === "checkout") {
+  const handleQuickAdd = (itemsToAdd, actionType = "continue") => {
+    addItemsToCart(itemsToAdd, actionType, () => {
       if (!customer) {
         setCartOpen(false);
         setAccountMode("login");
@@ -302,15 +332,9 @@ export default function StorefrontLayout({
       }
       setCheckoutOpen(true);
       notify("Proceeding to secure checkout");
-    } else {
-      notify(`Added ${itemsToAdd.length} selection(s) to bag. Continue browsing!`);
-    }
+    });
+    setSelectedProduct(null);
   };
-
-  const changeQty = (index, delta) =>
-    setCart(list => list.map((item, i) => (i === index ? { ...item, qty: Math.max(1, item.qty + delta) } : item)));
-
-  const removeItem = index => setCart(list => list.filter((_, i) => i !== index));
 
   const handleCustomerLogin = async e => {
     e.preventDefault();
@@ -329,10 +353,18 @@ export default function StorefrontLayout({
       });
       if (error) throw error;
       if (data?.user) {
+        const userName = data.user.user_metadata?.full_name || "Valued Customer";
         setCustomer(data.user);
+        loadCustomerData(data.user);
         setAccountOpen(false);
         setLoginForm({ identifier: "", password: "" });
-        notify(`Welcome back, ${data.user.user_metadata?.full_name || "Customer"}!`);
+
+        setToastAlert({
+          title: `Welcome back, ${userName}! ✨`,
+          desc: "Signed in to Kashvi Fashions",
+          initial: userName.charAt(0).toUpperCase()
+        });
+        setTimeout(() => setToastAlert(null), 3800);
       }
     } catch (err) {
       setAuthError(err.message || "Invalid credentials. Please try again.");
@@ -426,10 +458,16 @@ export default function StorefrontLayout({
       if (verifyRes.data?.user || verifyRes.data?.session?.user) {
         const u = verifyRes.data.user || verifyRes.data.session.user;
         setCustomer(u);
-        notify("Account verified successfully! Welcome to Kashvi Fashions.");
+        loadCustomerData(u);
         setAccountOpen(false);
         setAccountMode("login");
         setOtpCode("");
+        setToastAlert({
+          title: `Welcome, ${u.user_metadata?.full_name || "Valued Customer"}! ✨`,
+          desc: "Account verified successfully",
+          initial: "✓"
+        });
+        setTimeout(() => setToastAlert(null), 3800);
       }
     } catch (err) {
       console.error("OTP verification error:", err);
@@ -456,8 +494,16 @@ export default function StorefrontLayout({
   const handleCustomerLogout = async () => {
     await supabase.auth.signOut();
     setCustomer(null);
+    setSavedAddresses([]);
+    setSelectedAddressId(null);
+    setIsAddingNewAddress(true);
     setAccountMenuOpen(false);
-    notify("Signed out successfully");
+    setToastAlert({
+      title: "Signed Out Successfully",
+      desc: "See you again soon!",
+      initial: "👋"
+    });
+    setTimeout(() => setToastAlert(null), 3000);
   };
 
   const handleUpdateProfile = async e => {
@@ -498,6 +544,16 @@ export default function StorefrontLayout({
 
     const updated = [payload, ...savedAddresses];
     setSavedAddresses(updated);
+    setSelectedAddressId(payload.id);
+    setForm({
+      name: payload.name,
+      phone: payload.phone,
+      address: payload.address,
+      pincode: payload.pincode,
+      email: form.email || customer?.email
+    });
+    setIsAddingNewAddress(false);
+
     if (customer?.id) {
       localStorage.setItem(`addresses_${customer.id}`, JSON.stringify(updated));
     }
@@ -505,8 +561,19 @@ export default function StorefrontLayout({
     setNewAddressForm({ name: "", phone: "", address: "", pincode: "", city: "", state: "" });
   };
 
-  // INITIATE UPI ORDER & OPEN KFUPISystem MODAL
-  const startPayment = async (e) => {
+  const handleSelectSavedAddress = (addr) => {
+    setSelectedAddressId(addr.id);
+    setForm({
+      name: addr.name,
+      phone: addr.phone,
+      address: addr.address,
+      pincode: addr.pincode,
+      email: form.email || customer?.email
+    });
+    setIsAddingNewAddress(false);
+  };
+
+  const startPayment = async e => {
     if (e && e.preventDefault) e.preventDefault();
 
     if (!customer) {
@@ -528,7 +595,7 @@ export default function StorefrontLayout({
     const cleanPin = String(form.pincode || "").trim();
 
     if (!cleanName || !cleanPhone || !cleanAddress || !cleanPin) {
-      notify("Please fill all required delivery coordinates");
+      notify("Please fill or select all required delivery coordinates");
       return;
     }
 
@@ -545,9 +612,13 @@ export default function StorefrontLayout({
     try {
       setOrderInitiating(true);
       const createdAt = new Date().toISOString();
-      const newOrderId = makeId("KF");
+      
+      // Generate Order ID format: KF262700001 (KF + FY 2627 + 5-digit auto serial)
+      const fyCode = "2627"; 
+      const serialNum = String((orders?.length || 0) + 1).padStart(5, '0');
+      const newOrderId = `KF${fyCode}${serialNum}`; // e.g. KF262700001
 
-      const newOrder = {
+      const pendingOrder = {
         id: newOrderId,
         customer_id: customer.id,
         status: "payment_verification",
@@ -560,7 +631,7 @@ export default function StorefrontLayout({
           amount: Number(total.toFixed(2))
         },
         shipping: {
-          courier: "India Post (Speed Post)",
+          courier: settings?.defaultCourier || "India Post (Speed Post)",
           trackingId: ""
         },
         refund: {},
@@ -577,10 +648,8 @@ export default function StorefrontLayout({
         ]
       };
 
-      const { error } = await supabase.from("orders").insert([newOrder]);
-      if (error) throw error;
-
-      setActivePendingOrder(newOrder);
+      // ONLY pass to QR modal, DO NOT save to database yet!
+      setActivePendingOrder(pendingOrder);
       setCheckoutOpen(false);
     } catch (err) {
       console.error("Order initialization error:", err);
@@ -598,6 +667,17 @@ export default function StorefrontLayout({
 
   return (
     <div className="store-container">
+      {/* TOP CENTER LUXURY TOAST BANNER */}
+      {toastAlert && (
+        <div className="kf-premium-toast">
+          <div className="kf-premium-toast-badge">{toastAlert.initial}</div>
+          <div className="kf-toast-content">
+            <h4 className="kf-toast-title">{toastAlert.title}</h4>
+            <p className="kf-toast-desc">{toastAlert.desc}</p>
+          </div>
+        </div>
+      )}
+
       <div className="store-announcement">
         ✦ COMPLIMENTARY SHIPPING ON ALL PREPAID UPI PURCHASES ✦
       </div>
@@ -605,26 +685,61 @@ export default function StorefrontLayout({
       {/* HEADER */}
       <header className="store-header">
         <div className="store-header-inner">
-          <div className="store-logo" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            {settings?.logoUrl ? (
-              <img src={settings.logoUrl} alt="Store Logo" className="store-header-logo-img" />
+          <div 
+            className="store-logo" 
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            style={{ display: "flex", alignItems: "center", cursor: "pointer" }}
+          >
+            {storeLogoUrl ? (
+              <img
+                src={storeLogoUrl}
+                alt="Store Logo"
+                className="store-header-logo-img"
+                style={{
+                  height: "64px",
+                  maxHeight: "68px",
+                  width: "auto",
+                  objectFit: "contain",
+                  display: "block"
+                }}
+                onError={() => {
+                  setStoreLogoUrl("");
+                  localStorage.removeItem("kashvi_store_logo");
+                }}
+              />
             ) : (
               <div>
-                <strong>{settings?.storeName || "KASHVI"}</strong>
-                <span>FASHIONS · ESTD 2025</span>
+                <strong>{settings?.storeName || settings?.data?.storeName || "KASHVI"}</strong>
+                <span>{settings?.tagline || settings?.data?.tagline || "FASHIONS · ESTD 2025"}</span>
               </div>
             )}
           </div>
 
-          <div className="store-actions">
+          <div className="store-actions" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             {customer ? (
               <div className="store-user-menu-wrap" style={{ position: "relative" }}>
                 <button
                   type="button"
-                  className="store-auth-btn user-logged"
+                  title="My Account"
                   onClick={() => setAccountMenuOpen(v => !v)}
+                  style={{
+                    width: "42px",
+                    height: "42px",
+                    borderRadius: "50%",
+                    background: "#ffffff",
+                    border: "1.5px solid var(--store-border)",
+                    color: "var(--store-primary)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.04)"
+                  }}
                 >
-                  👤 {customer.user_metadata?.full_name?.split(" ")[0] || customer.user_metadata?.name || customer.email?.split("@")[0] || "My Account"} ▾
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
                 </button>
 
                 {accountMenuOpen && (
@@ -633,11 +748,11 @@ export default function StorefrontLayout({
                     style={{
                       position: "absolute",
                       right: 0,
-                      top: "calc(100% + 8px)",
+                      top: "calc(100% + 10px)",
                       background: "#ffffff",
                       border: "1px solid var(--store-border)",
-                      borderRadius: "10px",
-                      boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                      borderRadius: "12px",
+                      boxShadow: "0 12px 30px rgba(0,0,0,0.12)",
                       minWidth: "220px",
                       padding: "8px",
                       zIndex: 1000,
@@ -647,16 +762,16 @@ export default function StorefrontLayout({
                     }}
                   >
                     <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--store-border)", marginBottom: "4px" }}>
-                      <strong style={{ fontSize: "13.5px", color: "var(--store-primary)", display: "block" }}>
+                      <strong style={{ fontSize: "14px", color: "var(--store-primary)", display: "block" }}>
                         {customer.user_metadata?.full_name || "Valued Customer"}
                       </strong>
-                      <small style={{ color: "var(--store-text-muted)", fontSize: "11px" }}>{customer.email}</small>
+                      <small style={{ color: "var(--store-text-muted)", fontSize: "11.5px" }}>{customer.email}</small>
                     </div>
 
                     <button
                       type="button"
                       className="store-dropdown-link"
-                      style={{ textAlign: "left", padding: "8px 10px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}
+                      style={{ textAlign: "left", padding: "9px 12px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}
                       onClick={() => { setAccountMenuOpen(false); setMyOrdersModal(true); }}
                     >
                       📦 <span>My Orders ({myOrdersList.length})</span>
@@ -665,7 +780,7 @@ export default function StorefrontLayout({
                     <button
                       type="button"
                       className="store-dropdown-link"
-                      style={{ textAlign: "left", padding: "8px 10px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}
+                      style={{ textAlign: "left", padding: "9px 12px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}
                       onClick={() => { setAccountMenuOpen(false); setAddressesModal(true); }}
                     >
                       📍 <span>Saved Addresses</span>
@@ -674,7 +789,7 @@ export default function StorefrontLayout({
                     <button
                       type="button"
                       className="store-dropdown-link"
-                      style={{ textAlign: "left", padding: "8px 10px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}
+                      style={{ textAlign: "left", padding: "9px 12px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "600", color: "#334155", display: "flex", alignItems: "center", gap: "8px" }}
                       onClick={() => { setAccountMenuOpen(false); setProfileModal(true); }}
                     >
                       ⚙️ <span>Profile Settings</span>
@@ -685,7 +800,7 @@ export default function StorefrontLayout({
                     <button
                       type="button"
                       className="store-dropdown-link"
-                      style={{ textAlign: "left", padding: "8px 10px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "700", color: "#ef4444", display: "flex", alignItems: "center", gap: "8px" }}
+                      style={{ textAlign: "left", padding: "9px 12px", borderRadius: "6px", border: "none", background: "transparent", cursor: "pointer", fontSize: "13px", fontWeight: "700", color: "#ef4444", display: "flex", alignItems: "center", gap: "8px" }}
                       onClick={handleCustomerLogout}
                     >
                       🚪 <span>Sign Out</span>
@@ -696,20 +811,80 @@ export default function StorefrontLayout({
             ) : (
               <button
                 type="button"
-                className="store-auth-btn"
+                title="Sign In"
                 onClick={() => {
                   setAuthError("");
                   setAccountMode("login");
                   setAccountOpen(true);
                 }}
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "50%",
+                  background: "#ffffff",
+                  border: "1.5px solid var(--store-border)",
+                  color: "var(--store-primary)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
               >
-                Sign In
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
               </button>
             )}
 
-            <button type="button" className="store-cart-btn" onClick={() => setCartOpen(true)}>
-              <span>🛍 Bag</span>
-              {cartCount > 0 && <span className="store-cart-badge">{cartCount}</span>}
+            {/* LUXURY CART BUTTON */}
+            <button
+              type="button"
+              title="Shopping Bag"
+              onClick={() => setCartOpen(true)}
+              style={{
+                position: "relative",
+                width: "42px",
+                height: "42px",
+                borderRadius: "50%",
+                background: "var(--store-primary)",
+                color: "#ffffff",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 4px 12px rgba(14, 92, 70, 0.25)"
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 0 1-8 0" />
+              </svg>
+
+              {cartCount > 0 && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: "-4px",
+                    right: "-4px",
+                    background: "#2dd4bf",
+                    color: "#093c2e",
+                    fontSize: "11px",
+                    fontWeight: "800",
+                    minWidth: "19px",
+                    height: "19px",
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.2)"
+                  }}
+                >
+                  {cartCount}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -872,75 +1047,79 @@ export default function StorefrontLayout({
       </section>
 
       {/* FOOTER */}
-      <footer className="store-footer">
-        <div className="store-footer-inner">
-          <strong className="store-footer-brand">{settings?.storeName?.toUpperCase() || "KASHVI FASHIONS"}</strong>
-          <p className="store-footer-desc">Redefining daily lifestyle essentials with unmatched precision and silhouette comfort.</p>
-          
-          <div className="store-footer-social-icons">
-            {settings?.whatsappNo && (
-              <a 
-                href={`https://wa.me/91${String(settings.whatsappNo).replace(/[^0-9]/g, "")}`} 
-                target="_blank" 
-                rel="noreferrer"
-                className="store-social-icon-btn wa"
-                title="Chat on WhatsApp"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.062-2.115-.527-1.745-.724-2.87-2.502-2.96-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.275.072.376-.044c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.099.824zm-3.392-10.416c-5.514 0-10 4.486-10 10 0 1.932.551 3.737 1.506 5.267l-1.545 5.64 5.801-1.521c1.477.854 3.197 1.334 5.038 1.334 5.514 0 10-4.486 10-10s-4.486-10-10-10z"/>
-                </svg>
-              </a>
-            )}
+<footer className="store-footer">
+  <div className="store-footer-inner">
+    <strong className="store-footer-brand">
+      {settings?.storeName?.toUpperCase() || settings?.data?.storeName?.toUpperCase() || "KASHVI FASHIONS"}
+    </strong>
+    <p className="store-footer-desc">
+      {settings?.storeDescription || settings?.data?.storeDescription || "Redefining daily lifestyle essentials with unmatched precision and silhouette comfort."}
+    </p>
 
-            {settings?.instagramUrl && (
-              <a 
-                href={settings.instagramUrl} 
-                target="_blank" 
-                rel="noreferrer"
-                className="store-social-icon-btn insta"
-                title="Follow on Instagram"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
-                </svg>
-              </a>
-            )}
+    {/* SOCIAL MEDIA ICONS WITH DIRECT FALLBACKS */}
+    <div className="store-footer-social-icons">
+      {(settings?.whatsappNo || settings?.whatsapp || settings?.data?.whatsappNo || settings?.data?.whatsapp) && (
+        <a
+          href={`https://wa.me/91${String(settings?.whatsappNo || settings?.whatsapp || settings?.data?.whatsappNo || settings?.data?.whatsapp).replace(/[^0-9]/g, "")}`}
+          target="_blank"
+          rel="noreferrer"
+          className="store-social-icon-btn wa"
+          title="Chat on WhatsApp"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.771-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.694.062-2.115-.527-1.745-.724-2.87-2.502-2.96-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.394.86s.275.072.376-.044c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.099.824zm-3.392-10.416c-5.514 0-10 4.486-10 10 0 1.932.551 3.737 1.506 5.267l-1.545 5.64 5.801-1.521c1.477.854 3.197 1.334 5.038 1.334 5.514 0 10-4.486 10-10s-4.486-10-10-10z" />
+          </svg>
+        </a>
+      )}
 
-            {settings?.facebookUrl && (
-              <a 
-                href={settings.facebookUrl} 
-                target="_blank" 
-                rel="noreferrer"
-                className="store-social-icon-btn fb"
-                title="Like on Facebook"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.374 14.5 5 15.688 5H18V0h-3.808C10.595 0 9 1.582 9 4.615V8z"/>
-                </svg>
-              </a>
-            )}
+      {(settings?.instagramUrl || settings?.instagram_url || settings?.data?.instagramUrl || settings?.data?.instagram_url) && (
+        <a
+          href={settings?.instagramUrl || settings?.instagram_url || settings?.data?.instagramUrl || settings?.data?.instagram_url}
+          target="_blank"
+          rel="noreferrer"
+          className="store-social-icon-btn insta"
+          title="Follow on Instagram"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+          </svg>
+        </a>
+      )}
 
-            {settings?.youtubeUrl && (
-              <a 
-                href={settings.youtubeUrl} 
-                target="_blank" 
-                rel="noreferrer"
-                className="store-social-icon-btn yt"
-                title="Subscribe on YouTube"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
-                </svg>
-              </a>
-            )}
-          </div>
+      {(settings?.facebookUrl || settings?.facebook_url || settings?.data?.facebookUrl || settings?.data?.facebook_url) && (
+        <a
+          href={settings?.facebookUrl || settings?.facebook_url || settings?.data?.facebookUrl || settings?.data?.facebook_url}
+          target="_blank"
+          rel="noreferrer"
+          className="store-social-icon-btn fb"
+          title="Like on Facebook"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.374 14.5 5 15.688 5H18V0h-3.808C10.595 0 9 1.582 9 4.615V8z" />
+          </svg>
+        </a>
+      )}
 
-          <div className="store-footer-bottom">
-            <small>© {new Date().getFullYear()} {settings?.storeName || "Kashvi Fashions"}. All rights reserved.</small>
-          </div>
-        </div>
-      </footer>
+      {(settings?.youtubeUrl || settings?.youtube_url || settings?.data?.youtubeUrl || settings?.data?.youtube_url) && (
+        <a
+          href={settings?.youtubeUrl || settings?.youtube_url || settings?.data?.youtubeUrl || settings?.data?.youtube_url}
+          target="_blank"
+          rel="noreferrer"
+          className="store-social-icon-btn yt"
+          title="Subscribe on YouTube"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
+          </svg>
+        </a>
+      )}
+    </div>
 
+    <div className="store-footer-bottom">
+      <small>© {new Date().getFullYear()} {settings?.storeName || settings?.data?.storeName || "Kashvi Fashions"}. All rights reserved.</small>
+    </div>
+  </div>
+</footer>
       {/* MOBILE BOTTOM NAVIGATION */}
       <div className="store-mobile-bottom-bar">
         <button type="button" className="store-mobile-nav-item" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
@@ -1205,7 +1384,7 @@ export default function StorefrontLayout({
                           </span>
                         </div>
                         <small style={{ color: "var(--store-text-muted)", fontSize: "12px", display: "block", marginTop: "3px" }}>
-                          Placed on: {new Date(ord.created_at || ord.createdAt || Date.now()).toLocaleDateString("en-IN", { dateStyle: "long", timeStyle: "short" })}
+                          Placed on: {new Date(ord.created_at || ord.createdAt || Date.now()).toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" })}
                         </small>
                       </div>
 
@@ -1399,13 +1578,7 @@ export default function StorefrontLayout({
                       className="store-secondary-btn"
                       style={{ padding: "6px 12px", fontSize: "12px" }}
                       onClick={() => {
-                        setForm({
-                          name: addr.name,
-                          phone: addr.phone,
-                          address: addr.address,
-                          pincode: addr.pincode,
-                          email: form.email || customer?.email
-                        });
+                        handleSelectSavedAddress(addr);
                         notify("Address selected for active delivery!");
                         setAddressesModal(false);
                       }}
@@ -1468,72 +1641,30 @@ export default function StorefrontLayout({
         </div>
       )}
 
-      {/* CART DRAWER */}
-      {cartOpen && (
-        <div className="store-overlay" onClick={() => setCartOpen(false)}>
-          <aside className="store-cart-drawer" onClick={e => e.stopPropagation()}>
-            <div className="store-drawer-head">
-              <div><span>SHOPPING BAG</span><h2>Your Cart ({cartCount})</h2></div>
-              <button type="button" onClick={() => setCartOpen(false)}>×</button>
-            </div>
+      {/* SEPARATED CART DRAWER */}
+      <CartDrawer
+        isOpen={cartOpen}
+        onClose={() => setCartOpen(false)}
+        customer={customer}
+        onOpenLogin={() => {
+          setAuthError("");
+          setAccountMode("login");
+          setAccountOpen(true);
+          notify("Please sign in to proceed with checkout");
+        }}
+        onProceedToCheckout={() => setCheckoutOpen(true)}
+      />
 
-            <div className="store-drawer-items">
-              {!cart.length && <div className="store-empty-notice"><h3>Your bag is empty</h3></div>}
-              {cart.map((item, index) => (
-                <div className="store-cart-item" key={`${item.productId}-${item.size}-${item.colour}-${index}`}>
-                  <div className="store-cart-item-img">{item.image ? <img src={item.image} alt="" /> : "KF"}</div>
-                  <div style={{ flex: 1 }}>
-                    <strong>{item.name}</strong>
-                    <div style={{ display: "flex", gap: "6px", alignItems: "center", margin: "3px 0 6px" }}>
-                      <span className="store-variant-tag">{item.size}</span>
-                      {item.colour && <span className="store-variant-tag colour">{item.colour}</span>}
-                    </div>
-                    <b style={{ fontSize: "14px" }}>{money(item.price)}</b>
-                    <div className="store-qty-controls">
-                      <button type="button" onClick={() => changeQty(index, -1)}>−</button>
-                      <span>{item.qty}</span>
-                      <button type="button" onClick={() => changeQty(index, 1)}>+</button>
-                      <button type="button" className="store-remove-btn" onClick={() => removeItem(index)}>Remove</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {cart.length > 0 && (
-              <div className="store-drawer-bottom">
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "14px" }}>
-                  <span>Bag Subtotal</span><strong style={{ fontSize: "19px" }}>{money(subtotal)}</strong>
-                </div>
-                <button type="button" className="store-primary-btn full" onClick={() => {
-                  if (!customer) {
-                    setCartOpen(false);
-                    setAccountMode("login");
-                    setAccountOpen(true);
-                    notify("Please sign in to proceed with checkout");
-                    return;
-                  }
-                  setCartOpen(false);
-                  setCheckoutOpen(true);
-                }}>
-                  Proceed to Secure Checkout →
-                </button>
-              </div>
-            )}
-          </aside>
-        </div>
-      )}
-
-      {/* CHECKOUT MODAL */}
+      {/* CHECKOUT MODAL WITH SAVED ADDRESS SELECTOR */}
       {checkoutOpen && (
-        <div className="store-overlay" onClick={() => { if (!paymentSubmitted) { setCheckoutOpen(false); setPaymentStep(false); } }}>
-          <div className="store-checkout-modal" onClick={e => e.stopPropagation()}>
+        <div className="store-overlay" onClick={() => { if (!paymentSubmitted) { setCheckoutOpen(false); } }}>
+          <div className="store-checkout-modal" style={{ maxWidth: "780px" }} onClick={e => e.stopPropagation()}>
             <div className="store-drawer-head">
               <div>
                 <span>KASHVI CHECKOUT</span>
                 <h2>{paymentSubmitted ? "Order Confirmation" : "Delivery Coordinates"}</h2>
               </div>
-              <button type="button" onClick={() => { setCheckoutOpen(false); setPaymentStep(false); setPaymentSubmitted(false); }}>×</button>
+              <button type="button" onClick={() => { setCheckoutOpen(false); setPaymentSubmitted(false); }}>×</button>
             </div>
 
             {paymentSubmitted ? (
@@ -1558,52 +1689,114 @@ export default function StorefrontLayout({
               <div className="store-checkout-grid">
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                    <h3 style={{ fontSize: "15px", margin: 0 }}>Contact & Address Details</h3>
+                    <h3 style={{ fontSize: "15px", margin: 0 }}>
+                      {savedAddresses.length > 0 && !isAddingNewAddress ? "Select Delivery Address" : "Enter Delivery Address"}
+                    </h3>
                     {savedAddresses.length > 0 && (
                       <button
                         type="button"
                         className="store-auth-text-btn"
                         style={{ fontSize: "12px", fontWeight: "700" }}
-                        onClick={() => setAddressesModal(true)}
+                        onClick={() => {
+                          if (isAddingNewAddress) {
+                            setIsAddingNewAddress(false);
+                            if (savedAddresses.length > 0) {
+                              handleSelectSavedAddress(savedAddresses[0]);
+                            }
+                          } else {
+                            setIsAddingNewAddress(true);
+                            setForm({
+                              name: customer?.user_metadata?.full_name || "",
+                              email: customer?.email || "",
+                              phone: customer?.user_metadata?.mobile || "",
+                              address: "",
+                              pincode: ""
+                            });
+                          }
+                        }}
                       >
-                        📍 Use Saved Address
+                        {isAddingNewAddress ? "← Choose from Saved" : "+ Add New Address"}
                       </button>
                     )}
                   </div>
 
-                  <div className="store-checkout-fields">
-                    <label className="store-field">
-                      Full Name *
-                      <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Recipient name" />
-                    </label>
-                    <label className="store-field">
-                      Email Address *
-                      <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="For order updates" />
-                    </label>
-                    <label className="store-field" style={{ gridColumn: "1 / -1" }}>
-                      Mobile Number *
-                      <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="10-digit mobile" />
-                    </label>
-                    <label className="store-field" style={{ gridColumn: "1 / -1" }}>
-                      Street Address, Flat, House No. *
-                      <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Complete postal address" />
-                    </label>
-                    <label className="store-field" style={{ gridColumn: "1 / -1" }}>
-                      Destination Pincode *
-                      <input value={form.pincode} maxLength={6} onChange={e => setForm({ ...form, pincode: e.target.value })} placeholder="6-digit pincode" />
-                    </label>
-                  </div>
+                  {/* SAVED ADDRESSES DIRECT LIST */}
+                  {savedAddresses.length > 0 && !isAddingNewAddress ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "14px" }}>
+                      {savedAddresses.map((addr) => {
+                        const isSelected = selectedAddressId === addr.id;
+                        return (
+                          <div
+                            key={addr.id}
+                            onClick={() => handleSelectSavedAddress(addr)}
+                            style={{
+                              padding: "12px 14px",
+                              borderRadius: "10px",
+                              border: isSelected ? "2px solid #0d5249" : "1px solid var(--store-border)",
+                              background: isSelected ? "rgba(13, 82, 73, 0.04)" : "#ffffff",
+                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "10px",
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name="checkout_address"
+                              checked={isSelected}
+                              onChange={() => handleSelectSavedAddress(addr)}
+                              style={{ marginTop: "4px", accentColor: "#0d5249", cursor: "pointer" }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <strong style={{ fontSize: "13.5px", color: isSelected ? "#0d5249" : "#0f172a" }}>{addr.name}</strong>
+                                <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>{addr.phone}</span>
+                              </div>
+                              <p style={{ margin: "3px 0 0", fontSize: "12.5px", color: "#475569", lineHeight: "1.4" }}>
+                                {addr.address}, {addr.city}, {addr.state} - <b>{addr.pincode}</b>
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* MANUAL / NEW ADDRESS INPUT FORM */
+                    <div className="store-checkout-fields">
+                      <label className="store-field">
+                        Full Name *
+                        <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Recipient name" />
+                      </label>
+                      <label className="store-field">
+                        Email Address *
+                        <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="For order updates" />
+                      </label>
+                      <label className="store-field" style={{ gridColumn: "1 / -1" }}>
+                        Mobile Number *
+                        <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="10-digit mobile" />
+                      </label>
+                      <label className="store-field" style={{ gridColumn: "1 / -1" }}>
+                        Street Address, Flat, House No. *
+                        <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Complete postal address" />
+                      </label>
+                      <label className="store-field" style={{ gridColumn: "1 / -1" }}>
+                        Destination Pincode *
+                        <input value={form.pincode} maxLength={6} onChange={e => setForm({ ...form, pincode: e.target.value })} placeholder="6-digit pincode" />
+                      </label>
+                    </div>
+                  )}
 
                   {pincodeLoading ? (
                     <div style={{ fontSize: "12.5px", color: "var(--store-primary)", marginTop: "8px" }}>Verifying pincode...</div>
                   ) : liveDestination ? (
-                    <div className="store-destination-card">
+                    <div className="store-destination-card" style={{ marginTop: "10px" }}>
                       <small>SERVICEABLE DESTINATION</small>
                       <strong>{liveDestination.city || "Local Area"}, {liveDestination.district || ""}</strong>
                       <span>{liveDestination.state || ""} · Zone: {zone}</span>
                     </div>
                   ) : pincodeError ? (
-                    <p className="store-error-text">Entered pincode not found in delivery registry.</p>
+                    <p className="store-error-text" style={{ marginTop: "8px" }}>Entered pincode not found in delivery registry.</p>
                   ) : null}
                 </div>
 
@@ -1647,26 +1840,35 @@ export default function StorefrontLayout({
         onClose={() => setActivePendingOrder(null)}
         orderData={activePendingOrder}
         settings={settings}
-        onPaymentSuccess={(confirmedOrder) => {
-          setActivePendingOrder(null);
-          setOrders(list => [{ ...confirmedOrder, status: "payment_received" }, ...list]);
-          setSubmittedOrderId(confirmedOrder.id);
-          setCart([]);
-          setCheckoutOpen(true);
-          setPaymentSubmitted(true);
-          notify("🎉 Payment Verified! Your order has been placed successfully.");
+        onPaymentSuccess={async (confirmedOrder) => {
+          try {
+            // SAVE TO DATABASE ONLY AFTER SUCCESSFUL PAYMENT
+            const { error } = await supabase.from("orders").insert([confirmedOrder]);
+            if (error) throw error;
 
-          const recipientEmail = form.email || customer?.email;
-          sendAutomatedEmail({
-            toEmail: recipientEmail,
-            customerName: form.name,
-            orderId: confirmedOrder.id,
-            stage: "payment_received",
-            total: Number(confirmedOrder.total || 0).toFixed(2),
-            items: cart,
-            trackingNo: "",
-            courier: "India Post"
-          });
+            setActivePendingOrder(null);
+            setOrders(list => [{ ...confirmedOrder, status: "payment_received" }, ...list]);
+            setSubmittedOrderId(confirmedOrder.id);
+            clearCart();
+            setCheckoutOpen(true);
+            setPaymentSubmitted(true);
+            notify("🎉 Payment Verified! Your order has been placed successfully.");
+
+            const recipientEmail = form.email || customer?.email;
+            sendAutomatedEmail({
+              toEmail: recipientEmail,
+              customerName: form.name,
+              orderId: confirmedOrder.id,
+              stage: "payment_received",
+              total: Number(confirmedOrder.total || 0).toFixed(2),
+              items: cart,
+              trackingNo: "",
+              courier: "India Post"
+            });
+          } catch (err) {
+            console.error("Database order insert error:", err);
+            notify("Payment received, but failed to record order. Please contact support.");
+          }
         }}
       />
 
@@ -1674,7 +1876,7 @@ export default function StorefrontLayout({
       {selectedProduct && (
         <ProductQuickViewModal
           product={selectedProduct}
-          onAddItems={addItemsToCart}
+          onAddItems={handleQuickAdd}
           onEnlarge={imgUrl => setEnlargedImage(imgUrl)}
           onClose={() => setSelectedProduct(null)}
         />

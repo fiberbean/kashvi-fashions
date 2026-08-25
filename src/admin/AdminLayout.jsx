@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import "./admin.css";
 import { supabase } from "../lib/supabase";
 import { sendAutomatedEmail } from "../lib/emailService";
+import AdminNotifications from "./AdminNotifications";
 
 const makeId = prefix => `${prefix}${Date.now().toString().slice(-8)}`;
 
@@ -68,7 +69,7 @@ const generateWhatsAppTemplate = (order, stage, storeSettings) => {
     .join("\n");
 
   if (stage === "payment_verification" || stage === "new") {
-    return `*🛍️ ORDER PLACED & VERIFICATION IN PROGRESS*\n\nDear *${customerName}*,\nThank you for shopping with *${storeName}*!\n\n📋 *Order Identifier:* #${orderId}\n💵 *Total Amount:* ${totalAmount} (Prepaid UPI)\n\n📦 *Selected Items:*\n${itemsText}\n\n⏳ *Status:* We are verifying your payment claim against bank statement. Once confirmed, stock check & packing will commence immediately.\n\nHelpline WhatsApp: ${storeSettings?.whatsapp || "919550724234"}`;
+    return `*🛍️ ORDER PLACED & VERIFICATION IN PROGRESS*\n\nDear *${customerName}*,\nThank you for shopping with *${storeName}*!\n\n📋 *Order Identifier:* #${orderId}\n💵 *Total Amount:* ${totalAmount} (Prepaid UPI)\n\n📦 *Selected Items:*\n${itemsText}\n\n⏳ *Status:* We are verifying your payment claim against bank statement. Once confirmed, stock check & packing will commence immediately.\n\nHelpline WhatsApp: ${storeSettings?.whatsapp || storeSettings?.whatsappNo || "919550724234"}`;
   }
 
   if (stage === "stock_check" || stage === "payment_received") {
@@ -88,7 +89,7 @@ const generateWhatsAppTemplate = (order, stage, storeSettings) => {
   }
 
   if (stage === "refund_pending" || stage === "stock_unavailable") {
-    return `*⚠️ ORDER UPDATE: STOCK UNAVAILABLE*\n\nDear *${customerName}*,\nWe regret to inform you that selected items for Order *#${orderId}* are currently out of stock.\n\n💵 Full refund of *${totalAmount}* is initiated to your UPI account.\n\nHelpline: ${storeSettings?.whatsapp || "919550724234"}`;
+    return `*⚠️ ORDER UPDATE: STOCK UNAVAILABLE*\n\nDear *${customerName}*,\nWe regret to inform you that selected items for Order *#${orderId}* are currently out of stock.\n\n💵 Full refund of *${totalAmount}* is initiated to your UPI account.\n\nHelpline: ${storeSettings?.whatsapp || storeSettings?.whatsappNo || "919550724234"}`;
   }
 
   if (stage === "refund_completed") {
@@ -268,55 +269,77 @@ export default function AdminLayout({
     }
   };
 
- /* Save Settings without localStorage Quota overflow */
+  /* Save Settings directly to Supabase Database (100% No localStorage Quota Limits) */
   const handleSaveSettings = async () => {
     try {
-      setSettings(settingsDraft);
-
       const payloadData = {
-        storeName: settingsDraft.storeName,
-        upiId: settingsDraft.upiId,
-        whatsapp: settingsDraft.whatsapp,
-        originPincode: settingsDraft.originPincode,
-        logoUrl: settingsDraft.logoUrl,
+        storeName: settingsDraft.storeName || "Kashvi Fashions",
+        upiId: settingsDraft.upiId || "",
+        whatsapp: settingsDraft.whatsapp || settingsDraft.whatsappNo || "",
+        whatsappNo: settingsDraft.whatsappNo || settingsDraft.whatsapp || "",
+        originPincode: settingsDraft.originPincode || "533001",
+        logoUrl: settingsDraft.logoUrl || "",
         deliveryCharge: settingsDraft.deliveryCharge || 0,
-        defaultCourier: settingsDraft.defaultCourier || "India Post (Speed Post)",
+        defaultCourier: settingsDraft.defaultCourier || "India Post (Registered Parcel)",
         instagramUrl: settingsDraft.instagramUrl || "",
         facebookUrl: settingsDraft.facebookUrl || "",
         youtubeUrl: settingsDraft.youtubeUrl || ""
       };
 
-      // 1. Save completely to Supabase (handles large images safely)
-      const { error } = await supabase.from("settings").upsert({
-        id: 1,
+      setSettings(payloadData);
+
+      // 1. Direct Save to store_settings table
+      const storeSettingsPayload = {
+        id: "main_settings",
+        store_name: payloadData.storeName,
+        upi_id: payloadData.upiId,
+        whatsapp_no: payloadData.whatsappNo,
+        origin_pincode: payloadData.originPincode,
+        default_courier: payloadData.defaultCourier,
+        instagram_url: payloadData.instagramUrl,
+        facebook_url: payloadData.facebookUrl,
+        youtube_url: payloadData.youtubeUrl,
+        logo_url: payloadData.logoUrl,
         data: payloadData,
         updated_at: new Date().toISOString()
-      });
+      };
 
-      if (error) throw error;
+      await supabase.from("store_settings").upsert(storeSettingsPayload, { onConflict: "id" });
 
-      // 2. Save only lightweight text info to localStorage (ignoring huge base64 logo if too large)
-      try {
-        const localData = { ...payloadData };
-        if (localData.logoUrl && localData.logoUrl.startsWith("data:image")) {
-          // Keep base64 out of localStorage quota
-          localData.logoUrl = "";
-        }
-        localStorage.setItem("kf_store_settings", JSON.stringify(localData));
-      } catch (storageErr) {
-        console.warn("LocalStorage quota full, saved directly to database:", storageErr);
-      }
-
-      notify("Store settings & social links saved to Database!");
+      notify("✅ Store settings, logo & social media saved to Database successfully!");
     } catch (err) {
       console.error("Save error:", err);
       notify(`Failed to save settings: ${err.message || "Database error"}`);
     }
   };
 
-  const handleLogoUpload = e => {
+  const handleLogoUpload = async e => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    notify("Uploading logo...");
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `store_logo_${Date.now()}.${fileExt}`;
+      const filePath = `branding/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("products")
+        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+
+      if (uploadError) {
+        const reader = new FileReader();
+        reader.onloadend = () => setSettingsDraft(prev => ({ ...prev, logoUrl: reader.result }));
+        reader.readAsDataURL(file);
+      } else {
+        const { data } = supabase.storage.from("products").getPublicUrl(filePath);
+        if (data?.publicUrl) {
+          setSettingsDraft(prev => ({ ...prev, logoUrl: data.publicUrl }));
+        }
+      }
+      notify("Logo file ready to save!");
+    } catch (err) {
+      console.warn("Logo upload fallback to inline:", err);
       const reader = new FileReader();
       reader.onloadend = () => setSettingsDraft(prev => ({ ...prev, logoUrl: reader.result }));
       reader.readAsDataURL(file);
@@ -526,47 +549,37 @@ export default function AdminLayout({
   };
 
   const handleSaveUTR = () => {
-  if (!utrDialog.value.trim()) return notify("Please enter the UTR Number");
-  if (utrDialog.type === "payment") {
-    handleUpdateOrderStatus(utrDialog.orderId, "stock_check", {
-      payment: {
-        status: "received",
-        utr: utrDialog.value.trim(),
-        confirmedAt: new Date().toISOString()
-      }
-    });
-  } else {
-    handleUpdateOrderStatus(utrDialog.orderId, "refund_completed", {
-      refund: {
-        status: "completed",
-        utr: utrDialog.value.trim(),
-        refundedAt: new Date().toISOString()
-      }
-    });
-  }
-  setUtrDialog({ open: false, orderId: "", type: "payment", value: "" });
-};
-
-const handleSaveDispatch = () => {
-  if (!trackingDialog.trackingId.trim()) return notify("Please enter India Post tracking number");
-  handleUpdateOrderStatus(trackingDialog.orderId, "shipped", {
-    shipping: {
-      courier: trackingDialog.courier,
-      trackingId: trackingDialog.trackingId.trim(),
-      dispatchedAt: new Date().toISOString()
-    }
-  });
-  setTrackingDialog({ open: false, orderId: "", trackingId: "", courier: "India Post (Speed Post)" });
-};
-
-  const executeSendWhatsApp = (orderObj, customMessage) => {
-    const phone = (orderObj.customer?.phone || orderObj.customer?.mobile || "").replace(/\D/g, "");
-    if (phone) {
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(customMessage)}`, "_blank");
-      setWhatsappPrompt(null);
+    if (!utrDialog.value.trim()) return notify("Please enter the UTR Number");
+    if (utrDialog.type === "payment") {
+      handleUpdateOrderStatus(utrDialog.orderId, "stock_check", {
+        payment: {
+          status: "received",
+          utr: utrDialog.value.trim(),
+          confirmedAt: new Date().toISOString()
+        }
+      });
     } else {
-      notify("Customer phone number is missing");
+      handleUpdateOrderStatus(utrDialog.orderId, "refund_completed", {
+        refund: {
+          status: "completed",
+          utr: utrDialog.value.trim(),
+          refundedAt: new Date().toISOString()
+        }
+      });
     }
+    setUtrDialog({ open: false, orderId: "", type: "payment", value: "" });
+  };
+
+  const handleSaveDispatch = () => {
+    if (!trackingDialog.trackingId.trim()) return notify("Please enter India Post tracking number");
+    handleUpdateOrderStatus(trackingDialog.orderId, "shipped", {
+      shipping: {
+        courier: trackingDialog.courier,
+        trackingId: trackingDialog.trackingId.trim(),
+        dispatchedAt: new Date().toISOString()
+      }
+    });
+    setTrackingDialog({ open: false, orderId: "", trackingId: "", courier: "India Post (Speed Post)" });
   };
 
   /* Filtered Lists */
@@ -794,7 +807,8 @@ const handleSaveDispatch = () => {
             <h1>{page === "subCategories" ? "SUB-CATEGORIES" : page === "rateCards" ? "DELIVERY RATES" : page.toUpperCase()}</h1>
             <p>Smart Operations, Real-time Fulfilment Hub & Matrix Controls</p>
           </div>
-          <div className="admin-top-actions">
+          <div className="admin-top-actions" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <AdminNotifications orders={orders} navigateToOrders={() => navigate("orders")} />
             <span className="admin-notification">
               ● {orders.filter(item => item.status === "payment_verification").length} Verification Pending
             </span>
@@ -1622,8 +1636,8 @@ const handleSaveDispatch = () => {
                 <label className="admin-field">
                   WhatsApp Business Contact
                   <input
-                    value={settingsDraft.whatsapp || ""}
-                    onChange={e => setSettingsDraft({ ...settingsDraft, whatsapp: e.target.value })}
+                    value={settingsDraft.whatsappNo || settingsDraft.whatsapp || ""}
+                    onChange={e => setSettingsDraft({ ...settingsDraft, whatsapp: e.target.value, whatsappNo: e.target.value })}
                     placeholder="91XXXXXXXXXX"
                   />
                 </label>
@@ -1638,7 +1652,7 @@ const handleSaveDispatch = () => {
                 <label className="admin-field" style={{ gridColumn: "1 / -1" }}>
                   Default Courier Partner (Speed Dispatch)
                   <select
-                    value={settingsDraft.defaultCourier || "India Post (Speed Post)"}
+                    value={settingsDraft.defaultCourier || "India Post (Registered Parcel)"}
                     onChange={e => setSettingsDraft({ ...settingsDraft, defaultCourier: e.target.value })}
                   >
                     <option value="India Post (Speed Post)">India Post (Speed Post / Parcel)</option>
@@ -1649,32 +1663,33 @@ const handleSaveDispatch = () => {
                     <option value="Professional Courier">The Professional Couriers</option>
                   </select>
                 </label>
+
                 <label className="admin-field">
-            Instagram Profile URL
-            <input
-              value={settingsDraft.instagramUrl || ""}
-              onChange={e => setSettingsDraft({ ...settingsDraft, instagramUrl: e.target.value })}
-              placeholder="https://instagram.com/your_handle"
-            />
-          </label>
+                  Instagram Profile URL
+                  <input
+                    value={settingsDraft.instagramUrl || ""}
+                    onChange={e => setSettingsDraft({ ...settingsDraft, instagramUrl: e.target.value })}
+                    placeholder="https://instagram.com/your_handle"
+                  />
+                </label>
 
-          <label className="admin-field">
-            Facebook Page URL
-            <input
-              value={settingsDraft.facebookUrl || ""}
-              onChange={e => setSettingsDraft({ ...settingsDraft, facebookUrl: e.target.value })}
-              placeholder="https://facebook.com/your_page"
-            />
-          </label>
+                <label className="admin-field">
+                  Facebook Page URL
+                  <input
+                    value={settingsDraft.facebookUrl || ""}
+                    onChange={e => setSettingsDraft({ ...settingsDraft, facebookUrl: e.target.value })}
+                    placeholder="https://facebook.com/your_page"
+                  />
+                </label>
 
-          <label className="admin-field" style={{ gridColumn: "1 / -1" }}>
-            YouTube Channel URL
-            <input
-              value={settingsDraft.youtubeUrl || ""}
-              onChange={e => setSettingsDraft({ ...settingsDraft, youtubeUrl: e.target.value })}
-              placeholder="https://youtube.com/@your_channel"
-            />
-          </label>
+                <label className="admin-field" style={{ gridColumn: "1 / -1" }}>
+                  YouTube Channel URL
+                  <input
+                    value={settingsDraft.youtubeUrl || ""}
+                    onChange={e => setSettingsDraft({ ...settingsDraft, youtubeUrl: e.target.value })}
+                    placeholder="https://youtube.com/@your_channel"
+                  />
+                </label>
               </div>
 
               <button
@@ -2281,8 +2296,7 @@ const handleSaveDispatch = () => {
         </div>
       )}
 
-      {/* INSPECT ORDER WITH STEP-BY-STEP PIPELINE ACTIONS */}
-      {/* 1. INSPECT ORDER (HORIZONTAL STEPPER & ACTIONS) */}
+      {/* INSPECT ORDER (HORIZONTAL STEPPER & ACTIONS) */}
       {inspectOrder && (
         <div className="admin-modal-backdrop" onClick={() => setInspectOrder(null)}>
           <div className="admin-modal-card" style={{ maxWidth: "820px" }} onClick={e => e.stopPropagation()}>
@@ -2462,7 +2476,6 @@ const handleSaveDispatch = () => {
                 {/* 4. SHIPPED / DISPATCHED STATUS - WITH LIVE INDIA POST TRACKING AUDIT */}
                 {inspectOrder.status === "shipped" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    {/* CONSIGNMENT TRACKING CARD */}
                     <div style={{ background: "rgba(2, 132, 199, 0.1)", border: "1.5px solid #0284c7", borderRadius: "8px", padding: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div>
                         <span style={{ fontSize: "11px", fontWeight: "bold", color: "#38bdf8", textTransform: "uppercase", display: "block" }}>
@@ -2476,28 +2489,26 @@ const handleSaveDispatch = () => {
                         </div>
                       </div>
 
-                      {/* DIRECT 1-CLICK INDIA POST LIVE TRACKING LINK */}
                       <button
                         type="button"
                         className="admin-primary-btn"
                         style={{ background: "#0284c7", color: "#fff", padding: "8px 14px", fontSize: "12.5px" }}
                         onClick={() => {
-  const consignmentNo = inspectOrder.shipping?.trackingId?.trim() || "";
-  if (consignmentNo) {
-    navigator.clipboard.writeText(consignmentNo);
-    notify(`Consignment #${consignmentNo} copied! Paste (Ctrl+V) on India Post page.`);
-  }
-  window.open(
-    `https://www.indiapost.gov.in/_layouts/15/dpt.cept.tracking/trackconsignment.aspx`,
-    "_blank"
-  );
-}}
+                          const consignmentNo = inspectOrder.shipping?.trackingId?.trim() || "";
+                          if (consignmentNo) {
+                            navigator.clipboard.writeText(consignmentNo);
+                            notify(`Consignment #${consignmentNo} copied! Paste (Ctrl+V) on India Post page.`);
+                          }
+                          window.open(
+                            `https://www.indiapost.gov.in/_layouts/15/dpt.cept.tracking/trackconsignment.aspx`,
+                            "_blank"
+                          );
+                        }}
                       >
                         🔍 Check Status on India Post ↗
                       </button>
                     </div>
 
-                    {/* ACTION CONTROLS AFTER ONLINE VERIFICATION */}
                     <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "flex-end" }}>
                       <button
                         type="button"
@@ -2557,7 +2568,7 @@ const handleSaveDispatch = () => {
         </div>
       )}
 
-      {/* 2. UTR ENTRY PROMPT MODAL */}
+      {/* UTR ENTRY PROMPT MODAL */}
       {utrDialog.open && (
         <div className="admin-modal-backdrop" onClick={() => setUtrDialog({ open: false, orderId: "", type: "payment", value: "" })}>
           <div className="admin-modal-card" style={{ maxWidth: "440px" }} onClick={e => e.stopPropagation()}>
@@ -2591,7 +2602,7 @@ const handleSaveDispatch = () => {
         </div>
       )}
 
-      {/* 3. TRACKING ENTRY MODAL */}
+      {/* TRACKING ENTRY MODAL */}
       {trackingDialog.open && (
         <div className="admin-modal-backdrop" onClick={() => setTrackingDialog({ open: false, orderId: "", trackingId: "", courier: "India Post (Speed Post)" })}>
           <div className="admin-modal-card" style={{ maxWidth: "460px" }} onClick={e => e.stopPropagation()}>
@@ -2628,7 +2639,7 @@ const handleSaveDispatch = () => {
         </div>
       )}
 
-      {/* 4. PRINT SLIP MODAL (PRODUCT TOTAL ONLY & EDITABLE WEIGHT) */}
+      {/* PRINT SLIP MODAL */}
       {printLabelOrder && (
         <div className="admin-modal-backdrop" onClick={() => setPrintLabelOrder(null)}>
           <div className="admin-modal-card" style={{ maxWidth: "620px", background: "#ffffff", color: "#000", padding: "20px" }} onClick={e => e.stopPropagation()}>
@@ -2701,7 +2712,7 @@ const handleSaveDispatch = () => {
                 </span>
                 <strong>{settings?.storeName || "Kashvi Fashions"}</strong>
                 <div>Kakinada Central Fulfillment Hub, East Godavari District, Andhra Pradesh - <b>{settings?.originPincode || "533001"}</b></div>
-                <div>Helpline: <b>{settings?.whatsapp || "919550724234"}</b></div>
+                <div>Helpline: <b>{settings?.whatsappNo || settings?.whatsapp || "919550724234"}</b></div>
               </div>
 
               {/* CONTENTS */}

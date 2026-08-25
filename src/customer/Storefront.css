@@ -1849,11 +1849,80 @@ html, body {
 
 /* ================= NOTIFICATION TOAST ================= */
 .store-toast, 
-.toast-notification,
-div[class*="toast"],
-div[class*="notify"],
-div[role="status"],
-div[role="alert"] {
+.toast-notification {
   z-index: 9999999 !important;
   position: fixed !important;
+}
+
+@keyframes kfDropBounce {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.kf-premium-toast {
+  position: fixed !important;
+  top: 24px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  z-index: 9999999 !important;
+  background: #0d5249 !important;
+  color: #ffffff !important;
+  padding: 10px 22px 10px 14px !important;
+  border-radius: 999px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
+  animation: kfDropBounce 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  white-space: nowrap !important;
+  max-width: 90vw !important;
+  pointer-events: none !important;
+}
+
+.kf-premium-toast-badge {
+  background: #fd79a8 !important;
+  color: #ffffff !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  flex-shrink: 0 !important;
+  position: static !important;
+}
+
+.kf-toast-content {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  text-align: left !important;
+  position: static !important;
+}
+
+.kf-toast-title {
+  margin: 0 !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+  line-height: 1.3 !important;
+  position: static !important;
+}
+
+.kf-toast-desc {
+  margin: 0 !important;
+  font-size: 11px !important;
+  color: #94a3b8 !important;
+  line-height: 1.2 !important;
+  position: static !important;
 }
