@@ -11,8 +11,38 @@ export default function KFUPISystem({
   const [timeLeft, setTimeLeft] = useState(600);
   const [isVerifying, setIsVerifying] = useState(false);
   const [paymentDone, setPaymentDone] = useState(false);
+  const [storeInfo, setStoreInfo] = useState({
+    upiId: settings?.upiId || "",
+    storeName: settings?.storeName || "Kashvi Fashions"
+  });
 
-  // 10-Minute Expiry Countdown Timer
+  // 1. Fetch Store Info from Supabase Database if not passed via props
+  useEffect(() => {
+    async function loadStoreInfo() {
+      if (!storeInfo.upiId) {
+        try {
+          const { data, error } = await supabase
+            .from("settings")
+            .select("*")
+            .single();
+
+          if (data) {
+            setStoreInfo({
+              upiId: data.upi_id || data.upiId || data.payment_upi || "",
+              storeName: data.store_name || data.storeName || "Kashvi Fashions"
+            });
+          }
+        } catch (err) {
+          console.error("Failed to load store settings from DB:", err);
+        }
+      }
+    }
+    if (isOpen) {
+      loadStoreInfo();
+    }
+  }, [isOpen, storeInfo.upiId]);
+
+  // 2. 10-Minute Expiry Countdown Timer
   useEffect(() => {
     if (!isOpen || !orderData || paymentDone) return;
     setTimeLeft(600);
@@ -29,7 +59,7 @@ export default function KFUPISystem({
     return () => clearInterval(timer);
   }, [isOpen, orderData, paymentDone, onClose]);
 
-  // Realtime Listener & Rapid Polling for Instant Credit Detection
+  // 3. Realtime Listener & Rapid Polling for Bank Credit Detection
   useEffect(() => {
     if (!isOpen || !orderData?.id || paymentDone) return;
 
@@ -40,7 +70,7 @@ export default function KFUPISystem({
       }, 2000);
     };
 
-    // 1. Supabase Postgres Realtime Subscription (Sub-second instant trigger)
+    // Supabase Postgres Realtime Subscription
     const channel = supabase
       .channel(`order-status-${orderData.id}`)
       .on(
@@ -62,7 +92,7 @@ export default function KFUPISystem({
       )
       .subscribe();
 
-    // 2. High-frequency Polling Fallback (Every 2 seconds)
+    // High-frequency Polling Fallback (Every 2 seconds)
     const interval = setInterval(async () => {
       try {
         const { data } = await supabase
@@ -91,15 +121,15 @@ export default function KFUPISystem({
 
   if (!isOpen || !orderData) return null;
 
-  const upiId = String(settings?.upiId || "").trim();
-  const storeName = settings?.storeName || "Kashvi Fashions";
+  const upiId = String(storeInfo.upiId || settings?.upiId || "").trim();
+  const storeName = storeInfo.storeName || settings?.storeName || "Kashvi Fashions";
   const amount = Number(orderData.total || orderData.total_amount || 0).toFixed(2);
   const orderRef = orderData.id;
   
-  // Standard NPCI Generic UPI Intent URI (Triggers Android OS Native App Chooser)
+  // Standard Generic UPI Intent URI (Triggers Android Installed Apps Chooser)
   const upiIntentUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(String(orderRef))}`;
   
-  // High-contrast clean matrix QR
+  // Clean QR Code Matrix
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiIntentUrl)}&color=0d5249&bgcolor=ffffff&margin=1`;
 
   const formatTime = (seconds) => {
@@ -110,11 +140,10 @@ export default function KFUPISystem({
 
   const handlePayViaApp = () => {
     if (!upiId) {
-      alert("Store UPI ID is not configured in Admin Settings.");
+      alert("Store UPI ID DB lo load avvaledu. Please check Store Info.");
       return;
     }
     setIsVerifying(true);
-    // Triggers Android bottom-sheet with all installed UPI apps
     window.location.href = upiIntentUrl;
   };
 
@@ -138,10 +167,6 @@ export default function KFUPISystem({
         @keyframes kfPopIn {
           0% { transform: scale(0.8); opacity: 0; }
           100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes kfRotateCyberRing {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
         }
       `}</style>
 
@@ -176,7 +201,6 @@ export default function KFUPISystem({
         ) : (
           /* ADVANCED HUD CYBER QR CHECKOUT */
           <>
-            {/* Header with Logo */}
             <div style={headerContainerStyle}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <svg width="24" height="24" viewBox="0 0 100 100" fill="none" stroke="#0d5249" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round">
@@ -196,27 +220,21 @@ export default function KFUPISystem({
               </div>
             </div>
 
-            {/* Total Payable Amount Vault */}
             <div style={amountVaultStyle}>
               <span style={{ fontSize: "13px", color: "#64748b", fontWeight: "500" }}>Total Payable</span>
               <span style={amountNumberStyle}>₹{amount}</span>
             </div>
 
-            {/* FULL HUD CYBER SCANNER CHAMBER */}
+            {/* HUD SCANNER CHAMBER */}
             <div style={hudOuterFrameStyle}>
-              {/* HUD Precision Corner Brackets */}
               <div style={{ ...hudCornerStyle, top: "-4px", left: "-4px", borderTop: "3px solid #0d5249", borderLeft: "3px solid #0d5249" }} />
               <div style={{ ...hudCornerStyle, top: "-4px", right: "-4px", borderTop: "3px solid #0d5249", borderRight: "3px solid #0d5249" }} />
               <div style={{ ...hudCornerStyle, bottom: "-4px", left: "-4px", borderBottom: "3px solid #0d5249", borderLeft: "3px solid #0d5249" }} />
               <div style={{ ...hudCornerStyle, bottom: "-4px", right: "-4px", borderBottom: "3px solid #0d5249", borderRight: "3px solid #0d5249" }} />
 
-              {/* HUD Micro Grid Lines */}
               <div style={hudGridOverlayStyle} />
-
-              {/* Active Laser Scanning Beam */}
               <div style={laserScanBeamStyle} />
 
-              {/* QR Image Container with Center Brand Emblem */}
               <div style={qrImageWrapperStyle}>
                 {upiId ? (
                   <>
@@ -225,7 +243,6 @@ export default function KFUPISystem({
                       alt="Scan to Pay"
                       style={{ width: "175px", height: "175px", borderRadius: "10px", display: "block" }}
                     />
-                    {/* Embedded Center Kashvi Logo Badge */}
                     <div style={centerBrandBadgeStyle}>
                       <svg width="18" height="18" viewBox="0 0 100 100" fill="none" stroke="#0d5249" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M50 20 L20 65 L80 65 Z" />
@@ -234,14 +251,13 @@ export default function KFUPISystem({
                     </div>
                   </>
                 ) : (
-                  <div style={{ textAlign: "center", padding: "20px", color: "#ef4444", fontSize: "12px" }}>
-                    ⚠️ Store UPI ID is missing in Admin Settings
+                  <div style={{ textAlign: "center", padding: "20px", color: "#ef4444", fontSize: "12px", fontWeight: "600" }}>
+                    Loading Store UPI Info...
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Primary Action Button */}
             <div style={{ position: "relative", overflow: "hidden", borderRadius: "12px", marginTop: "14px" }}>
               <button
                 type="button"
@@ -253,7 +269,6 @@ export default function KFUPISystem({
               <div style={shimmerEffectStyle} />
             </div>
 
-            {/* Realtime Radar Status Bar */}
             <div style={statusBarStyle}>
               <span style={radarDotStyle} />
               <span style={{ fontSize: "12px", color: "#64748b", fontWeight: "500" }}>
@@ -263,7 +278,6 @@ export default function KFUPISystem({
               </span>
             </div>
 
-            {/* Cancel Action */}
             <button onClick={onClose} style={cancelActionStyle}>
               Cancel Transaction
             </button>
@@ -274,7 +288,6 @@ export default function KFUPISystem({
   );
 }
 
-// Styling definitions
 const overlayStyle = {
   position: "fixed",
   top: 0, left: 0, right: 0, bottom: 0,
