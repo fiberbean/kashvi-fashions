@@ -517,12 +517,14 @@ export default function StorefrontLayout({
     setNewAddressForm({ name: "", phone: "", address: "", pincode: "", city: "", state: "" });
   };
 
-  const startPayment = () => {
+  const startPayment = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+
     if (!customer) {
       setCheckoutOpen(false);
       setAccountMode("login");
       setAccountOpen(true);
-      notify("Please sign in or create an account to place your order");
+      notify("Please sign in or create an account to proceed");
       return;
     }
 
@@ -531,36 +533,36 @@ export default function StorefrontLayout({
       return;
     }
 
-    if (!form.name?.trim() || !form.phone?.trim() || !form.pincode?.trim() || !form.address?.trim()) {
-      notify("Please fill all required fields (Name, Phone, Address, Pincode)");
+    const cleanName = String(form.name || "").trim();
+    const cleanPhone = String(form.phone || "").trim();
+    const cleanAddress = String(form.address || "").trim();
+    const cleanPin = String(form.pincode || "").trim();
+
+    if (!cleanName || !cleanPhone || !cleanAddress || !cleanPin) {
+      notify("Please fill all required delivery coordinates");
       return;
     }
 
-    // Default destination fallback if database pincode check is pending
+    if (cleanPin.length !== 6) {
+      notify("Please enter a valid 6-digit Pincode");
+      return;
+    }
+
+    // Auto-fallback destination if background verification is slow
     if (!liveDestination) {
-      const pin = String(form.pincode).trim();
-      if (pin.length === 6) {
-        setLiveDestination({
-          pincode: pin,
-          city: "Local Area",
-          district: "Region",
-          state: "Andhra Pradesh",
-          zone_type: pin.startsWith("533") ? "Local" : "Within State"
-        });
-      } else {
-        notify("Please enter a valid 6-digit Pincode");
-        return;
-      }
+      setLiveDestination({
+        pincode: cleanPin,
+        city: "Local Area",
+        district: "District",
+        state: "Andhra Pradesh",
+        zone_type: cleanPin.startsWith("533") ? "Local" : "Within State"
+      });
     }
 
-    // Default UPI ID fallback if settings are loading
-    if (!settings?.upiId && !settingsDraft?.upiId) {
-      console.warn("Using fallback UPI ID");
-    }
-
+    // Instantly navigate to Payment Step
     setPaymentStep(true);
   };
-
+  
   const launchUpiApp = specificUri => {
     if (!settings.upiId) return notify("Store UPI ID is missing");
     window.location.href = specificUri || upiLink;
