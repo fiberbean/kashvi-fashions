@@ -17,30 +17,30 @@ export default function KFUPISystem({
   });
 
   // 1. Fetch Store Info from Supabase Database if not passed via props
+  // 1. Fetch Store Info from Supabase JSONB settings
   useEffect(() => {
     async function loadStoreInfo() {
-      if (!storeInfo.upiId) {
-        try {
-          const { data, error } = await supabase
-            .from("settings")
-            .select("*")
-            .single();
+      try {
+        const { data: dbRow, error } = await supabase
+          .from("settings")
+          .select("data")
+          .single();
 
-          if (data) {
-            setStoreInfo({
-              upiId: data.upi_id || data.upiId || data.payment_upi || "",
-              storeName: data.store_name || data.storeName || "Kashvi Fashions"
-            });
-          }
-        } catch (err) {
-          console.error("Failed to load store settings from DB:", err);
+        if (dbRow && dbRow.data) {
+          const payload = typeof dbRow.data === "string" ? JSON.parse(dbRow.data) : dbRow.data;
+          setStoreInfo({
+            upiId: payload.upiId || payload.upi_id || "BHARATPE2T0L0J7Q4Q71562@unitype",
+            storeName: payload.storeName || payload.store_name || "Kashvi Fashions"
+          });
         }
+      } catch (err) {
+        console.error("Failed to load store settings from DB:", err);
       }
     }
     if (isOpen) {
       loadStoreInfo();
     }
-  }, [isOpen, storeInfo.upiId]);
+  }, [isOpen]);
 
   // 2. 10-Minute Expiry Countdown Timer
   useEffect(() => {
