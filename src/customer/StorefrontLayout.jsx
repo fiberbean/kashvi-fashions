@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import "./Storefront.css";
 import { supabase } from "../lib/supabase";
 import { sendAutomatedEmail } from "../lib/emailService";
+import KFUPISystem from "./KFUPISystem";
 
 const money = value => `₹${Number(value || 0).toLocaleString("en-IN")}`;
 const makeId = prefix => `${prefix}${Date.now().toString().slice(-8)}`;
@@ -85,6 +86,8 @@ export default function StorefrontLayout({
   const [paymentSubmitted, setPaymentSubmitted] = useState(false);
   const [submittedOrderId, setSubmittedOrderId] = useState("");
   const [paymentStep, setPaymentStep] = useState(false);
+  const [activePendingOrder, setActivePendingOrder] = useState(null);
+  const [orderInitiating, setOrderInitiating] = useState(false);
 
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [liveDestination, setLiveDestination] = useState(null);
@@ -309,21 +312,6 @@ export default function StorefrontLayout({
 
   const removeItem = index => setCart(list => list.filter((_, i) => i !== index));
 
-  const baseUpiParams = `pa=${encodeURIComponent(settings.upiId || "")}&pn=${encodeURIComponent(
-    settings.storeName || "Kashvi Fashions"
-  )}&am=${encodeURIComponent(total.toFixed(2))}&cu=INR&tn=${encodeURIComponent(
-    "Kashvi Fashions Order"
-  )}`;
-
-  const upiLink = `upi://pay?${baseUpiParams}`;
-  const gpayLink = `gpay://upi/pay?${baseUpiParams}`;
-  const phonepeLink = `phonepe://pay?${baseUpiParams}`;
-  const paytmLink = `paytmmp://pay?${baseUpiParams}`;
-
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=260x260&margin=4&data=${encodeURIComponent(
-    upiLink
-  )}`;
-
   const handleCustomerLogin = async e => {
     e.preventDefault();
     setAuthError("");
@@ -517,7 +505,8 @@ export default function StorefrontLayout({
     setNewAddressForm({ name: "", phone: "", address: "", pincode: "", city: "", state: "" });
   };
 
-  const startPayment = (e) => {
+  // INITIATE UPI ORDER & OPEN KFUPISystem MODAL
+  const startPayment = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
     if (!customer) {
@@ -548,98 +537,56 @@ export default function StorefrontLayout({
       return;
     }
 
-    // Auto-fallback destination if background verification is slow
     if (!liveDestination) {
-      setLiveDestination({
-        pincode: cleanPin,
-        city: "Local Area",
-        district: "District",
-        state: "Andhra Pradesh",
-        zone_type: cleanPin.startsWith("533") ? "Local" : "Within State"
-      });
+      notify("Pincode is unserviceable");
+      return;
     }
-
-    // Instantly navigate to Payment Step
-    setPaymentStep(true);
-  };
-  
-  const launchUpiApp = specificUri => {
-    if (!settings.upiId) return notify("Store UPI ID is missing");
-    window.location.href = specificUri || upiLink;
-  };
-
-  const placeOrder = async () => {
-    if (!customer) {
-      setCheckoutOpen(false);
-      setAccountMode("login");
-      setAccountOpen(true);
-      return notify("Authentication required to place order");
-    }
-    if (!cart.length || !form.name.trim() || !form.phone.trim() || !form.address.trim() || !form.pincode.trim()) {
-      return notify("Please complete required contact & address fields");
-    }
-    if (!liveDestination) return notify("Pincode is unserviceable");
-    if (!settings.upiId) return notify("UPI ID configuration missing");
-
-    const createdAt = new Date().toISOString();
-    const newOrderId = makeId("KF");
-
-    const newOrder = {
-      id: newOrderId,
-      customer_id: customer.id,
-      status: "payment_verification",
-      total: Number(total.toFixed(2)),
-      total_weight: Number(totalWeight || 0),
-      payment: {
-        status: "claimed",
-        claimedAt: createdAt,
-        method: "UPI",
-        amount: Number(total.toFixed(2))
-      },
-      shipping: {
-        courier: "India Post (Speed Post)",
-        trackingId: ""
-      },
-      refund: {},
-      customer: {
-        ...form,
-        city: liveDestination.city || liveDestination.office || "",
-        district: liveDestination.district || "",
-        state: liveDestination.state || ""
-      },
-      items: cart,
-      history: [
-        { status: "new", at: createdAt },
-        { status: "payment_verification", at: createdAt }
-      ]
-    };
 
     try {
+      setOrderInitiating(true);
+      const createdAt = new Date().toISOString();
+      const newOrderId = makeId("KF");
+
+      const newOrder = {
+        id: newOrderId,
+        customer_id: customer.id,
+        status: "payment_verification",
+        total: Number(total.toFixed(2)),
+        total_weight: Number(totalWeight || 0),
+        payment: {
+          status: "claimed",
+          claimedAt: createdAt,
+          method: "UPI",
+          amount: Number(total.toFixed(2))
+        },
+        shipping: {
+          courier: "India Post (Speed Post)",
+          trackingId: ""
+        },
+        refund: {},
+        customer: {
+          ...form,
+          city: liveDestination.city || liveDestination.office || "",
+          district: liveDestination.district || "",
+          state: liveDestination.state || ""
+        },
+        items: cart,
+        history: [
+          { status: "new", at: createdAt },
+          { status: "payment_verification", at: createdAt }
+        ]
+      };
+
       const { error } = await supabase.from("orders").insert([newOrder]);
       if (error) throw error;
 
-      setOrders(list => [newOrder, ...list]);
-      setSubmittedOrderId(newOrderId);
-      setCart([]);
-      setPaymentStep(false);
-      setPaymentSubmitted(true);
-      notify("Order placed successfully!");
-
-      const recipientEmail = form.email || customer?.email;
-      sendAutomatedEmail({
-        toEmail: recipientEmail,
-        customerName: form.name,
-        orderId: newOrderId,
-        stage: "payment_verification",
-        total: total.toFixed(2),
-        items: cart,
-        trackingNo: "",
-        courier: "India Post"
-      });
-
+      setActivePendingOrder(newOrder);
+      setCheckoutOpen(false);
     } catch (err) {
-      console.error(err);
-      notify(`Error: ${err.message || "Failed to place order. Try again."}`);
+      console.error("Order initialization error:", err);
+      notify(`Error: ${err.message || "Failed to initiate payment. Try again."}`);
+    } finally {
+      setOrderInitiating(false);
     }
   };
 
@@ -830,7 +777,7 @@ export default function StorefrontLayout({
             {search && <button type="button" onClick={() => setSearch("")}>×</button>}
           </div>
 
-            <div className="store-pills-scroll">
+          <div className="store-pills-scroll">
             <button
               type="button"
               className={`store-pill-btn ${category === "All" ? "active" : ""}`}
@@ -904,7 +851,7 @@ export default function StorefrontLayout({
         </div>
       </section>
 
-      {/* VALUE HIGHLIGHTS - 2x2 ON MOBILE & 4-COL ON DESKTOP */}
+      {/* VALUE HIGHLIGHTS */}
       <section className="store-trust-banner">
         <div className="trust-item">
           <span className="trust-icon">✓</span>
@@ -924,15 +871,13 @@ export default function StorefrontLayout({
         </div>
       </section>
 
-      {/* MINIMAL FOOTER WITH DYNAMIC ADMIN-LINKED SOCIAL ICONS */}
+      {/* FOOTER */}
       <footer className="store-footer">
         <div className="store-footer-inner">
           <strong className="store-footer-brand">{settings?.storeName?.toUpperCase() || "KASHVI FASHIONS"}</strong>
           <p className="store-footer-desc">Redefining daily lifestyle essentials with unmatched precision and silhouette comfort.</p>
           
-          {/* DYNAMIC ICON-ONLY SOCIAL LINKS */}
           <div className="store-footer-social-icons">
-            {/* WhatsApp */}
             {settings?.whatsappNo && (
               <a 
                 href={`https://wa.me/91${String(settings.whatsappNo).replace(/[^0-9]/g, "")}`} 
@@ -947,7 +892,6 @@ export default function StorefrontLayout({
               </a>
             )}
 
-            {/* Instagram */}
             {settings?.instagramUrl && (
               <a 
                 href={settings.instagramUrl} 
@@ -962,7 +906,6 @@ export default function StorefrontLayout({
               </a>
             )}
 
-            {/* Facebook */}
             {settings?.facebookUrl && (
               <a 
                 href={settings.facebookUrl} 
@@ -977,7 +920,6 @@ export default function StorefrontLayout({
               </a>
             )}
 
-            {/* YouTube */}
             {settings?.youtubeUrl && (
               <a 
                 href={settings.youtubeUrl} 
@@ -1269,7 +1211,7 @@ export default function StorefrontLayout({
 
                       <div style={{ textAlign: "right" }}>
                         <span style={{ fontSize: "11px", fontWeight: "bold", color: "var(--store-text-muted)", display: "block" }}>TOTAL BILL</span>
-                        <strong style={{ fontSize: "18px", color: "var(--store-primary)" }}>{money(ord.total)}</strong>
+                        <strong style={{ fontSize: "18px", color: "var(--store-primary)" }}>{money(ord.total || ord.total_amount)}</strong>
                       </div>
                     </div>
 
@@ -1589,7 +1531,7 @@ export default function StorefrontLayout({
             <div className="store-drawer-head">
               <div>
                 <span>KASHVI CHECKOUT</span>
-                <h2>{paymentSubmitted ? "Order Confirmation" : paymentStep ? "Instant UPI Settlement" : "Delivery Coordinates"}</h2>
+                <h2>{paymentSubmitted ? "Order Confirmation" : "Delivery Coordinates"}</h2>
               </div>
               <button type="button" onClick={() => { setCheckoutOpen(false); setPaymentStep(false); setPaymentSubmitted(false); }}>×</button>
             </div>
@@ -1612,7 +1554,7 @@ export default function StorefrontLayout({
                   </button>
                 </div>
               </div>
-            ) : !paymentStep ? (
+            ) : (
               <div className="store-checkout-grid">
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
@@ -1683,54 +1625,14 @@ export default function StorefrontLayout({
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "15px", fontWeight: 800, marginTop: "10px", paddingTop: "10px", borderTop: "1px solid var(--store-border)" }}>
                     <span>Grand Total</span><strong>{liveDestination ? money(total) : "—"}</strong>
                   </div>
-                  <button type="button" className="store-primary-btn full" style={{ marginTop: "16px" }} onClick={startPayment}>
-                    Proceed to UPI Payment · {liveDestination ? money(total) : "—"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="store-responsive-payment-view">
-                <div className="store-pay-header-bar">
-                  <div><span>TOTAL PAYABLE AMOUNT</span><h3>{money(total)}</h3></div>
-                  <div className="store-secure-shield">🔒 100% Secure UPI</div>
-                </div>
-
-                <div className="store-mobile-app-picker">
-                  <span className="picker-title">⚡ PAY INSTANTLY VIA INSTALLED APP</span>
-                  <div className="store-app-buttons-grid">
-                    <button type="button" className="store-app-launch-btn gpay-btn" onClick={() => launchUpiApp(gpayLink)}>
-                      <span className="app-icon">G</span><b>Google Pay</b>
-                    </button>
-                    <button type="button" className="store-app-launch-btn phonepe-btn" onClick={() => launchUpiApp(phonepeLink)}>
-                      <span className="app-icon">पे</span><b>PhonePe</b>
-                    </button>
-                    <button type="button" className="store-app-launch-btn paytm-btn" onClick={() => launchUpiApp(paytmLink)}>
-                      <span className="app-icon">₹</span><b>Paytm</b>
-                    </button>
-                    <button type="button" className="store-app-launch-btn any-upi-btn" onClick={() => launchUpiApp(upiLink)}>
-                      <span className="app-icon">✦</span><b>Other UPI</b>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="store-desktop-qr-container">
-                  <div className="store-qr-wrapper">
-                    <img src={qrUrl} alt="UPI QR Code" />
-                    <small>Scan using phone scanner or banking app</small>
-                  </div>
-                  <div className="store-vpa-copy-card">
-                    <div><small>MERCHANT UPI VPA</small><strong>{settings.upiId || "kashvifashions@upi"}</strong></div>
-                    <button type="button" className="store-copy-pill" onClick={() => { navigator.clipboard.writeText(settings.upiId); notify("UPI ID copied!"); }}>Copy VPA</button>
-                  </div>
-                </div>
-
-                <div className="store-payment-completion-bar">
-                  <p>Completed your payment? Tap below to finish order.</p>
-                  <button type="button" className="store-primary-btn full pulse" onClick={placeOrder}>
-                    ✓ I HAVE COMPLETED PAYMENT
-                  </button>
-                  <button type="button" className="store-text-button-subtle" onClick={() => setPaymentStep(false)}>
-                    ← Back to Address Details
+                  <button 
+                    type="button" 
+                    className="store-primary-btn full" 
+                    style={{ marginTop: "16px" }} 
+                    onClick={startPayment}
+                    disabled={orderInitiating}
+                  >
+                    {orderInitiating ? "Initiating Secure UPI..." : `Proceed to UPI Payment · ${liveDestination ? money(total) : "—"}`}
                   </button>
                 </div>
               </div>
@@ -1738,6 +1640,35 @@ export default function StorefrontLayout({
           </div>
         </div>
       )}
+
+      {/* KFUPISYSTEM AUTOMATED CHECKOUT MODAL */}
+      <KFUPISystem
+        isOpen={Boolean(activePendingOrder)}
+        onClose={() => setActivePendingOrder(null)}
+        orderData={activePendingOrder}
+        settings={settings}
+        onPaymentSuccess={(confirmedOrder) => {
+          setActivePendingOrder(null);
+          setOrders(list => [{ ...confirmedOrder, status: "payment_received" }, ...list]);
+          setSubmittedOrderId(confirmedOrder.id);
+          setCart([]);
+          setCheckoutOpen(true);
+          setPaymentSubmitted(true);
+          notify("🎉 Payment Verified! Your order has been placed successfully.");
+
+          const recipientEmail = form.email || customer?.email;
+          sendAutomatedEmail({
+            toEmail: recipientEmail,
+            customerName: form.name,
+            orderId: confirmedOrder.id,
+            stage: "payment_received",
+            total: Number(confirmedOrder.total || 0).toFixed(2),
+            items: cart,
+            trackingNo: "",
+            courier: "India Post"
+          });
+        }}
+      />
 
       {/* QUICK VIEW */}
       {selectedProduct && (
