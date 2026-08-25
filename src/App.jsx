@@ -57,12 +57,12 @@ export default function App() {
       try {
         // 1. Settings Table
         const { data: setRes } = await supabase.from("settings").select("*").eq("id", 1).maybeSingle();
-        if (setRes?.data) {
-          setSettings(prev => ({
-            ...prev,
-            ...setRes.data
-          }));
-        }
+        if (setRes) {
+  setSettings(prev => ({
+    ...prev,
+    ...setRes
+  }));
+}
 
         // 2. Products Table
         const { data: p } = await supabase.from("products").select("*").order("created_at", { ascending: false });
