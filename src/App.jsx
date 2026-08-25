@@ -14,7 +14,9 @@ const defaultSettings = {
 
 export default function App() {
   const [view, setView] = useState(
-  window.location.pathname === "/kfmama" ? "admin" : "store"
+  window.location.pathname.toLowerCase() === "/kfmama"
+    ? "admin"
+    : "store"
 );
   const [page, setPage] = useState("dashboard");
   const [notice, setNotice] = useState("");
@@ -165,7 +167,10 @@ export default function App() {
           settings={settings}
           setSettings={setSettings}
           notify={notify}
-          onStore={() => setView("store")}
+          onStore={() => {
+  window.history.pushState({}, "", "/");
+  setView("store");
+}}
         />
       ) : (
         <StorefrontLayout
@@ -177,7 +182,10 @@ export default function App() {
           setOrders={setOrders}
           pincodes={pincodes}
           notify={notify}
-          onAdmin={() => setView("admin")}
+          onAdmin={() => {
+  window.history.pushState({}, "", "/kfmama");
+  setView("admin");
+}}
         />
       )}
 
