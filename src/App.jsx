@@ -13,7 +13,9 @@ const defaultSettings = {
 };
 
 export default function App() {
-  const [view, setView] = useState("admin");
+  const [view, setView] = useState(
+  window.location.pathname === "/kfmama" ? "admin" : "store"
+);
   const [page, setPage] = useState("dashboard");
   const [notice, setNotice] = useState("");
 
