@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function KFUPISystem({
@@ -14,6 +14,9 @@ export default function KFUPISystem({
   const [paymentDone, setPaymentDone] = useState(false);
   const [showMobileQR, setShowMobileQR] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+
+  // Lock to prevent multiple callback triggers
+  const isHandledRef = useRef(false);
 
   const [storeInfo, setStoreInfo] = useState({
     upiId: settings?.upiId || "",
@@ -60,6 +63,7 @@ export default function KFUPISystem({
     if (!isOpen || !orderData || paymentDone) return;
     setTimeLeft(300);
     setIsExpired(false);
+    isHandledRef.current = false;
 
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
@@ -83,15 +87,30 @@ export default function KFUPISystem({
     const sessionStartTime = Date.now();
 
     const handleSuccess = async (signalRecord) => {
+      if (isHandledRef.current) return;
+      isHandledRef.current = true;
       setPaymentDone(true);
+
+      // Consume signal in DB
       if (signalRecord?.id) {
-        await supabase
-          .from("payment_signals")
-          .update({ status: "consumed" })
-          .eq("id", signalRecord.id);
+        try {
+          await supabase
+            .from("payment_signals")
+            .update({ status: "consumed" })
+            .eq("id", signalRecord.id);
+        } catch (err) {
+          console.error("Failed to update signal status:", err);
+        }
       }
+
+      // Preserve original orderData and attach payment metadata cleanly
       setTimeout(() => {
-        onPaymentSuccess({ ...(signalRecord || orderData), utr: signalRecord?.utr || "" });
+        onPaymentSuccess({
+          ...orderData,
+          utr: signalRecord?.utr || "",
+          payment_signal_id: signalRecord?.id || null,
+          payment_status: "paid"
+        });
       }, 2000);
     };
 
@@ -119,6 +138,7 @@ export default function KFUPISystem({
 
     // High-frequency Polling Fallback (Every 2 seconds)
     const interval = setInterval(async () => {
+      if (isHandledRef.current) return;
       try {
         const { data } = await supabase
           .from("payment_signals")
@@ -176,6 +196,7 @@ export default function KFUPISystem({
   };
 
   const handleRetry = () => {
+    isHandledRef.current = false;
     setIsExpired(false);
     setTimeLeft(300);
     setIsVerifying(false);
