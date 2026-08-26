@@ -8,20 +8,33 @@ export default function KFUPISystem({
   settings,
   onPaymentSuccess
 }) {
-  const [timeLeft, setTimeLeft] = useState(600);
+  const [timeLeft, setTimeLeft] = useState(300); // 5 Minutes (300 seconds)
+  const [isExpired, setIsExpired] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [paymentDone, setPaymentDone] = useState(false);
+  const [showMobileQR, setShowMobileQR] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
   const [storeInfo, setStoreInfo] = useState({
     upiId: settings?.upiId || "",
     storeName: settings?.storeName || "Kashvi Fashions"
   });
 
-  // 1. Fetch Store Info from Supabase Database if not passed via props
+  // Mobile Device Detection
+  useEffect(() => {
+    const checkDevice = () => {
+      setIsMobile(window.innerWidth <= 768 || /Mobi|Android|iPhone/i.test(navigator.userAgent));
+    };
+    checkDevice();
+    window.addEventListener("resize", checkDevice);
+    return () => window.removeEventListener("resize", checkDevice);
+  }, []);
+
   // 1. Fetch Store Info from Supabase JSONB settings
   useEffect(() => {
     async function loadStoreInfo() {
       try {
-        const { data: dbRow, error } = await supabase
+        const { data: dbRow } = await supabase
           .from("settings")
           .select("data")
           .single();
@@ -42,51 +55,63 @@ export default function KFUPISystem({
     }
   }, [isOpen]);
 
-  // 2. 10-Minute Expiry Countdown Timer
+  // 2. 5-Minute Expiry Countdown Timer
   useEffect(() => {
     if (!isOpen || !orderData || paymentDone) return;
-    setTimeLeft(600);
+    setTimeLeft(300);
+    setIsExpired(false);
+
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          onClose();
+          setIsExpired(true);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+
     return () => clearInterval(timer);
-  }, [isOpen, orderData, paymentDone, onClose]);
+  }, [isOpen, orderData, paymentDone]);
 
-  // 3. Realtime Listener & Rapid Polling for Bank Credit Detection
+  // 3. Realtime Listener & Rapid Polling on payment_signals Table
   useEffect(() => {
-    if (!isOpen || !orderData?.id || paymentDone) return;
+    if (!isOpen || !orderData || paymentDone || isExpired) return;
 
-    const handleSuccess = (updatedData) => {
+    const targetAmount = Number(orderData.total || orderData.total_amount || 0);
+    const sessionStartTime = Date.now();
+
+    const handleSuccess = async (signalRecord) => {
       setPaymentDone(true);
+      if (signalRecord?.id) {
+        await supabase
+          .from("payment_signals")
+          .update({ status: "consumed" })
+          .eq("id", signalRecord.id);
+      }
       setTimeout(() => {
-        onPaymentSuccess(updatedData || orderData);
+        onPaymentSuccess({ ...(signalRecord || orderData), utr: signalRecord?.utr || "" });
       }, 2000);
     };
 
     // Supabase Postgres Realtime Subscription
     const channel = supabase
-      .channel(`order-status-${orderData.id}`)
+      .channel("payment-signals-channel")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'orders',
-          filter: `id=eq.${orderData.id}`
+          event: "INSERT",
+          schema: "public",
+          table: "payment_signals"
         },
         (payload) => {
+          const signal = payload.new;
           if (
-            payload.new?.status === "payment_received" ||
-            payload.new?.payment?.status === "received"
+            signal?.status === "received" &&
+            Number(signal.amount) === targetAmount
           ) {
-            handleSuccess(payload.new);
+            handleSuccess(signal);
           }
         }
       )
@@ -96,17 +121,20 @@ export default function KFUPISystem({
     const interval = setInterval(async () => {
       try {
         const { data } = await supabase
-          .from("orders")
-          .select("status, payment")
-          .eq("id", orderData.id)
-          .single();
+          .from("payment_signals")
+          .select("*")
+          .eq("status", "received")
+          .order("created_at", { ascending: false })
+          .limit(1);
 
-        if (
-          data &&
-          (data.status === "payment_received" || data.payment?.status === "received")
-        ) {
-          clearInterval(interval);
-          handleSuccess(data);
+        if (data && data.length > 0) {
+          const signal = data[0];
+          const signalTime = new Date(signal.created_at).getTime();
+
+          if (signalTime >= sessionStartTime - 10000 && Number(signal.amount) === targetAmount) {
+            clearInterval(interval);
+            handleSuccess(signal);
+          }
         }
       } catch (err) {
         console.error("Payment check error:", err);
@@ -117,18 +145,18 @@ export default function KFUPISystem({
       clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [isOpen, orderData, paymentDone, onPaymentSuccess]);
+  }, [isOpen, orderData, paymentDone, isExpired, onPaymentSuccess]);
 
   if (!isOpen || !orderData) return null;
 
   const upiId = String(storeInfo.upiId || settings?.upiId || "").trim();
   const storeName = storeInfo.storeName || settings?.storeName || "Kashvi Fashions";
   const amount = Number(orderData.total || orderData.total_amount || 0).toFixed(2);
-  const orderRef = orderData.id;
-  
-  // Standard Generic UPI Intent URI (Triggers Android Installed Apps Chooser)
+  const orderRef = orderData.id || "KF" + Date.now().toString().slice(-6);
+
+  // Standard Generic UPI Intent URI
   const upiIntentUrl = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName)}&am=${amount}&cu=INR&tn=${encodeURIComponent(String(orderRef))}`;
-  
+
   // Clean QR Code Matrix
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiIntentUrl)}&color=0d5249&bgcolor=ffffff&margin=1`;
 
@@ -145,6 +173,12 @@ export default function KFUPISystem({
     }
     setIsVerifying(true);
     window.location.href = upiIntentUrl;
+  };
+
+  const handleRetry = () => {
+    setIsExpired(false);
+    setTimeLeft(300);
+    setIsVerifying(false);
   };
 
   return (
@@ -171,7 +205,28 @@ export default function KFUPISystem({
       `}</style>
 
       <div style={modalCardStyle}>
-        {paymentDone ? (
+        {isExpired ? (
+          /* EXPIRED SCREEN */
+          <div style={{ textAlign: "center", padding: "20px 0", animation: "kfPopIn 0.3s ease-out" }}>
+            <div style={expiredCircleStyle}>
+              <span style={{ fontSize: "28px" }}>⏳</span>
+            </div>
+
+            <h2 style={{ fontSize: "18px", fontWeight: "800", color: "#ef4444", margin: "16px 0 4px" }}>
+              Session Expired
+            </h2>
+            <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 20px" }}>
+              Payment window (5 mins) timed out. Please try again.
+            </p>
+
+            <button type="button" onClick={handleRetry} style={primaryCtaButtonStyle}>
+              🔄 Try Again
+            </button>
+            <button onClick={onClose} style={cancelActionStyle}>
+              Cancel Transaction
+            </button>
+          </div>
+        ) : paymentDone ? (
           /* SUCCESS SCREEN */
           <div style={{ textAlign: "center", padding: "20px 0", animation: "kfPopIn 0.4s ease-out" }}>
             <div style={successCheckCircleStyle}>
@@ -179,7 +234,7 @@ export default function KFUPISystem({
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
-            
+
             <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0d5249", margin: "16px 0 4px" }}>
               Payment Successful!
             </h2>
@@ -225,39 +280,7 @@ export default function KFUPISystem({
               <span style={amountNumberStyle}>₹{amount}</span>
             </div>
 
-            {/* HUD SCANNER CHAMBER */}
-            <div style={hudOuterFrameStyle}>
-              <div style={{ ...hudCornerStyle, top: "-4px", left: "-4px", borderTop: "3px solid #0d5249", borderLeft: "3px solid #0d5249" }} />
-              <div style={{ ...hudCornerStyle, top: "-4px", right: "-4px", borderTop: "3px solid #0d5249", borderRight: "3px solid #0d5249" }} />
-              <div style={{ ...hudCornerStyle, bottom: "-4px", left: "-4px", borderBottom: "3px solid #0d5249", borderLeft: "3px solid #0d5249" }} />
-              <div style={{ ...hudCornerStyle, bottom: "-4px", right: "-4px", borderBottom: "3px solid #0d5249", borderRight: "3px solid #0d5249" }} />
-
-              <div style={hudGridOverlayStyle} />
-              <div style={laserScanBeamStyle} />
-
-              <div style={qrImageWrapperStyle}>
-                {upiId ? (
-                  <>
-                    <img
-                      src={qrUrl}
-                      alt="Scan to Pay"
-                      style={{ width: "175px", height: "175px", borderRadius: "10px", display: "block" }}
-                    />
-                    <div style={centerBrandBadgeStyle}>
-                      <svg width="18" height="18" viewBox="0 0 100 100" fill="none" stroke="#0d5249" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M50 20 L20 65 L80 65 Z" />
-                        <path d="M50 10 C50 10 50 20 50 20" />
-                      </svg>
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ textAlign: "center", padding: "20px", color: "#ef4444", fontSize: "12px", fontWeight: "600" }}>
-                    Loading Store UPI Info...
-                  </div>
-                )}
-              </div>
-            </div>
-
+            {/* Pay via UPI App Action */}
             <div style={{ position: "relative", overflow: "hidden", borderRadius: "12px", marginTop: "14px" }}>
               <button
                 type="button"
@@ -268,6 +291,52 @@ export default function KFUPISystem({
               </button>
               <div style={shimmerEffectStyle} />
             </div>
+
+            {/* Mobile QR Toggle Button */}
+            {isMobile && (
+              <button
+                type="button"
+                onClick={() => setShowMobileQR(!showMobileQR)}
+                style={toggleQRButtonStyle}
+              >
+                {showMobileQR ? "▲ Hide QR Code" : "📷 Show QR Code to Scan"}
+              </button>
+            )}
+
+            {/* HUD SCANNER CHAMBER (Always on desktop, conditional on mobile) */}
+            {(!isMobile || showMobileQR) && (
+              <div style={hudOuterFrameStyle}>
+                <div style={{ ...hudCornerStyle, top: "-4px", left: "-4px", borderTop: "3px solid #0d5249", borderLeft: "3px solid #0d5249" }} />
+                <div style={{ ...hudCornerStyle, top: "-4px", right: "-4px", borderTop: "3px solid #0d5249", borderRight: "3px solid #0d5249" }} />
+                <div style={{ ...hudCornerStyle, bottom: "-4px", left: "-4px", borderBottom: "3px solid #0d5249", borderLeft: "3px solid #0d5249" }} />
+                <div style={{ ...hudCornerStyle, bottom: "-4px", right: "-4px", borderBottom: "3px solid #0d5249", borderRight: "3px solid #0d5249" }} />
+
+                <div style={hudGridOverlayStyle} />
+                <div style={laserScanBeamStyle} />
+
+                <div style={qrImageWrapperStyle}>
+                  {upiId ? (
+                    <>
+                      <img
+                        src={qrUrl}
+                        alt="Scan to Pay"
+                        style={{ width: "175px", height: "175px", borderRadius: "10px", display: "block" }}
+                      />
+                      <div style={centerBrandBadgeStyle}>
+                        <svg width="18" height="18" viewBox="0 0 100 100" fill="none" stroke="#0d5249" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M50 20 L20 65 L80 65 Z" />
+                          <path d="M50 10 C50 10 50 20 50 20" />
+                        </svg>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ textAlign: "center", padding: "20px", color: "#ef4444", fontSize: "12px", fontWeight: "600" }}>
+                      Loading Store UPI Info...
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div style={statusBarStyle}>
               <span style={radarDotStyle} />
@@ -352,6 +421,19 @@ const amountNumberStyle = {
   fontSize: "22px",
   fontWeight: "800",
   color: "#000000"
+};
+
+const toggleQRButtonStyle = {
+  width: "100%",
+  marginTop: "10px",
+  background: "#f8fafc",
+  border: "1px dashed #0d5249",
+  borderRadius: "10px",
+  padding: "8px",
+  fontSize: "12px",
+  fontWeight: "700",
+  color: "#0d5249",
+  cursor: "pointer"
 };
 
 const hudOuterFrameStyle = {
@@ -482,6 +564,18 @@ const successCheckCircleStyle = {
   borderRadius: "50%",
   background: "rgba(253, 121, 168, 0.1)",
   border: "2px solid #fd79a8",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  margin: "0 auto"
+};
+
+const expiredCircleStyle = {
+  width: "70px",
+  height: "70px",
+  borderRadius: "50%",
+  background: "rgba(239, 68, 68, 0.1)",
+  border: "2px solid #ef4444",
   display: "flex",
   justifyContent: "center",
   alignItems: "center",
