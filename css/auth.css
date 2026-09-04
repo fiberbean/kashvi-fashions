@@ -1,0 +1,272 @@
+/* =========================================================
+   CUSTOMER AUTH & INDEPENDENT POPUP MODALS
+   ========================================================= */
+
+/* Shared Overlay for All Popups */
+.auth-modal-overlay,
+.account-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 36, 30, 0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: none !important;
+  align-items: center;
+  justify-content: center;
+  z-index: 2200;
+  padding: 16px;
+}
+
+.auth-modal-overlay.active,
+.account-modal-overlay.active {
+  display: flex !important;
+}
+
+.auth-card,
+.account-modal-card {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 54, 47, 0.25);
+  padding: 24px;
+  position: relative;
+  animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-close-auth,
+.btn-close-acc-modal {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(0, 86, 75, 0.08);
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.btn-close-auth:hover,
+.btn-close-acc-modal:hover {
+  background: rgba(212, 106, 132, 0.2);
+  color: var(--brand-pink);
+}
+
+.acc-modal-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(0, 86, 75, 0.1);
+  padding-bottom: 10px;
+}
+
+/* Header Dropdown Menu */
+.account-dropdown-menu {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  width: 250px;
+  box-shadow: 0 12px 36px rgba(0, 54, 47, 0.18);
+  display: none;
+  flex-direction: column;
+  z-index: 2100;
+  overflow: hidden;
+  animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.account-dropdown-menu.active {
+  display: flex;
+}
+
+.acc-dropdown-header {
+  padding: 12px 14px;
+  background: rgba(0, 86, 75, 0.04);
+  border-bottom: 1px solid rgba(0, 86, 75, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.acc-dropdown-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--brand-emerald);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.acc-menu-item {
+  padding: 11px 16px;
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.acc-menu-item:hover {
+  background: rgba(0, 86, 75, 0.06);
+  padding-left: 20px;
+}
+
+.acc-menu-item.logout {
+  color: var(--stat-red);
+  border-top: 1px solid rgba(0, 86, 75, 0.08);
+}
+
+/* Auth Modal Tabs & Forms */
+.auth-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(0, 86, 75, 0.12);
+  margin-bottom: 18px;
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.auth-tab-btn.active {
+  color: var(--brand-emerald-dark);
+  border-bottom-color: var(--brand-pink);
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.auth-field-group label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+  text-transform: uppercase;
+}
+
+.auth-input {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 86, 75, 0.2);
+  font-size: 0.84rem;
+  outline: none;
+  background: #fff;
+}
+
+.auth-input:focus {
+  border-color: var(--brand-emerald);
+  box-shadow: 0 0 0 2px rgba(0, 86, 75, 0.1);
+}
+
+.btn-auth-submit {
+  width: 100%;
+  padding: 10px;
+  background: var(--brand-emerald);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.btn-auth-submit:hover {
+  background: var(--brand-emerald-dark);
+}
+
+.auth-helper-links {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.74rem;
+  margin-top: 4px;
+}
+
+.auth-link {
+  color: var(--brand-pink);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Modals Item Cards */
+.customer-order-card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 86, 75, 0.14);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.saved-addr-card {
+  background: #ffffff;
+  border: 1.5px solid rgba(0, 86, 75, 0.14);
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.saved-addr-card.is-default {
+  border-color: var(--brand-emerald);
+  background: rgba(0, 86, 75, 0.02);
+}
+
+.btn-delete-addr-icon {
+  background: none;
+  border: none;
+  color: var(--stat-red);
+  font-size: 1.1rem;
+  cursor: pointer;
+}

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workspace Login — Kashvi Fashions</title>
+  
+  <link rel="stylesheet" href="css/theme.css">
+  <style>
+    .login-wrapper {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 360px;
+      padding: 28px 24px;
+      background: var(--bg-glass-card);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      box-shadow: 0 16px 40px rgba(0, 54, 47, 0.12), 0 1px 1px 0 rgba(255, 255, 255, 0.95) inset;
+      text-align: center;
+    }
+
+    .login-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .login-logo {
+      width: 48px;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 10px;
+      border: 1.5px solid var(--brand-pink);
+      box-shadow: 0 0 14px var(--brand-pink-glow);
+      background: #fff;
+    }
+
+    .login-brand-title {
+      font-family: var(--font-brand);
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--brand-emerald-dark);
+      line-height: 1.1;
+    }
+
+    .login-brand-sub {
+      font-size: 0.65rem;
+      color: var(--brand-pink);
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      text-align: left;
+    }
+
+    .login-form .form-group label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--brand-emerald-dark);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .login-form .form-input {
+      padding: 8px 12px;
+      border: 1px solid rgba(0, 86, 75, 0.2);
+      border-radius: 6px;
+      font-size: 0.86rem;
+      background: rgba(255, 255, 255, 0.95);
+      outline: none;
+      width: 100%;
+      text-align: center;
+      font-weight: 600;
+      letter-spacing: 1px;
+    }
+
+    .login-form .form-input:focus {
+      border-color: var(--brand-emerald);
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(0, 86, 75, 0.12);
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 9px;
+      background: var(--brand-emerald);
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 86, 75, 0.25);
+      margin-top: 4px;
+      transition: all 0.2s ease;
+    }
+
+    .login-btn:hover {
+      background: var(--brand-emerald-dark);
+    }
+
+    .login-error-msg {
+      display: none;
+      font-size: 0.75rem;
+      color: var(--stat-red);
+      background: rgba(222, 53, 11, 0.1);
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(222, 53, 11, 0.2);
+      margin-bottom: 10px;
+      text-align: center;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-wrapper">
+    <div class="login-card">
+      
+      <div class="login-brand">
+        <img src="assets/logo.png" alt="Logo" class="login-logo" onerror="this.src='https://placehold.co/100x100/00564b/ffffff?text=KF'">
+        <div>
+          <div class="login-brand-title">KASHVI</div>
+          <div class="login-brand-sub">FASHIONS</div>
+        </div>
+      </div>
+
+      <div id="login-error" class="login-error-msg"></div>
+
+      <form id="login-form" class="login-form">
+        <div class="form-group">
+          <label for="login-admin-id">Admin ID</label>
+          <input type="text" id="login-admin-id" class="form-input" placeholder="e.g. admin" required autofocus>
+        </div>
+        
+        <div class="form-group">
+          <label for="login-admin-pin">Security PIN</label>
+          <input type="password" id="login-admin-pin" class="form-input" placeholder="••••" maxlength="8" required>
+        </div>
+
+        <button type="submit" id="btn-login-submit" class="login-btn">Unlock Workspace</button>
+      </form>
+
+    </div>
+  </div>
+
+  <script type="module">
+    import { supabase } from './js/supabase.js';
+
+    // Check existing PIN session
+    const isAuth = sessionStorage.getItem('kashvi_admin_auth');
+    if (isAuth === 'true') {
+      window.location.replace('admin.html');
+    }
+
+    const form = document.getElementById('login-form');
+    const adminIdInput = document.getElementById('login-admin-id');
+    const adminPinInput = document.getElementById('login-admin-pin');
+    const submitBtn = document.getElementById('btn-login-submit');
+    const errorEl = document.getElementById('login-error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Verifying PIN...';
+
+      const enteredId = adminIdInput.value.trim();
+      const enteredPin = adminPinInput.value.trim();
+
+      try {
+        // Fetch Admin Credentials from store_settings
+        const { data, error } = await supabase
+          .from('store_settings')
+          .select('admin_id, admin_pin, pipeline_pin')
+          .eq('id', 'store_config')
+          .single();
+
+        if (error) throw error;
+
+        const validId = data?.admin_id || 'admin';
+        const validPin = data?.admin_pin || data?.pipeline_pin || '1234';
+
+        if (enteredId.toLowerCase() === validId.toLowerCase() && enteredPin === validPin) {
+          sessionStorage.setItem('kashvi_admin_auth', 'true');
+          sessionStorage.setItem('kashvi_admin_user', enteredId);
+          window.location.replace('admin.html');
+        } else {
+          throw new Error('❌ Incorrect Admin ID or Security PIN!');
+        }
+      } catch (err) {
+        errorEl.innerText = err.message || 'Authentication failed.';
+        errorEl.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerText = 'Unlock Workspace';
+      }
+    });
+  </script>
+
+</body>
+</html>

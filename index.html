@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Kashvi Fashions — Royal Handloom & Luxury Fashion</title>
+
+  <link rel="stylesheet" href="css/theme.css?v=9.0">
+  <link rel="stylesheet" href="css/storefront.css?v=9.0">
+  <link rel="stylesheet" href="css/product-detail.css?v=9.0">
+  <link rel="stylesheet" href="css/checkout.css?v=9.0">
+  <link rel="stylesheet" href="css/payment.css?v=9.0">
+  <link rel="stylesheet" href="css/auth.css?v=9.0">
+
+  <!-- Mobile Luxury Responsive & Cart Drawer Fixes -->
+  <style>
+    /* ================= GLOBAL IMAGE FIXES ================= */
+    .pdp-main-image-wrap {
+      width: 100% !important;
+      background: #f8faf9 !important;
+      border-radius: 12px !important;
+      overflow: hidden !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      border: 1px solid #edf4f1 !important;
+      position: relative !important;
+    }
+
+    .pdp-main-img {
+      width: 100% !important;
+      height: 100% !important;
+      max-height: 480px !important;
+      object-fit: contain !important;
+      display: block !important;
+    }
+
+    .pdp-thumb-strip {
+      display: flex !important;
+      gap: 8px !important;
+      margin-top: 10px !important;
+      overflow-x: auto !important;
+      padding-bottom: 4px !important;
+    }
+
+    .pdp-thumb-strip img, .pdp-thumb-item {
+      width: 52px !important;
+      height: 64px !important;
+      object-fit: cover !important;
+      border-radius: 6px !important;
+      border: 1.5px solid #dce8e2 !important;
+      cursor: pointer !important;
+      flex-shrink: 0 !important;
+    }
+
+    .pdp-thumb-strip img.active {
+      border-color: var(--brand-emerald, #00564b) !important;
+      box-shadow: 0 0 0 2px rgba(0,86,75,0.2) !important;
+    }
+
+    /* ================= CART DRAWER OVERHAUL (CRITICAL FIX) ================= */
+    .cart-drawer-overlay {
+      z-index: 100000 !important; /* Higher than Mobile Dock Bar */
+    }
+
+    .cart-drawer {
+      display: flex !important;
+      flex-direction: column !important;
+      height: 100% !important;
+      max-height: 100vh !important;
+    }
+
+    .cart-drawer-header {
+      flex-shrink: 0 !important;
+    }
+
+    .free-ship-bar-wrap {
+      flex-shrink: 0 !important;
+    }
+
+    .cart-drawer-body {
+      flex: 1 1 auto !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+      padding: 14px 16px !important;
+    }
+
+    .cart-drawer-footer {
+      flex-shrink: 0 !important;
+      background: #ffffff !important;
+      border-top: 1px solid #e1eee8 !important;
+      padding: 16px 18px 24px 18px !important;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.06) !important;
+    }
+
+    .btn-checkout-proceed {
+      width: 100% !important;
+      display: block !important;
+      background: var(--brand-emerald, #00564b) !important;
+      color: #ffffff !important;
+      padding: 12px 0 !important;
+      border-radius: 8px !important;
+      font-size: 0.92rem !important;
+      font-weight: 700 !important;
+      border: none !important;
+      margin-top: 10px !important;
+      cursor: pointer !important;
+      text-align: center !important;
+    }
+
+    /* ================= MOBILE-SPECIFIC ADJUSTMENTS (max-width: 768px) ================= */
+    @media (max-width: 768px) {
+      .announcement-bar {
+        font-size: 0.68rem !important;
+        padding: 6px 10px !important;
+        line-height: 1.3 !important;
+        text-align: center !important;
+      }
+
+      .store-header {
+        padding: 8px 12px !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 999 !important;
+        background: #ffffff !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+      }
+
+      .header-inner {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 8px 0 !important;
+      }
+
+      .brand-container {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        order: 1 !important;
+      }
+
+      .brand-logo-img {
+        width: 32px !important;
+        height: 32px !important;
+      }
+
+      .brand-text-title {
+        font-size: 0.95rem !important;
+        letter-spacing: 0.5px !important;
+      }
+
+      .brand-text-sub {
+        font-size: 0.6rem !important;
+      }
+
+      .header-actions {
+        order: 2 !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+      }
+
+      .btn-header-cart {
+        padding: 6px 10px !important;
+        font-size: 0.72rem !important;
+        border-radius: 20px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 4px !important;
+      }
+
+      .header-search-wrap {
+        order: 3 !important;
+        width: 100% !important;
+        margin: 4px 0 2px 0 !important;
+        position: relative !important;
+      }
+
+      .header-search-input {
+        width: 100% !important;
+        height: 36px !important;
+        font-size: 0.78rem !important;
+        border-radius: 20px !important;
+        padding-left: 34px !important;
+      }
+
+      .search-icon-abs {
+        position: absolute !important;
+        left: 12px !important;
+        top: 50% !important;
+        transform: translateY(-50%) !important;
+        font-size: 0.85rem !important;
+      }
+
+      .category-navbar {
+        background: #ffffff !important;
+        border-bottom: 1px solid #edf2f0 !important;
+        padding: 4px 0 !important;
+      }
+
+      .category-nav-inner {
+        display: flex !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        gap: 8px !important;
+        padding: 4px 12px !important;
+        scrollbar-width: none !important;
+        -webkit-overflow-scrolling: touch !important;
+      }
+
+      .category-nav-inner::-webkit-scrollbar {
+        display: none !important;
+      }
+
+      .cat-nav-btn {
+        font-size: 0.74rem !important;
+        padding: 6px 14px !important;
+        border-radius: 20px !important;
+      }
+
+      .store-main-container {
+        padding: 10px 12px 75px 12px !important;
+      }
+
+      .hero-slider-wrap {
+        width: 100% !important;
+        height: 180px !important;
+        max-height: 200px !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        margin-bottom: 16px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+      }
+
+      .hero-slider-wrap img, .hero-slide {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+      }
+
+      .products-grid {
+        display: grid !important;
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 10px !important;
+      }
+
+      /* Modals Overlay Above Dock */
+      .account-modal-overlay, .product-modal-overlay, .checkout-view-overlay, .payment-modal-overlay {
+        z-index: 100000 !important;
+      }
+
+      .account-modal-card, .product-detail-modal-card, .checkout-card, .payment-modal-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: 92vh !important;
+        max-height: 92vh !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        border-radius: 18px 18px 0 0 !important;
+        overflow-y: auto !important;
+        padding: 16px 16px 85px 16px !important;
+        margin: 0 !important;
+      }
+
+      .product-detail-modal-card {
+        display: flex !important;
+        flex-direction: column !important;
+      }
+
+      .pdp-main-image-wrap {
+        height: 360px !important;
+        max-height: 380px !important;
+        background: #f4f7f6 !important;
+      }
+
+      .pdp-main-img {
+        height: 100% !important;
+        width: auto !important;
+        max-width: 100% !important;
+        object-fit: contain !important;
+      }
+
+      .checkout-layout-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 16px !important;
+      }
+
+      /* Mobile Sticky Dock Navigation Bar */
+      .mobile-dock-nav {
+        display: flex !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        height: 58px !important;
+        background: #ffffff !important;
+        border-top: 1px solid #e1eee8 !important;
+        justify-content: space-around !important;
+        align-items: center !important;
+        z-index: 9999 !important; /* Lower than Cart & Modals */
+        box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06) !important;
+      }
+
+      .mobile-dock-btn {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        background: none !important;
+        border: none !important;
+        font-size: 0.65rem !important;
+        font-weight: 700 !important;
+        color: #5c7369 !important;
+        cursor: pointer !important;
+        gap: 2px !important;
+      }
+
+      .mobile-dock-btn span:first-child {
+        font-size: 1.15rem !important;
+      }
+
+      .mobile-dock-btn.active {
+        color: var(--brand-emerald-dark, #00564b) !important;
+      }
+
+      /* Lift Tawk.to widget above mobile bottom dock bar */
+      #tawk-default-container, iframe[title*="chat"] {
+        bottom: 68px !important;
+        right: 10px !important;
+        transform: scale(0.85) !important;
+        transform-origin: bottom right !important;
+      }
+    }
+
+    @media (min-width: 769px) {
+      .mobile-dock-nav {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Announcement Bar -->
+  <div class="announcement-bar" id="announcement-ticker">
+    ✨ Free Express Shipping across India on Orders Above ₹999 | Direct UPI Checkout
+  </div>
+
+  <!-- Main Store Header -->
+  <header class="store-header">
+    <div class="header-inner">
+      
+      <!-- Brand Identity -->
+      <a href="#" class="brand-container">
+        <img src="assets/logo.png" alt="Logo" class="brand-logo-img" onerror="this.src='https://placehold.co/100x100/00564b/ffffff?text=KF'">
+        <div class="brand-text-wrap">
+          <span class="brand-text-title">KASHVI</span>
+          <span class="brand-text-sub">FASHIONS</span>
+        </div>
+      </a>
+
+      <!-- Header Actions (Profile & Cart) -->
+      <div class="header-actions">
+        <!-- Auth Profile Trigger -->
+        <button type="button" class="btn-header-cart" id="btn-header-auth" style="background:transparent; color:var(--brand-emerald-dark); border:1px solid rgba(0,86,75,0.2); box-shadow:none;">
+          <span>👤</span> <span>Login</span>
+        </button>
+
+        <!-- Profile Options Dropdown Menu -->
+        <div class="account-dropdown-menu" id="account-dropdown-menu">
+          <div class="acc-dropdown-header">
+            <div class="acc-dropdown-avatar" id="acc-menu-avatar">A</div>
+            <div style="display:flex; flex-direction:column; overflow:hidden;">
+              <strong style="font-size:0.86rem; color:var(--brand-emerald-dark); white-space:nowrap; text-overflow:ellipsis; overflow:hidden;" id="acc-menu-name">Customer</strong>
+              <span style="font-size:0.7rem; color:var(--text-muted); white-space:nowrap; text-overflow:ellipsis; overflow:hidden;" id="acc-menu-email">user@email.com</span>
+            </div>
+          </div>
+          <button type="button" class="acc-menu-item" id="menu-item-orders">
+            <span>📦</span> <span>My Orders</span>
+          </button>
+          <button type="button" class="acc-menu-item" id="menu-item-addresses">
+            <span>📍</span> <span>Saved Addresses</span>
+          </button>
+          <button type="button" class="acc-menu-item" id="menu-item-settings">
+            <span>⚙️</span> <span>Profile Settings</span>
+          </button>
+          <button type="button" class="acc-menu-item logout" id="menu-item-logout">
+            <span>🚪</span> <span>Logout</span>
+          </button>
+        </div>
+
+        <!-- Shopping Bag Trigger -->
+        <button type="button" class="btn-header-cart" id="btn-open-cart">
+          <span>🛍️ Cart</span>
+          <span class="cart-count-badge" id="cart-items-count">0</span>
+        </button>
+      </div>
+
+      <!-- Search Field -->
+      <div class="header-search-wrap">
+        <span class="search-icon-abs">🔍</span>
+        <input type="text" id="store-search-input" class="header-search-input" placeholder="Search sarees, dresses, bra's, jewellery...">
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Category Mega Navigation Bar -->
+  <nav class="category-navbar">
+    <div class="category-nav-inner" id="category-nav-container">
+      <div class="cat-nav-item">
+        <button type="button" class="cat-nav-btn active" data-cat="all">All Collections</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Storefront Main Catalog Container -->
+  <main class="store-main-container">
+    <div class="hero-slider-wrap" id="hero-slider-container">
+      <img src="https://placehold.co/1200x400/00362f/ffffff?text=Kashvi+Luxury+Collection" class="hero-slide" alt="Hero Banner">
+    </div>
+
+    <div class="products-grid" id="store-products-grid">
+      <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+        Loading Royal Collections...
+      </div>
+    </div>
+  </main>
+
+  <!-- Mobile Sticky Dock Navigation Bar -->
+  <div class="mobile-dock-nav">
+    <button type="button" class="mobile-dock-btn active" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">
+      <span>🏠</span> <span>Home</span>
+    </button>
+    <button type="button" class="mobile-dock-btn" onclick="document.getElementById('store-search-input')?.focus();">
+      <span>🔍</span> <span>Search</span>
+    </button>
+    <button type="button" class="mobile-dock-btn" id="btn-mobile-dock-chat" onclick="if(window.Tawk_API && window.Tawk_API.maximize) { window.Tawk_API.showWidget(); window.Tawk_API.maximize(); }">
+      <span>💬</span> <span>Support</span>
+    </button>
+    <button type="button" class="mobile-dock-btn" onclick="document.getElementById('btn-open-cart')?.click();">
+      <span>🛍️</span> <span>Cart</span>
+    </button>
+    <button type="button" class="mobile-dock-btn" onclick="document.getElementById('btn-header-auth')?.click();">
+      <span>👤</span> <span>Account</span>
+    </button>
+  </div>
+
+  <!-- POPUP 1: MY ORDERS ONLY -->
+  <div class="account-modal-overlay" id="modal-my-orders">
+    <div class="account-modal-card">
+      <button type="button" class="btn-close-acc-modal">&times;</button>
+      <div class="acc-modal-title"><span>📦</span> My Orders & Live Status</div>
+      <div id="popup-orders-list" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+  </div>
+
+  <!-- POPUP 2: SAVED ADDRESSES ONLY -->
+  <div class="account-modal-overlay" id="modal-saved-addresses">
+    <div class="account-modal-card">
+      <button type="button" class="btn-close-acc-modal">&times;</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div class="acc-modal-title" style="margin-bottom:0; border:none; padding:0;"><span>📍</span> Saved Delivery Addresses</div>
+        <button type="button" id="btn-toggle-popup-add-addr" style="background:none; border:none; color:var(--brand-pink); font-size:0.8rem; font-weight:700; cursor:pointer;">
+          + Add New Address
+        </button>
+      </div>
+
+      <div id="popup-addresses-list" style="display:flex; flex-direction:column; gap:8px;"></div>
+
+      <form class="auth-form" id="form-popup-add-address" style="display:none; background:rgba(0,86,75,0.03); border:1px dashed rgba(0,86,75,0.25); border-radius:10px; padding:14px; margin-top:10px;">
+        <strong style="font-size:0.82rem; color:var(--brand-emerald-dark);">Add New Delivery Address</strong>
+
+        <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:6px;">
+          <div class="auth-field-group">
+            <label>Type</label>
+            <select id="popup-addr-type" class="auth-input" style="padding:6px 8px;">
+              <option value="Home">Home</option>
+              <option value="Office">Office</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="auth-field-group">
+            <label>Full Name *</label>
+            <input type="text" id="popup-addr-name" class="auth-input" placeholder="Full Name" required>
+          </div>
+        </div>
+
+        <div class="auth-field-group">
+          <label>WhatsApp Phone *</label>
+          <input type="tel" id="popup-addr-phone" class="auth-input" placeholder="9876543210" maxlength="10" required>
+        </div>
+
+        <div class="auth-field-group">
+          <label>Door / Street Address *</label>
+          <input type="text" id="popup-addr-door" class="auth-input" placeholder="Flat 201, Main Road" required>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">
+          <div class="auth-field-group">
+            <label>Pincode *</label>
+            <input type="text" id="popup-addr-pin" class="auth-input" placeholder="533001" maxlength="6" required>
+          </div>
+          <div class="auth-field-group">
+            <label>City *</label>
+            <input type="text" id="popup-addr-city" class="auth-input" placeholder="Kakinada" required>
+          </div>
+        </div>
+
+        <label style="display:flex; align-items:center; gap:6px; font-size:0.74rem; cursor:pointer;">
+          <input type="checkbox" id="popup-addr-default"> Set as Default Address
+        </label>
+
+        <button type="submit" class="btn-auth-submit" style="padding:8px;">Save Address</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- POPUP 3: PROFILE SETTINGS ONLY -->
+  <div class="account-modal-overlay" id="modal-profile-settings">
+    <div class="account-modal-card">
+      <button type="button" class="btn-close-acc-modal">&times;</button>
+      <div class="acc-modal-title"><span>⚙️</span> Profile Settings</div>
+
+      <form class="auth-form" id="form-profile-settings-popup">
+        <div class="auth-field-group">
+          <label>Full Name</label>
+          <input type="text" id="prof-settings-name" class="auth-input" required>
+        </div>
+
+        <div class="auth-field-group">
+          <label>WhatsApp Phone</label>
+          <input type="tel" id="prof-settings-mobile" class="auth-input" maxlength="10" required>
+        </div>
+
+        <div class="auth-field-group">
+          <label>Email Address</label>
+          <input type="email" id="prof-settings-email" class="auth-input" readonly style="background:#f4f6f5; cursor:not-allowed;">
+        </div>
+
+        <button type="submit" class="btn-auth-submit">Update Profile</button>
+      </form>
+
+      <div style="margin-top:14px; padding:12px; background:rgba(212,106,132,0.06); border:1px solid rgba(212,106,132,0.2); border-radius:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <strong style="font-size:0.8rem; color:var(--brand-emerald-dark); display:block;">Change Email Address</strong>
+          <span style="font-size:0.7rem; color:var(--text-muted);">Requires OTP verification</span>
+        </div>
+        <button type="button" class="btn-auth-submit" id="btn-change-email-popup" style="width:auto; padding:6px 12px; font-size:0.75rem; background:var(--brand-pink);">Change</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTH MODAL (LOGIN & REGISTER) -->
+  <div class="auth-modal-overlay" id="auth-modal-overlay">
+    <div class="auth-card">
+      <button type="button" class="btn-close-auth" id="btn-close-auth">&times;</button>
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab-btn active" id="tab-btn-login">Sign In</button>
+        <button type="button" class="auth-tab-btn" id="tab-btn-register">New Account</button>
+      </div>
+
+      <form class="auth-form" id="form-login">
+        <div class="auth-field-group">
+          <label>Email Address</label>
+          <input type="email" id="login-email" class="auth-input" placeholder="swathi@gmail.com" required>
+        </div>
+        <div class="auth-field-group">
+          <label>Password</label>
+          <input type="password" id="login-password" class="auth-input" placeholder="••••••••" required>
+        </div>
+        
+        <div class="auth-helper-links">
+          <a class="auth-link" id="link-login-with-otp">Login with OTP</a>
+          <a class="auth-link" id="link-forgot-password">Forgot Password?</a>
+        </div>
+
+        <button type="submit" class="btn-auth-submit">Sign In</button>
+      </form>
+
+      <form class="auth-form" id="form-register" style="display: none;">
+        <div class="auth-field-group">
+          <label>Full Name *</label>
+          <input type="text" id="reg-name" class="auth-input" placeholder="Swathi Reddy" required>
+        </div>
+        <div class="auth-field-group">
+          <label>WhatsApp Number (for order alerts) *</label>
+          <input type="tel" id="reg-whatsapp" class="auth-input" placeholder="9876543210" maxlength="10" required>
+        </div>
+        <div class="auth-field-group">
+          <label>Email Address *</label>
+          <input type="email" id="reg-email" class="auth-input" placeholder="swathi@gmail.com" required>
+        </div>
+        <div class="auth-field-group">
+          <label>Create Password *</label>
+          <input type="password" id="reg-password" class="auth-input" placeholder="••••••••" minlength="6" required>
+        </div>
+        <button type="submit" class="btn-auth-submit">Send Email OTP & Register</button>
+      </form>
+
+      <form class="auth-form" id="form-otp-verify" style="display: none;">
+        <div style="text-align: center; margin-bottom: 6px;">
+          <h4 style="color:var(--brand-emerald-dark); font-size:1rem;">Enter Verification Code</h4>
+          <p style="font-size:0.75rem; color:var(--text-muted);">6-digit code sent to <strong id="otp-target-email">-</strong></p>
+        </div>
+        <div class="auth-field-group">
+          <label>6-Digit Email OTP</label>
+          <input type="text" id="auth-otp-token" class="auth-input" placeholder="123456" maxlength="6" style="text-align:center; font-size:1.2rem; letter-spacing:4px; font-weight:800;" required>
+        </div>
+        <button type="submit" class="btn-auth-submit">Verify OTP & Continue</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- PRODUCT DETAIL MODAL -->
+  <div class="product-modal-overlay" id="product-detail-modal">
+    <div class="product-detail-modal-card">
+      <button type="button" class="btn-close-modal" id="btn-close-prod-modal">&times;</button>
+      
+      <div class="pdp-gallery-col">
+        <div class="pdp-main-image-wrap" id="btn-open-lightbox" title="Click to Enlarge Full Screen">
+          <img src="" alt="Product Preview" class="pdp-main-img" id="pdp-main-img">
+        </div>
+        <div class="pdp-thumb-strip" id="pdp-thumb-strip"></div>
+      </div>
+
+      <div class="pdp-info-col">
+        <div>
+          <span class="pdp-brand-tag" id="pdp-brand">Kashvi Fashions</span>
+          <h2 class="pdp-title" id="pdp-title">-</h2>
+          <div class="pdp-meta-strip">
+            <span id="pdp-category-tag">Category</span>
+            <span>&bull;</span>
+            <span id="pdp-weight-tag">Weight: 80g</span>
+          </div>
+        </div>
+
+        <div class="pdp-price-box">
+          <span class="pdp-selling-price" id="pdp-price">₹ 0</span>
+          <span class="pdp-mrp" id="pdp-mrp">₹ 0</span>
+          <span class="pdp-discount-badge" id="pdp-discount">0% OFF</span>
+          <span class="pdp-stock-status badge-in-stock" id="pdp-stock">In Stock</span>
+        </div>
+
+        <div class="pdp-spec-group" id="pdp-group-colours">
+          <div class="pdp-spec-label">
+            <span>Select Colour:</span>
+            <span class="highlight-val" id="pdp-selected-colour-text">-</span>
+          </div>
+          <div class="pdp-pills-row" id="pdp-colour-pills"></div>
+        </div>
+
+        <div class="pdp-spec-group" id="pdp-group-sizes">
+          <div class="pdp-spec-label">
+            <span>Select Size:</span>
+            <span class="highlight-val" id="pdp-selected-size-text">-</span>
+          </div>
+          <div class="pdp-pills-row" id="pdp-size-pills"></div>
+        </div>
+
+        <div class="pdp-spec-group" id="pdp-group-fabric">
+          <div class="pdp-spec-label">
+            <span>Fabric / Material:</span>
+            <span class="highlight-val" id="pdp-fabric-val">-</span>
+          </div>
+        </div>
+
+        <div class="combo-builder-box">
+          <div class="combo-builder-top">
+            <span class="combo-builder-title">Custom Order Combos</span>
+            <button type="button" class="btn-add-combo" id="btn-add-combo-row">+ Add Current Combo</button>
+          </div>
+          <div class="combo-items-list" id="pdp-combo-items-list">
+            <div style="font-size:0.74rem; color:var(--text-muted); text-align:center; padding:4px 0;">
+              Select Colour & Size, then click "+ Add Current Combo" to order multiple variants at once.
+            </div>
+          </div>
+        </div>
+
+        <div class="pdp-action-row">
+          <div class="pdp-qty-counter">
+            <button type="button" class="btn-pdp-qty" id="btn-qty-minus">-</button>
+            <span class="pdp-qty-val" id="pdp-qty-val">1</span>
+            <button type="button" class="btn-pdp-qty" id="btn-qty-plus">+</button>
+          </div>
+          <button type="button" class="btn-pdp-add-cart" id="btn-pdp-add-to-bag">🛍️ Add Selection(s) to Cart</button>
+        </div>
+
+        <div class="pdp-accordion-sec">
+          <h4>Product Details & Fabric Care</h4>
+          <p id="pdp-description">-</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LIGHTBOX ENLARGE OVERLAY -->
+  <div class="pdp-lightbox-overlay" id="pdp-lightbox-modal">
+    <div class="lightbox-content-wrap">
+      <button type="button" class="btn-close-lightbox" id="btn-close-lightbox">&times;</button>
+      <img src="" alt="Enlarged Image" class="lightbox-enlarged-img" id="lightbox-enlarged-img">
+    </div>
+  </div>
+
+  <!-- Cart Slide-Over Drawer -->
+  <div class="cart-drawer-overlay" id="cart-drawer-overlay">
+    <div class="cart-drawer">
+      <div class="cart-drawer-header">
+        <h3 style="font-size:1.05rem; font-weight:700; color:var(--brand-emerald-dark);">Shopping Cart</h3>
+        <button type="button" id="btn-close-cart" style="background:none; border:none; font-size:1.4rem; cursor:pointer; color:var(--text-muted);">&times;</button>
+      </div>
+      
+      <div class="free-ship-bar-wrap" id="cart-free-ship-msg">
+        Add ₹999 for FREE Delivery!
+      </div>
+
+      <div class="cart-drawer-body" id="cart-items-list">
+        <div style="text-align:center; padding:30px; color:var(--text-muted); font-size:0.85rem;">
+          Your shopping bag is empty.
+        </div>
+      </div>
+
+      <div class="cart-drawer-footer">
+        <div style="display:flex; justify-content:space-between; font-size:0.95rem; font-weight:700; color:var(--brand-emerald-dark);">
+          <span>Total:</span>
+          <span id="cart-total-price">₹ 0</span>
+        </div>
+        <button type="button" class="btn-checkout-proceed" id="btn-proceed-checkout">Proceed to Checkout &rarr;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODERN 2-COLUMN CHECKOUT MODAL -->
+  <div class="checkout-view-overlay" id="checkout-modal-overlay">
+    <div class="checkout-card">
+      <button type="button" class="btn-close-checkout" id="btn-close-checkout">&times;</button>
+
+      <div class="checkout-header-title">
+        <span>📦</span> Delivery & Payment Checkout
+      </div>
+
+      <div class="checkout-layout-grid">
+        <div class="checkout-address-col">
+          <div class="checkout-section-subtitle">Select Delivery Address</div>
+
+          <div id="checkout-saved-addresses-list" class="saved-addresses-list"></div>
+
+          <button type="button" class="btn-add-address-trigger" id="btn-toggle-add-address">
+            + Add Another Delivery Address
+          </button>
+
+          <div class="new-address-form-box" id="checkout-new-address-form" style="display: none;">
+            <div class="checkout-input-group">
+              <label>Full Name *</label>
+              <input type="text" id="new-addr-name" class="checkout-input" placeholder="e.g. Swathi Reddy">
+            </div>
+
+            <div class="checkout-row-2">
+              <div class="checkout-input-group">
+                <label>WhatsApp Phone *</label>
+                <input type="tel" id="new-addr-phone" class="checkout-input" placeholder="9876543210" maxlength="10">
+              </div>
+              <div class="checkout-input-group">
+                <label>Email Address</label>
+                <input type="email" id="new-addr-email" class="checkout-input" placeholder="swathi@gmail.com">
+              </div>
+            </div>
+
+            <div class="checkout-input-group">
+              <label>Door / Street Address *</label>
+              <input type="text" id="new-addr-door" class="checkout-input" placeholder="Flat 201, Main Road, Near Clock Tower">
+            </div>
+
+            <div class="checkout-row-3">
+              <div class="checkout-input-group">
+                <label>Pincode *</label>
+                <input type="text" id="new-addr-pincode" class="checkout-input" placeholder="533001" maxlength="6">
+              </div>
+              <div class="checkout-input-group">
+                <label>City *</label>
+                <input type="text" id="new-addr-city" class="checkout-input" placeholder="Kakinada">
+              </div>
+              <div class="checkout-input-group">
+                <label>State *</label>
+                <input type="text" id="new-addr-state" class="checkout-input" value="Andhra Pradesh">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="checkout-summary-col">
+          <div class="checkout-section-subtitle">Payment Summary</div>
+
+          <div class="order-bill-card">
+            <div class="bill-line"><span>Bag Subtotal:</span><span id="checkout-subtotal">₹ 0</span></div>
+            <div class="bill-line"><span>India Post Speed Delivery:</span><span id="checkout-delivery">₹ 0</span></div>
+            <div class="bill-line total"><span>Total Payable:</span><span id="checkout-grand-total">₹ 0</span></div>
+          </div>
+
+          <button type="button" class="btn-confirm-order" id="btn-submit-order" onclick="window.triggerProceedToUPIPayment()">
+            <span>⚡</span> <span>Proceed to UPI Payment</span>
+          </button>
+
+          <div class="checkout-trust-badge">
+            <span>🔒 Zero Gateway Surcharge</span> &bull; <span>Instant Bank Verification</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DYNAMIC UPI PAYMENT MODAL -->
+  <div class="payment-modal-overlay" id="payment-modal-overlay">
+    <div class="payment-modal-card">
+      <button type="button" class="btn-close-payment" id="btn-close-payment">&times;</button>
+
+      <div class="payment-modal-header">
+        <span class="payment-brand-title">KASHVI FASHIONS UPI</span>
+        <div class="payment-timer-wrap">
+          <span>Expires in:</span>
+          <strong id="pay-timer-countdown">05:00</strong>
+        </div>
+      </div>
+
+      <div class="payment-amount-box">
+        <span class="pay-label">Total Amount Payable</span>
+        <div class="pay-rupee-val" id="pay-modal-amount">₹ 0</div>
+        <span class="pay-order-ref" id="pay-modal-order-id">Ref: -</span>
+      </div>
+
+      <div class="upi-apps-intent-group" id="upi-apps-container">
+        <button type="button" class="btn-upi-app" data-app="gpay">
+          <span>🟢</span> <span>Google Pay</span>
+        </button>
+        <button type="button" class="btn-upi-app" data-app="phonepe">
+          <span>🟣</span> <span>PhonePe</span>
+        </button>
+        <button type="button" class="btn-upi-app" data-app="paytm">
+          <span>🔵</span> <span>Paytm UPI</span>
+        </button>
+      </div>
+
+      <div class="payment-qr-container">
+        <div class="qr-frame-box">
+          <img src="" alt="Dynamic BharatPe QR" id="pay-dynamic-qr-img">
+        </div>
+        <p class="qr-scan-hint">Scan with any UPI App (GPay, PhonePe, Paytm, BHIM)</p>
+      </div>
+
+      <div class="pay-status-pill waiting" id="pay-live-status-pill">
+        <span class="spinner-dot"></span>
+        <span>Awaiting BharatPe Payment Confirmation...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDER SUCCESS MODAL -->
+  <div class="modal-overlay" id="order-success-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:100001; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
+    <div style="background:#ffffff; border-radius:14px; width:92%; max-width:500px; padding:28px 24px; box-shadow:0 12px 36px rgba(0,0,0,0.2); text-align:center; animation:popIn 0.25s ease-out;">
+      <div style="width:68px; height:68px; background:#e8f7f0; color:#00875a; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin:0 auto 16px auto;">
+        ✓
+      </div>
+
+      <h2 style="color:#00564b; margin:0 0 6px 0; font-size:1.45rem; font-weight:800;">Thank You For Your Order!</h2>
+      <p style="color:#666; font-size:0.88rem; margin:0 0 20px 0;">We have received your payment and are getting your package ready.</p>
+
+      <div style="background:#f9fbfb; border:1px solid #e1ece9; border-radius:10px; padding:16px; text-align:left; font-size:0.86rem; margin-bottom:22px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="color:#777;">Order ID:</span>
+          <strong id="succ-order-id" style="color:#00564b; letter-spacing:0.5px;">-</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="color:#777;">Amount Paid:</span>
+          <strong id="succ-order-amount" style="color:#111;">₹ 0</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="color:#777;">Payment Method:</span>
+          <span id="succ-payment-method" style="font-weight:600; color:#00564b;">Cashfree (Verified)</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+          <span style="color:#777;">Transaction Ref:</span>
+          <span id="succ-payment-ref" style="font-family:monospace; color:#444;">-</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; border-top:1px dashed #d1e2dd; padding-top:8px; margin-top:8px;">
+          <span style="color:#777;">Order Status:</span>
+          <span style="background:#d4edda; color:#155724; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:12px;">Processing</span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button type="button" id="btn-view-my-orders" style="background:#00564b; color:#ffffff; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:0.92rem; cursor:pointer; width:100%; transition:background 0.2s;">
+          📦 View in My Orders
+        </button>
+        <button type="button" id="btn-continue-shopping" style="background:transparent; color:#00564b; border:1px solid #00564b; padding:10px; border-radius:8px; font-weight:600; font-size:0.86rem; cursor:pointer; width:100%;">
+          Continue Shopping
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js?v=9.0"></script>
+
+  <!-- Clean Tawk.to Controller -->
+  <script type="text/javascript">
+    var Tawk_API = Tawk_API || {};
+    var Tawk_LoadStart = new Date();
+
+    Tawk_API.onLoad = function () {
+      if (window.innerWidth <= 768) {
+        Tawk_API.hideWidget();
+      }
+    };
+
+    Tawk_API.onChatMinimized = function () {
+      if (window.innerWidth <= 768) {
+        Tawk_API.hideWidget();
+      }
+    };
+
+    (function () {
+      var s1 = document.createElement("script"), s0 = document.getElementsByTagName("script")[0];
+      s1.async = true;
+      s1.src = 'https://embed.tawk.to/6a3e91444d21e11d45404b5c/default';
+      s1.charset = 'UTF-8';
+      s1.setAttribute('crossorigin', '*');
+      s0.parentNode.insertBefore(s1, s0);
+    })();
+  </script>
+
+</body>
+</html>

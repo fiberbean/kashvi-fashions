@@ -1,0 +1,219 @@
+/* Orders Filter Bar & Stage Navigation */
+.orders-filter-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.order-status-pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.status-pill-btn {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 86, 75, 0.15);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-main);
+  transition: all 0.2s ease;
+}
+
+.status-pill-btn.active {
+  background: var(--brand-emerald);
+  color: #fff;
+  border-color: var(--brand-emerald);
+}
+
+/* Stage Specific Badges */
+.badge-order-status {
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  display: inline-block;
+}
+
+.status-new { background: #fef3c7; color: #b45309; }
+.status-payment_check { background: #e0e7ff; color: #4338ca; }
+.status-order_check { background: #ede9fe; color: #6d28d9; }
+.status-processing { background: #e0f2fe; color: #0369a1; }
+.status-packing { background: #fef9c3; color: #a16207; }
+.status-ready_to_dispatch { background: #ffedd5; color: #c2410c; }
+.status-dispatched { background: #fce7f3; color: #be185d; }
+.status-delivered { background: #dcfce7; color: #15803d; }
+.status-refund_initiated { background: #fee2e2; color: #b91c1c; }
+.status-cancelled { background: #f3f4f6; color: #4b5563; }
+
+/* Quick Action Inline Controller in Table */
+.pipeline-action-box {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.btn-stage-done {
+  background: var(--brand-emerald);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-stage-done:hover {
+  background: var(--brand-emerald-dark);
+}
+
+/* Pipeline Progress Stepper inside Drawer */
+.pipeline-stepper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  margin: 15px 0 25px 0;
+  padding: 0 10px;
+}
+
+.pipeline-stepper::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 30px;
+  right: 30px;
+  height: 3px;
+  background: rgba(0, 86, 75, 0.12);
+  z-index: 1;
+}
+
+.step-node {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.step-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(0, 86, 75, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.step-node.completed .step-circle {
+  background: var(--brand-emerald);
+  border-color: var(--brand-emerald);
+  color: #fff;
+}
+
+.step-node.active .step-circle {
+  background: var(--brand-pink);
+  border-color: var(--brand-pink);
+  color: #fff;
+  transform: scale(1.15);
+  box-shadow: 0 0 0 4px rgba(212, 106, 132, 0.2);
+}
+
+.step-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 60px;
+}
+
+.step-node.active .step-label {
+  color: var(--brand-pink);
+}
+
+/* Stage Action Workflow Box */
+.stage-action-box {
+  background: linear-gradient(135deg, rgba(0, 86, 75, 0.04), rgba(212, 106, 132, 0.04));
+  border: 1.5px solid rgba(0, 86, 75, 0.18);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.stage-action-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.stage-action-header h4 {
+  font-size: 0.88rem;
+  color: var(--brand-emerald-dark);
+  font-weight: 700;
+  margin: 0;
+}
+
+.stage-inputs-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Order Grid and Cards */
+.order-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.order-detail-card {
+  background: rgba(0, 86, 75, 0.02);
+  border: 1px solid rgba(0, 86, 75, 0.12);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.order-detail-card h4 {
+  font-size: 0.78rem;
+  color: var(--brand-emerald-dark);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.order-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin: 12px 0;
+}
+
+.order-items-table th {
+  background: rgba(0, 86, 75, 0.06);
+  padding: 8px 10px;
+  text-align: left;
+  color: var(--brand-emerald-dark);
+}
+
+.order-items-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(0, 86, 75, 0.06);
+}

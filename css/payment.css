@@ -1,0 +1,413 @@
+/* Mobile-First Frosted Payment Modal */
+.payment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 36, 30, 0.65);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 12px;
+}
+
+.payment-modal-overlay.active {
+  display: flex;
+}
+
+.payment-modal-card {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 92vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 48px rgba(0, 54, 47, 0.25);
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  animation: modalPopUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPopUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.payment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 86, 75, 0.08);
+  padding-bottom: 10px;
+}
+
+.payment-header h3 {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+}
+
+.payment-timer-badge {
+  background: rgba(212, 106, 132, 0.12);
+  color: var(--brand-pink);
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Amount Highlight Card */
+.payment-amount-box {
+  background: linear-gradient(135deg, rgba(0, 86, 75, 0.06), rgba(212, 106, 132, 0.08));
+  border: 1px solid rgba(0, 86, 75, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+}
+
+.payment-amount-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.payment-amount-val {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  margin-top: 2px;
+}
+
+/* Mobile Option 1: Direct UPI App List */
+.upi-apps-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.upi-apps-title {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.upi-app-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 86, 75, 0.18);
+  background: #ffffff;
+  text-decoration: none;
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 0.86rem;
+  box-shadow: 0 2px 6px rgba(0, 54, 47, 0.04);
+  transition: all 0.15s ease;
+}
+
+.upi-app-btn:hover, .upi-app-btn:active {
+  border-color: var(--brand-emerald);
+  background: rgba(0, 86, 75, 0.04);
+  transform: scale(0.99);
+}
+
+.upi-app-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.upi-app-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+/* Secondary Toggle: Show QR Code (Option 2) */
+.toggle-qr-sec {
+  text-align: center;
+  border-top: 1px dashed rgba(0, 86, 75, 0.15);
+  padding-top: 10px;
+}
+
+.btn-toggle-qr {
+  background: none;
+  border: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--brand-pink);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.qr-display-box {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.qr-display-box.active {
+  display: flex;
+}
+
+.qr-img-tag {
+  width: 150px;
+  height: 150px;
+  border: 1px solid rgba(0, 86, 75, 0.15);
+  border-radius: 8px;
+  padding: 4px;
+  background: #fff;
+}
+
+/* Live Auto-Detection Pulse Status */
+.payment-waiting-pulse {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(0, 86, 75, 0.06);
+  border-radius: 8px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--stat-green);
+  box-shadow: 0 0 0 rgba(0, 135, 90, 0.4);
+  animation: pulseAnim 1.4s infinite;
+}
+
+@keyframes pulseAnim {
+  0% { box-shadow: 0 0 0 0 rgba(0, 135, 90, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(0, 135, 90, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 135, 90, 0); }
+}
+
+/* Fallbacks & Support Dispute */
+.payment-fallback-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid rgba(0, 86, 75, 0.08);
+  padding-top: 10px;
+}
+
+.btn-claimed-paid {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid var(--brand-emerald);
+  color: var(--brand-emerald-dark);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-raise-ticket {
+  background: none;
+  border: none;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+/* Dynamic UPI Payment Modal */
+.payment-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 36, 30, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: none !important;
+  align-items: center;
+  justify-content: center;
+  z-index: 2500;
+  padding: 16px;
+}
+
+.payment-modal-overlay.active {
+  display: flex !important;
+}
+
+.payment-modal-card {
+  background: #ffffff;
+  border-radius: 18px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 24px 60px rgba(0, 54, 47, 0.3);
+  padding: 24px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: modalScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-close-payment {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(0, 86, 75, 0.08);
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+  cursor: pointer;
+}
+
+.payment-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  border-bottom: 1px solid rgba(0, 86, 75, 0.1);
+  padding-bottom: 10px;
+}
+
+.payment-brand-title {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  letter-spacing: 0.5px;
+}
+
+.payment-timer-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: var(--stat-red);
+}
+
+.payment-amount-box {
+  text-align: center;
+  background: rgba(0, 86, 75, 0.03);
+  border: 1px solid rgba(0, 86, 75, 0.1);
+  border-radius: 12px;
+  width: 100%;
+  padding: 12px;
+}
+
+.pay-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.pay-rupee-val {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+}
+
+.pay-order-ref {
+  font-size: 0.72rem;
+  color: var(--brand-pink);
+  font-weight: 700;
+}
+
+.upi-apps-intent-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+}
+
+.btn-upi-app {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1.5px solid rgba(0, 86, 75, 0.15);
+  background: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.btn-upi-app:hover {
+  background: rgba(0, 86, 75, 0.05);
+  border-color: var(--brand-emerald);
+}
+
+.payment-qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.qr-frame-box {
+  width: 170px;
+  height: 170px;
+  padding: 6px;
+  border: 1.5px solid rgba(0, 86, 75, 0.15);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.qr-frame-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.qr-scan-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.pay-status-pill {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pay-status-pill.waiting {
+  background: rgba(255, 171, 0, 0.1);
+  color: #b78103;
+  border: 1px solid rgba(255, 171, 0, 0.3);
+}
+
+.pay-status-pill.confirmed {
+  background: rgba(0, 135, 90, 0.12);
+  color: var(--stat-green);
+  border: 1px solid rgba(0, 135, 90, 0.3);
+}

@@ -1,0 +1,312 @@
+/* Delivery & Contact Details Modal Overlay */
+.checkout-view-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 36, 30, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: none !important;
+  align-items: center;
+  justify-content: center;
+  z-index: 1500;
+  padding: 20px;
+}
+
+.checkout-view-overlay.active {
+  display: flex !important;
+}
+
+.checkout-card {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 860px; /* Spacious width */
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(0, 54, 47, 0.28);
+  padding: 32px 36px;
+  position: relative;
+  animation: checkoutPop 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes checkoutPop {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+@media (max-width: 768px) {
+  .checkout-card {
+    padding: 20px 16px;
+    max-height: 92vh;
+  }
+}
+
+.btn-close-checkout {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  background: rgba(0, 86, 75, 0.08);
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-close-checkout:hover {
+  background: rgba(212, 106, 132, 0.2);
+  color: var(--brand-pink);
+}
+
+.checkout-header-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid rgba(0, 86, 75, 0.1);
+  padding-bottom: 14px;
+}
+
+/* 2-Column Balanced Spacious Grid */
+.checkout-layout-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .checkout-layout-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+/* Left Column: Delivery Address Selection */
+.checkout-address-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.checkout-section-subtitle {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.saved-addresses-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.address-select-card {
+  border: 1.5px solid rgba(0, 86, 75, 0.16);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  box-shadow: 0 2px 8px rgba(0, 54, 47, 0.03);
+}
+
+.address-select-card:hover {
+  border-color: var(--brand-emerald);
+  background: rgba(0, 86, 75, 0.02);
+  transform: translateY(-1px);
+}
+
+.address-select-card.active {
+  border-color: var(--brand-emerald);
+  background: rgba(0, 86, 75, 0.05);
+  box-shadow: 0 4px 16px rgba(0, 86, 75, 0.12);
+}
+
+.address-radio-input {
+  margin-top: 4px;
+  accent-color: var(--brand-emerald);
+  transform: scale(1.15);
+  cursor: pointer;
+}
+
+.address-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.address-tag-badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--brand-pink);
+  text-transform: uppercase;
+  background: rgba(212, 106, 132, 0.12);
+  padding: 2px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+
+.btn-add-address-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1.5px dashed var(--brand-emerald);
+  border-radius: 10px;
+  background: rgba(0, 86, 75, 0.03);
+  color: var(--brand-emerald-dark);
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-add-address-trigger:hover {
+  background: rgba(0, 86, 75, 0.08);
+  transform: translateY(-1px);
+}
+
+/* Collapsible New Address Form */
+.new-address-form-box {
+  background: #ffffff;
+  border: 1px solid rgba(0, 86, 75, 0.18);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 54, 47, 0.04);
+}
+
+.checkout-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checkout-input-group label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.checkout-input {
+  padding: 10px 14px;
+  border: 1px solid rgba(0, 86, 75, 0.22);
+  border-radius: 8px;
+  font-size: 0.86rem;
+  outline: none;
+  background: #ffffff;
+  color: var(--text-main);
+  transition: all 0.15s ease;
+}
+
+.checkout-input:focus {
+  border-color: var(--brand-emerald);
+  box-shadow: 0 0 0 2px rgba(0, 86, 75, 0.12);
+}
+
+.checkout-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.checkout-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+
+/* Right Column: Order Summary & Instant Action */
+.checkout-summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-bill-card {
+  background: rgba(0, 86, 75, 0.04);
+  border: 1px solid rgba(0, 86, 75, 0.12);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bill-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.bill-line.total {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  border-top: 1px dashed rgba(0, 86, 75, 0.18);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
+.btn-confirm-order {
+  width: 100%;
+  padding: 14px;
+  background: var(--brand-emerald);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 86, 75, 0.28);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-confirm-order:hover {
+  background: var(--brand-emerald-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 86, 75, 0.35);
+}
+
+.checkout-trust-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}

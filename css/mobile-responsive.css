@@ -1,0 +1,204 @@
+/* =========================================================
+   MOBILE-FIRST LUXURY E-COMMERCE OVERHAUL (max-width: 768px)
+   ========================================================= */
+@media (max-width: 768px) {
+
+  /* 1. Header Clean-up */
+  header, .navbar, .top-nav {
+    padding: 8px 12px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    background: #ffffff !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05) !important;
+  }
+
+  .brand-logo, .brand-logo img {
+    height: 34px !important;
+    width: auto !important;
+  }
+
+  /* Search Bar Moves to 2nd Row */
+  .search-container, .header-search {
+    order: 3 !important;
+    width: 100% !important;
+    margin-top: 6px !important;
+  }
+
+  .search-container input, .header-search input {
+    width: 100% !important;
+    font-size: 0.8rem !important;
+    height: 38px !important;
+    border-radius: 20px !important;
+    padding: 0 16px !important;
+  }
+
+  .header-actions {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  /* 2. Hero Banner Slider: Auto Aspect-Ratio */
+  .hero-slider-wrapper, .banner-slider-container {
+    margin: 8px 12px !important;
+    border-radius: 10px !important;
+    overflow: hidden !important;
+  }
+
+  .hero-slide-item img, .banner-slide img {
+    height: 180px !important;
+    max-height: 200px !important;
+    object-fit: cover !important;
+    border-radius: 10px !important;
+  }
+
+  .hero-slide-item div {
+    padding: 8px 12px !important;
+    left: 12px !important;
+    bottom: 12px !important;
+  }
+
+  .hero-slide-item h2 {
+    font-size: 0.95rem !important;
+    margin-bottom: 2px !important;
+  }
+
+  .hero-slide-item p {
+    font-size: 0.7rem !important;
+  }
+
+  /* 3. Horizontal Scrolling Category Pills */
+  .category-bar, .categories-scroll-wrapper {
+    display: flex !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+    scrollbar-width: none !important; /* Hide scrollbar for Chrome/Safari */
+  }
+
+  .category-bar::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .category-pill, .cat-item {
+    flex: 0 0 auto !important;
+    font-size: 0.75rem !important;
+    padding: 6px 14px !important;
+    border-radius: 20px !important;
+  }
+
+  /* 4. Sleek 2-Column Product Grid (Myntra Style) */
+  .products-grid, #products-container, .product-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    padding: 8px 12px !important;
+  }
+
+  .product-card {
+    border-radius: 10px !important;
+    border: 1px solid #edf4f1 !important;
+    overflow: hidden !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03) !important;
+  }
+
+  .product-card img, .product-image-container {
+    height: 190px !important;
+    width: 100% !important;
+    object-fit: cover !important;
+  }
+
+  .product-info {
+    padding: 8px 10px !important;
+  }
+
+  .product-title, .product-info h3 {
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin-bottom: 4px !important;
+  }
+
+  .product-pricing {
+    display: flex !important;
+    align-items: baseline !important;
+    gap: 6px !important;
+  }
+
+  .product-price {
+    font-size: 0.85rem !important;
+    font-weight: 800 !important;
+  }
+
+  .product-mrp {
+    font-size: 0.7rem !important;
+  }
+
+  .btn-add-to-cart {
+    width: 100% !important;
+    padding: 7px 0 !important;
+    font-size: 0.74rem !important;
+    border-radius: 6px !important;
+    margin-top: 6px !important;
+  }
+
+  /* 5. Fullscreen/Bottom-Sheet Modals for Mobile */
+  .modal-overlay .modal-drawer, 
+  .account-modal-overlay .acc-modal-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 90vh !important;
+    bottom: 0 !important;
+    position: fixed !important;
+    border-radius: 16px 16px 0 0 !important;
+    margin: 0 !important;
+  }
+
+  /* 6. Sticky Bottom Navigation Bar (Home, Orders, Cart) */
+  .mobile-bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    background: #ffffff;
+    border-top: 1px solid #e5ede9;
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    z-index: 1000;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  }
+
+  .mobile-bottom-bar a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-decoration: none;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #5c7369;
+    gap: 2px;
+  }
+
+  .mobile-bottom-bar a.active {
+    color: var(--brand-emerald, #00564b);
+  }
+
+  .mobile-bottom-bar a span:first-child {
+    font-size: 1.15rem;
+  }
+
+  /* Extra bottom padding to body so sticky bar won't overlap content */
+  body {
+    padding-bottom: 60px !important;
+  }
+}
