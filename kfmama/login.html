@@ -165,7 +165,7 @@
   <script type="module">
     import { supabase } from './js/supabase.js';
 
-    // Check existing PIN session
+    // If already authenticated, go straight to main dashboard
     const isAuth = sessionStorage.getItem('kashvi_admin_auth');
     if (isAuth === 'true') {
       window.location.replace('index.html');
@@ -187,7 +187,6 @@
       const enteredPin = adminPinInput.value.trim();
 
       try {
-        // Fetch Admin Credentials from store_settings
         const { data, error } = await supabase
           .from('store_settings')
           .select('admin_id, admin_pin, pipeline_pin')
