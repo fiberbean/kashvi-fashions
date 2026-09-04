@@ -168,7 +168,7 @@
     // Check existing PIN session
     const isAuth = sessionStorage.getItem('kashvi_admin_auth');
     if (isAuth === 'true') {
-      window.location.replace('admin.html');
+      window.location.replace('index.html');
     }
 
     const form = document.getElementById('login-form');
@@ -202,7 +202,7 @@
         if (enteredId.toLowerCase() === validId.toLowerCase() && enteredPin === validPin) {
           sessionStorage.setItem('kashvi_admin_auth', 'true');
           sessionStorage.setItem('kashvi_admin_user', enteredId);
-          window.location.replace('admin.html');
+          window.location.replace('index.html');
         } else {
           throw new Error('❌ Incorrect Admin ID or Security PIN!');
         }
