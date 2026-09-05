@@ -656,3 +656,23 @@ function bindEvents() {
     };
   }
 }
+
+// Supabase క్లయింట్ క్రియేట్ చేసిన తర్వాత (ఉదా: const supabase = createClient(...))
+// దాన్ని గ్లోబల్ window ఆబ్జెక్ట్‌కు అటాచ్ చేయండి:
+window.supabase = supabase;
+
+// Google OAuth Trigger inside app.js
+document.getElementById('btn-google-login')?.addEventListener('click', async () => {
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+    if (error) throw error;
+  } catch (err) {
+    console.error("Google Sign-In Error:", err);
+    alert("Google Sign-In Error: " + (err.message || err));
+  }
+});
