@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kashvi Fashions — Royal Handloom & Luxury Fashion</title>
 
-  <link rel="stylesheet" href="css/theme.css?v=9.0">
-  <link rel="stylesheet" href="css/storefront.css?v=9.0">
-  <link rel="stylesheet" href="css/product-detail.css?v=9.0">
-  <link rel="stylesheet" href="css/checkout.css?v=9.0">
-  <link rel="stylesheet" href="css/payment.css?v=9.0">
-  <link rel="stylesheet" href="css/auth.css?v=9.0">
+  <link rel="stylesheet" href="css/theme.css?v=9.4">
+  <link rel="stylesheet" href="css/storefront.css?v=9.4">
+  <link rel="stylesheet" href="css/product-detail.css?v=9.4">
+  <link rel="stylesheet" href="css/checkout.css?v=9.4">
+  <link rel="stylesheet" href="css/payment.css?v=9.4">
+  <link rel="stylesheet" href="css/auth.css?v=9.4">
 
   <!-- Mobile Luxury Responsive & Cart Drawer Fixes -->
   <style>
@@ -58,9 +58,9 @@
       box-shadow: 0 0 0 2px rgba(0,86,75,0.2) !important;
     }
 
-    /* ================= CART DRAWER OVERHAUL (CRITICAL FIX) ================= */
+    /* ================= CART DRAWER OVERHAUL ================= */
     .cart-drawer-overlay {
-      z-index: 100000 !important; /* Higher than Mobile Dock Bar */
+      z-index: 100000 !important;
     }
 
     .cart-drawer {
@@ -70,11 +70,7 @@
       max-height: 100vh !important;
     }
 
-    .cart-drawer-header {
-      flex-shrink: 0 !important;
-    }
-
-    .free-ship-bar-wrap {
+    .cart-drawer-header, .free-ship-bar-wrap {
       flex-shrink: 0 !important;
     }
 
@@ -108,6 +104,44 @@
       text-align: center !important;
     }
 
+    /* ================= DESKTOP HEADER ALIGNMENT ================= */
+    @media (min-width: 769px) {
+      .header-inner {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+      }
+      .brand-container {
+        order: 1 !important;
+        flex: 0 0 auto !important;
+      }
+      .header-search-wrap {
+        order: 2 !important;
+        flex: 1 !important;
+        max-width: 460px !important;
+        margin: 0 auto !important;
+        display: block !important;
+      }
+      .header-actions {
+        order: 3 !important;
+        position: relative !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+      }
+      .account-dropdown-menu {
+        position: absolute !important;
+        top: calc(100% + 8px) !important;
+        left: 0 !important;
+        right: auto !important;
+        min-width: 220px !important;
+        z-index: 1000 !important;
+      }
+      .mobile-dock-nav, #mobile-search-modal {
+        display: none !important;
+      }
+    }
+
     /* ================= MOBILE-SPECIFIC ADJUSTMENTS (max-width: 768px) ================= */
     @media (max-width: 768px) {
       .announcement-bar {
@@ -128,70 +162,76 @@
 
       .header-inner {
         display: flex !important;
-        flex-wrap: wrap !important;
+        flex-direction: row !important;
         align-items: center !important;
         justify-content: space-between !important;
-        gap: 8px 0 !important;
+        width: 100% !important;
+        gap: 8px !important;
       }
 
       .brand-container {
         display: flex !important;
         align-items: center !important;
-        gap: 8px !important;
-        order: 1 !important;
+        gap: 6px !important;
+        flex: 0 0 auto !important;
       }
 
       .brand-logo-img {
-        width: 32px !important;
-        height: 32px !important;
+        width: 30px !important;
+        height: 30px !important;
       }
 
       .brand-text-title {
-        font-size: 0.95rem !important;
+        font-size: 0.88rem !important;
         letter-spacing: 0.5px !important;
       }
 
       .brand-text-sub {
-        font-size: 0.6rem !important;
+        font-size: 0.55rem !important;
+      }
+
+      .header-search-wrap {
+        display: none !important;
       }
 
       .header-actions {
-        order: 2 !important;
         display: flex !important;
         align-items: center !important;
         gap: 6px !important;
+        position: relative !important;
+        margin-left: auto !important;
+        flex: 0 0 auto !important;
+      }
+
+      #btn-header-auth {
+        padding: 5px 8px !important;
+        font-size: 0.72rem !important;
+        border-radius: 16px !important;
+        white-space: nowrap !important;
+        max-width: 110px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
       }
 
       .btn-header-cart {
-        padding: 6px 10px !important;
+        padding: 5px 10px !important;
         font-size: 0.72rem !important;
-        border-radius: 20px !important;
+        border-radius: 16px !important;
         display: inline-flex !important;
         align-items: center !important;
         gap: 4px !important;
       }
 
-      .header-search-wrap {
-        order: 3 !important;
-        width: 100% !important;
-        margin: 4px 0 2px 0 !important;
-        position: relative !important;
-      }
-
-      .header-search-input {
-        width: 100% !important;
-        height: 36px !important;
-        font-size: 0.78rem !important;
-        border-radius: 20px !important;
-        padding-left: 34px !important;
-      }
-
-      .search-icon-abs {
+      .account-dropdown-menu {
         position: absolute !important;
-        left: 12px !important;
-        top: 50% !important;
-        transform: translateY(-50%) !important;
-        font-size: 0.85rem !important;
+        top: calc(100% + 6px) !important;
+        right: 0 !important;
+        left: auto !important;
+        min-width: 190px !important;
+        background: #ffffff !important;
+        box-shadow: 0 10px 25px rgba(0, 54, 47, 0.16) !important;
+        border-radius: 10px !important;
+        z-index: 10000 !important;
       }
 
       .category-navbar {
@@ -246,8 +286,7 @@
         gap: 10px !important;
       }
 
-      /* Modals Overlay Above Dock */
-      .account-modal-overlay, .product-modal-overlay, .checkout-view-overlay, .payment-modal-overlay {
+      .account-modal-overlay, .product-modal-overlay, .checkout-view-overlay, .payment-modal-overlay, .search-modal-overlay {
         z-index: 100000 !important;
       }
 
@@ -302,7 +341,7 @@
         border-top: 1px solid #e1eee8 !important;
         justify-content: space-around !important;
         align-items: center !important;
-        z-index: 9999 !important; /* Lower than Cart & Modals */
+        z-index: 9999 !important;
         box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06) !important;
       }
 
@@ -327,19 +366,55 @@
         color: var(--brand-emerald-dark, #00564b) !important;
       }
 
-      /* Lift Tawk.to widget above mobile bottom dock bar */
-      #tawk-default-container, iframe[title*="chat"] {
-        bottom: 68px !important;
-        right: 10px !important;
-        transform: scale(0.85) !important;
-        transform-origin: bottom right !important;
+      /* Completely Hide Chatbot Floating Widget on Mobile */
+      #tawk-default-container,
+      iframe[title*="chat"],
+      .chat-widget,
+      .chatbot-container,
+      [id*="tawk"] {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
       }
     }
 
-    @media (min-width: 769px) {
-      .mobile-dock-nav {
-        display: none !important;
-      }
+    /* Mobile Search Fullscreen Overlay */
+    .search-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 20, 16, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 100005;
+      padding: 16px 14px;
+      box-sizing: border-box;
+    }
+    .search-modal-box {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 14px 16px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    .search-modal-input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f4f7f5;
+      border-radius: 25px;
+      padding: 6px 14px;
+      border: 1px solid rgba(0,86,75,0.2);
+    }
+    .search-modal-input-wrap input {
+      border: none;
+      background: transparent;
+      outline: none;
+      width: 100%;
+      font-size: 0.9rem;
+      color: var(--text-main);
     }
   </style>
 </head>
@@ -354,7 +429,7 @@
   <header class="store-header">
     <div class="header-inner">
       
-      <!-- Brand Identity -->
+      <!-- Brand Identity (Left) -->
       <a href="#" class="brand-container">
         <img src="assets/logo.png" alt="Logo" class="brand-logo-img" onerror="this.src='https://placehold.co/100x100/00564b/ffffff?text=KF'">
         <div class="brand-text-wrap">
@@ -363,7 +438,13 @@
         </div>
       </a>
 
-      <!-- Header Actions (Profile & Cart) -->
+      <!-- Desktop Search Bar -->
+      <div class="header-search-wrap">
+        <span class="search-icon-abs">🔍</span>
+        <input type="text" id="store-search-input" class="header-search-input" placeholder="Search sarees, dresses, bra's, jewellery...">
+      </div>
+
+      <!-- Header Actions (Right: Profile & Cart) -->
       <div class="header-actions">
         <!-- Auth Profile Trigger -->
         <button type="button" class="btn-header-cart" id="btn-header-auth" style="background:transparent; color:var(--brand-emerald-dark); border:1px solid rgba(0,86,75,0.2); box-shadow:none;">
@@ -400,12 +481,6 @@
         </button>
       </div>
 
-      <!-- Search Field -->
-      <div class="header-search-wrap">
-        <span class="search-icon-abs">🔍</span>
-        <input type="text" id="store-search-input" class="header-search-input" placeholder="Search sarees, dresses, bra's, jewellery...">
-      </div>
-
     </div>
   </header>
 
@@ -431,12 +506,23 @@
     </div>
   </main>
 
+  <!-- Mobile Search Modal Overlay -->
+  <div class="search-modal-overlay" id="mobile-search-modal">
+    <div class="search-modal-box">
+      <div class="search-modal-input-wrap">
+        <span>🔍</span>
+        <input type="text" id="mobile-popup-search-input" placeholder="Search sarees, dresses, bra's...">
+        <button type="button" onclick="document.getElementById('mobile-search-modal').style.display='none'" style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:#777;">&times;</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Mobile Sticky Dock Navigation Bar -->
   <div class="mobile-dock-nav">
     <button type="button" class="mobile-dock-btn active" onclick="window.scrollTo({top: 0, behavior: 'smooth'});">
       <span>🏠</span> <span>Home</span>
     </button>
-    <button type="button" class="mobile-dock-btn" onclick="document.getElementById('store-search-input')?.focus();">
+    <button type="button" class="mobile-dock-btn" onclick="openMobileSearch();">
       <span>🔍</span> <span>Search</span>
     </button>
     <button type="button" class="mobile-dock-btn" id="btn-mobile-dock-chat" onclick="if(window.Tawk_API && window.Tawk_API.maximize) { window.Tawk_API.showWidget(); window.Tawk_API.maximize(); }">
@@ -904,10 +990,28 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=9.0"></script>
+  <script type="module" src="js/app.js?v=9.4"></script>
 
-  <!-- Clean Tawk.to Controller -->
+  <!-- Mobile Search Controller Script -->
   <script type="text/javascript">
+    window.openMobileSearch = function() {
+      const modal = document.getElementById('mobile-search-modal');
+      const input = document.getElementById('mobile-popup-search-input');
+      if (modal && input) {
+        modal.style.display = 'block';
+        setTimeout(() => input.focus(), 50);
+      }
+    };
+
+    // Forward mobile popup typing to main search filter
+    document.getElementById('mobile-popup-search-input')?.addEventListener('input', (e) => {
+      const mainInput = document.getElementById('store-search-input');
+      if (mainInput) {
+        mainInput.value = e.target.value;
+        mainInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
     var Tawk_API = Tawk_API || {};
     var Tawk_LoadStart = new Date();
 

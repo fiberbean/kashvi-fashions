@@ -3,13 +3,9 @@
    ========================================================= */
 @media (max-width: 768px) {
 
-  /* 1. Header Clean-up */
-  header, .navbar, .top-nav {
-    padding: 8px 12px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 8px !important;
+  /* 1. Header Clean 2-Row Split */
+  header, .store-header, .navbar, .top-nav {
+    padding: 8px 12px 10px 12px !important;
     position: sticky !important;
     top: 0 !important;
     z-index: 100 !important;
@@ -17,40 +13,128 @@
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05) !important;
   }
 
-  .brand-logo, .brand-logo img {
-    height: 34px !important;
+  .header-inner {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0 !important;
+    gap: 8px 0 !important;
+  }
+
+  /* Row 1 Left: Brand Logo */
+  .brand-container {
+    order: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    text-decoration: none !important;
+    flex: 0 0 auto !important;
+  }
+
+  .brand-logo, .brand-logo img, .brand-logo-img {
+    height: 32px !important;
     width: auto !important;
   }
 
-  /* Search Bar Moves to 2nd Row */
-  .search-container, .header-search {
-    order: 3 !important;
-    width: 100% !important;
-    margin-top: 6px !important;
+  .brand-text-title {
+    font-size: 0.95rem !important;
   }
 
-  .search-container input, .header-search input {
-    width: 100% !important;
-    font-size: 0.8rem !important;
-    height: 38px !important;
-    border-radius: 20px !important;
-    padding: 0 16px !important;
+  .brand-text-sub {
+    font-size: 0.55rem !important;
   }
 
+  /* Row 1 Right: User & Cart Actions */
   .header-actions {
+    order: 2 !important;
     display: flex !important;
     align-items: center !important;
-    gap: 10px !important;
+    gap: 8px !important;
+    margin-left: auto !important;
+    flex: 0 0 auto !important;
+  }
+
+  /* Compact User Profile Button */
+  .header-user-wrap,
+  .user-menu-container,
+  .user-nav-wrap {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  .btn-header-user,
+  .auth-user-btn {
+    padding: 5px 10px !important;
+    font-size: 0.72rem !important;
+    max-width: 110px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .user-dropdown-menu,
+  .user-menu-dropdown,
+  .profile-dropdown {
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    right: 0 !important;
+    left: auto !important;
+    min-width: 190px !important;
+    background: #ffffff !important;
+    box-shadow: 0 8px 24px rgba(0, 54, 47, 0.18) !important;
+    border-radius: 10px !important;
+    z-index: 1050 !important;
+  }
+
+  .btn-header-cart {
+    padding: 5px 10px !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Row 2: Full Width Clean Search Bar */
+  .search-container, 
+  .header-search, 
+  .header-search-wrap {
+    order: 3 !important;
+    width: 100% !important;
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+    margin: 4px 0 0 0 !important;
+    position: relative !important;
+  }
+
+  .search-container input, 
+  .header-search input, 
+  .header-search-input {
+    width: 100% !important;
+    font-size: 0.78rem !important;
+    height: 36px !important;
+    border-radius: 18px !important;
+    padding: 0 14px 0 34px !important;
+    background: #f4f7f5 !important;
+    border: 1px solid rgba(0, 86, 75, 0.12) !important;
+    box-sizing: border-box !important;
+  }
+
+  .search-icon-abs {
+    left: 11px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    font-size: 0.75rem !important;
   }
 
   /* 2. Hero Banner Slider: Auto Aspect-Ratio */
-  .hero-slider-wrapper, .banner-slider-container {
+  .hero-slider-wrap, .hero-slider-wrapper, .banner-slider-container {
     margin: 8px 12px !important;
+    height: 180px !important;
     border-radius: 10px !important;
     overflow: hidden !important;
   }
 
-  .hero-slide-item img, .banner-slide img {
+  .hero-slide-item img, .banner-slide img, .hero-slide {
     height: 180px !important;
     max-height: 200px !important;
     object-fit: cover !important;
@@ -73,27 +157,28 @@
   }
 
   /* 3. Horizontal Scrolling Category Pills */
-  .category-bar, .categories-scroll-wrapper {
+  .category-navbar, .category-bar, .categories-scroll-wrapper {
     display: flex !important;
     overflow-x: auto !important;
     white-space: nowrap !important;
     gap: 8px !important;
     padding: 8px 12px !important;
-    scrollbar-width: none !important; /* Hide scrollbar for Chrome/Safari */
+    scrollbar-width: none !important;
   }
 
+  .category-navbar::-webkit-scrollbar,
   .category-bar::-webkit-scrollbar {
     display: none !important;
   }
 
-  .category-pill, .cat-item {
+  .category-pill, .cat-item, .cat-nav-btn {
     flex: 0 0 auto !important;
     font-size: 0.75rem !important;
     padding: 6px 14px !important;
     border-radius: 20px !important;
   }
 
-  /* 4. Sleek 2-Column Product Grid (Myntra Style) */
+  /* 4. Sleek 2-Column Product Grid */
   .products-grid, #products-container, .product-list {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
@@ -108,17 +193,17 @@
     box-shadow: 0 2px 6px rgba(0,0,0,0.03) !important;
   }
 
-  .product-card img, .product-image-container {
+  .product-card img, .product-thumb-img, .product-image-container {
     height: 190px !important;
     width: 100% !important;
     object-fit: cover !important;
   }
 
-  .product-info {
+  .product-card-body, .product-info {
     padding: 8px 10px !important;
   }
 
-  .product-title, .product-info h3 {
+  .product-card-title, .product-title, .product-info h3 {
     font-size: 0.78rem !important;
     font-weight: 700 !important;
     white-space: nowrap !important;
@@ -127,22 +212,22 @@
     margin-bottom: 4px !important;
   }
 
-  .product-pricing {
+  .product-card-price-row, .product-pricing {
     display: flex !important;
     align-items: baseline !important;
     gap: 6px !important;
   }
 
-  .product-price {
+  .price-selling, .product-price {
     font-size: 0.85rem !important;
     font-weight: 800 !important;
   }
 
-  .product-mrp {
+  .price-mrp, .product-mrp {
     font-size: 0.7rem !important;
   }
 
-  .btn-add-to-cart {
+  .btn-add-cart-card, .btn-add-to-cart {
     width: 100% !important;
     padding: 7px 0 !important;
     font-size: 0.74rem !important;
@@ -152,7 +237,8 @@
 
   /* 5. Fullscreen/Bottom-Sheet Modals for Mobile */
   .modal-overlay .modal-drawer, 
-  .account-modal-overlay .acc-modal-box {
+  .account-modal-overlay .acc-modal-box,
+  .cart-drawer {
     width: 100% !important;
     max-width: 100% !important;
     height: 90vh !important;
@@ -162,7 +248,7 @@
     margin: 0 !important;
   }
 
-  /* 6. Sticky Bottom Navigation Bar (Home, Orders, Cart) */
+  /* 6. Sticky Bottom Navigation Bar */
   .mobile-bottom-bar {
     position: fixed;
     bottom: 0;
@@ -197,7 +283,22 @@
     font-size: 1.15rem;
   }
 
-  /* Extra bottom padding to body so sticky bar won't overlap content */
+  /* 7. Hide Chatbot / WhatsApp Widget in Mobile View */
+  .chat-widget,
+  .chatbot-container,
+  .whatsapp-chat-widget,
+  #chatbot-bubble,
+  #chat-widget-container,
+  [class*="chat-float"],
+  [class*="whatsapp-float"],
+  [id*="chat-widget"],
+  [id*="whatsapp-widget"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+  }
+
+  /* Extra bottom padding to body */
   body {
     padding-bottom: 60px !important;
   }
