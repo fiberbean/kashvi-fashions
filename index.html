@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kashvi Fashions — Royal Handloom & Luxury Fashion</title>
 
-  <link rel="stylesheet" href="css/theme.css?v=9.5">
-  <link rel="stylesheet" href="css/storefront.css?v=9.5">
-  <link rel="stylesheet" href="css/product-detail.css?v=9.5">
-  <link rel="stylesheet" href="css/checkout.css?v=9.5">
-  <link rel="stylesheet" href="css/payment.css?v=9.5">
-  <link rel="stylesheet" href="css/auth.css?v=9.5">
+  <link rel="stylesheet" href="css/theme.css?v=9.6">
+  <link rel="stylesheet" href="css/storefront.css?v=9.6">
+  <link rel="stylesheet" href="css/product-detail.css?v=9.6">
+  <link rel="stylesheet" href="css/checkout.css?v=9.6">
+  <link rel="stylesheet" href="css/payment.css?v=9.6">
+  <link rel="stylesheet" href="css/auth.css?v=9.6">
 
   <!-- Mobile Luxury Responsive & Cart Drawer Fixes -->
   <style>
@@ -419,6 +419,55 @@
       font-size: 0.9rem;
       color: var(--text-main);
     }
+
+    /* Google Sign-in Button Styles */
+    .btn-google-auth {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: #ffffff;
+      border: 1px solid #dce8e2;
+      padding: 11px 16px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      color: #2c3e35;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+      transition: all 0.2s ease;
+      margin-top: 14px;
+    }
+    .btn-google-auth:hover {
+      background: #fbfdfc;
+      border-color: rgba(0,86,75,0.3);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .auth-separator {
+      margin: 16px 0 10px 0;
+      text-align: center;
+      position: relative;
+    }
+    .auth-separator span {
+      background: #ffffff;
+      padding: 0 12px;
+      color: #8da197;
+      font-size: 0.72rem;
+      font-weight: 700;
+      position: relative;
+      z-index: 1;
+      letter-spacing: 0.5px;
+    }
+    .auth-separator hr {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      border: none;
+      border-top: 1px solid #e1eee8;
+      margin: 0;
+    }
   </style>
 </head>
 <body>
@@ -644,7 +693,7 @@
     </div>
   </div>
 
-  <!-- AUTH MODAL (LOGIN & REGISTER) -->
+  <!-- AUTH MODAL (LOGIN & REGISTER WITH GOOGLE AUTH) -->
   <div class="auth-modal-overlay" id="auth-modal-overlay">
     <div class="auth-card">
       <button type="button" class="btn-close-auth" id="btn-close-auth">&times;</button>
@@ -652,6 +701,17 @@
       <div class="auth-tabs">
         <button type="button" class="auth-tab-btn active" id="tab-btn-login">Sign In</button>
         <button type="button" class="auth-tab-btn" id="tab-btn-register">New Account</button>
+      </div>
+
+      <!-- Google OAuth Trigger Button -->
+      <button type="button" class="btn-google-auth" id="btn-google-login">
+        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" style="width: 18px; height: 18px;">
+        <span>Continue with Google</span>
+      </button>
+
+      <div class="auth-separator">
+        <hr>
+        <span>OR CONTINUE WITH EMAIL</span>
       </div>
 
       <form class="auth-form" id="form-login">
@@ -1057,9 +1117,9 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=9.5"></script>
+  <script type="module" src="js/app.js?v=9.6"></script>
 
-  <!-- Mobile Search Controller & Global Payment Flow Handlers -->
+  <!-- Mobile Search Controller, Payment Status Handlers & Google OAuth Trigger -->
   <script type="text/javascript">
     window.openMobileSearch = function() {
       const modal = document.getElementById('mobile-search-modal');
@@ -1076,6 +1136,25 @@
       if (mainInput) {
         mainInput.value = e.target.value;
         mainInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
+
+    /* ================= GOOGLE SIGN-IN HANDLER ================= */
+    document.getElementById('btn-google-login')?.addEventListener('click', async () => {
+      try {
+        if (!window.supabase) {
+          throw new Error("Supabase client not initialized yet.");
+        }
+        const { error } = await window.supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin
+          }
+        });
+        if (error) throw error;
+      } catch (err) {
+        console.error("Google Sign-In Error:", err);
+        alert("Google Sign-In Error: " + (err.message || err));
       }
     });
 
@@ -1151,7 +1230,6 @@
         console.error("DB error on drop-off:", err);
       }
 
-      // Retain cart and reopen drawer so customer does not lose progress
       const cartDrawer = document.getElementById('cart-drawer-overlay');
       if (cartDrawer) {
         cartDrawer.style.display = 'flex';
