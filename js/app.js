@@ -92,17 +92,12 @@ function renderHeroSlideshow(container) {
   container.style.position = 'relative';
   container.style.overflow = 'hidden';
 
+  // Render ONLY images and links — Title and Subtitle overlay box completely removed
   container.innerHTML = `
     <div id="hero-track" style="display: flex; transition: transform 0.5s ease-in-out; width: ${activeHeroBanners.length * 100}%; height: 100%;">
       ${activeHeroBanners.map(b => `
         <div style="flex: 0 0 ${100 / activeHeroBanners.length}%; width: ${100 / activeHeroBanners.length}%; position: relative; cursor: pointer;" onclick="window.location.href='${b.redirect_url || '#'}'">
-          <img src="${b.image_url}" class="hero-slide" alt="${b.title || 'Banner'}" style="width: 100%; height: 100%; object-fit: cover; display: block;">
-          ${b.title ? `
-            <div style="position: absolute; bottom: 16px; left: 16px; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); padding: 8px 14px; border-radius: 8px; color: #fff;">
-              <h3 style="font-size: 0.95rem; font-weight: 700; margin: 0;">${b.title}</h3>
-              ${b.subtitle ? `<p style="font-size: 0.72rem; margin: 2px 0 0 0; opacity: 0.9;">${b.subtitle}</p>` : ''}
-            </div>
-          ` : ''}
+          <img src="${b.image_url}" class="hero-slide" alt="Promotion Banner" style="width: 100%; height: 100%; object-fit: cover; display: block;">
         </div>
       `).join('')}
     </div>
@@ -657,8 +652,7 @@ function bindEvents() {
   }
 }
 
-// Supabase క్లయింట్ క్రియేట్ చేసిన తర్వాత (ఉదా: const supabase = createClient(...))
-// దాన్ని గ్లోబల్ window ఆబ్జెక్ట్‌కు అటాచ్ చేయండి:
+// Global window exposure for Supabase
 window.supabase = supabase;
 
 // Google OAuth Trigger inside app.js
