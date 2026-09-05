@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kashvi Fashions — Royal Handloom & Luxury Fashion</title>
 
-  <link rel="stylesheet" href="css/theme.css?v=9.6">
-  <link rel="stylesheet" href="css/storefront.css?v=9.6">
-  <link rel="stylesheet" href="css/product-detail.css?v=9.6">
-  <link rel="stylesheet" href="css/checkout.css?v=9.6">
-  <link rel="stylesheet" href="css/payment.css?v=9.6">
-  <link rel="stylesheet" href="css/auth.css?v=9.6">
+  <link rel="stylesheet" href="css/theme.css?v=9.8">
+  <link rel="stylesheet" href="css/storefront.css?v=9.8">
+  <link rel="stylesheet" href="css/product-detail.css?v=9.8">
+  <link rel="stylesheet" href="css/checkout.css?v=9.8">
+  <link rel="stylesheet" href="css/payment.css?v=9.8">
+  <link rel="stylesheet" href="css/auth.css?v=9.8">
 
   <!-- Mobile Luxury Responsive & Cart Drawer Fixes -->
   <style>
@@ -264,20 +264,25 @@
         padding: 10px 12px 75px 12px !important;
       }
 
+      /* Responsive Banner Fix: Never crops horizontally or vertically */
       .hero-slider-wrap {
         width: 100% !important;
-        height: 180px !important;
-        max-height: 200px !important;
-        border-radius: 12px !important;
+        height: auto !important;
+        aspect-ratio: 1200 / 400 !important;
+        min-height: 110px !important;
+        max-height: none !important;
+        border-radius: 10px !important;
         overflow: hidden !important;
-        margin-bottom: 16px !important;
+        margin-bottom: 14px !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+        background: #f8fbf9 !important;
       }
 
       .hero-slider-wrap img, .hero-slide {
         width: 100% !important;
         height: 100% !important;
-        object-fit: cover !important;
+        object-fit: contain !important;
+        display: block !important;
       }
 
       .products-grid {
@@ -1117,9 +1122,9 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=9.6"></script>
+  <script type="module" src="js/app.js?v=9.8"></script>
 
-  <!-- Mobile Search Controller, Payment Status Handlers & Google OAuth Trigger -->
+  <!-- Mobile Search Controller & Payment Status Handlers -->
   <script type="text/javascript">
     window.openMobileSearch = function() {
       const modal = document.getElementById('mobile-search-modal');
@@ -1136,25 +1141,6 @@
       if (mainInput) {
         mainInput.value = e.target.value;
         mainInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    });
-
-    /* ================= GOOGLE SIGN-IN HANDLER ================= */
-    document.getElementById('btn-google-login')?.addEventListener('click', async () => {
-      try {
-        if (!window.supabase) {
-          throw new Error("Supabase client not initialized yet.");
-        }
-        const { error } = await window.supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: window.location.origin
-          }
-        });
-        if (error) throw error;
-      } catch (err) {
-        console.error("Google Sign-In Error:", err);
-        alert("Google Sign-In Error: " + (err.message || err));
       }
     });
 

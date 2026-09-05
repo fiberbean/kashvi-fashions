@@ -9,6 +9,22 @@ let currentAuthMode = 'password';
 let customerCachedOrders = [];
 
 export async function initAuth() {
+  // 1. Process Google OAuth Hash Token if redirected
+  if (window.location.hash && window.location.hash.includes('access_token')) {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (!error && data?.session?.user) {
+        currentUser = data.session.user;
+        await fetchCustomerProfile(currentUser.id, currentUser.email);
+        await syncCloudCartToLocal(currentUser.id);
+        window.history.replaceState(null, null, window.location.pathname + window.location.search);
+      }
+    } catch (err) {
+      console.warn("OAuth redirect session parse fallback:", err);
+    }
+  }
+
+  // 2. Standard Session Check
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
@@ -20,6 +36,7 @@ export async function initAuth() {
     console.warn("Auth session init fallback:", err);
   }
 
+  // 3. Realtime Auth State Listener
   supabase.auth.onAuthStateChange(async (_event, session) => {
     currentUser = session?.user || null;
     if (currentUser) {
@@ -54,6 +71,27 @@ async function fetchCustomerProfile(authUserId, email) {
 
     if (data) {
       currentCustomer = data;
+    } else if (currentUser) {
+      // Auto create entry in customers table for new Google users
+      const custId = 'CUST-' + authUserId.substring(0, 8).toUpperCase();
+      const newCustomer = {
+        id: custId,
+        auth_user_id: authUserId,
+        name: currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || email.split('@')[0],
+        email: email,
+        mobile: currentUser.user_metadata?.mobile || '',
+        created_at: new Date().toISOString()
+      };
+
+      const { data: createdCust, error: insErr } = await supabase
+        .from('customers')
+        .insert([newCustomer])
+        .select()
+        .single();
+
+      if (!insErr && createdCust) {
+        currentCustomer = createdCust;
+      }
     }
   } catch (err) {
     console.warn("Customer profile fetch fallback:", err);
@@ -86,6 +124,8 @@ function updateUserNavUI(user, customer) {
       e.stopPropagation();
       dropdown?.classList.toggle('active');
     };
+
+    closeAuthModal();
   } else {
     authNavBtn.innerHTML = `<span>👤</span> <span>Login / Sign Up</span>`;
     authNavBtn.onclick = () => openAuthModal();
@@ -465,6 +505,26 @@ function bindAuthEvents() {
   const formOtpVerify = document.getElementById('form-otp-verify');
   const dropdown = document.getElementById('account-dropdown-menu');
   const ordersListContainer = document.getElementById('popup-orders-list');
+  const googleBtn = document.getElementById('btn-google-login');
+
+  // Bind Google OAuth Trigger
+  if (googleBtn) {
+    googleBtn.onclick = async (e) => {
+      e.preventDefault();
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin
+          }
+        });
+        if (error) throw error;
+      } catch (err) {
+        console.error("Google Sign-In Trigger Error:", err);
+        alert("Google Sign-In Error: " + (err.message || err));
+      }
+    };
+  }
 
   window.addEventListener('click', () => {
     dropdown?.classList.remove('active');
