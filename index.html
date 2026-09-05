@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kashvi Fashions — Royal Handloom & Luxury Fashion</title>
 
-  <link rel="stylesheet" href="css/theme.css?v=9.4">
-  <link rel="stylesheet" href="css/storefront.css?v=9.4">
-  <link rel="stylesheet" href="css/product-detail.css?v=9.4">
-  <link rel="stylesheet" href="css/checkout.css?v=9.4">
-  <link rel="stylesheet" href="css/payment.css?v=9.4">
-  <link rel="stylesheet" href="css/auth.css?v=9.4">
+  <link rel="stylesheet" href="css/theme.css?v=9.5">
+  <link rel="stylesheet" href="css/storefront.css?v=9.5">
+  <link rel="stylesheet" href="css/product-detail.css?v=9.5">
+  <link rel="stylesheet" href="css/checkout.css?v=9.5">
+  <link rel="stylesheet" href="css/payment.css?v=9.5">
+  <link rel="stylesheet" href="css/auth.css?v=9.5">
 
   <!-- Mobile Luxury Responsive & Cart Drawer Fixes -->
   <style>
@@ -286,7 +286,12 @@
         gap: 10px !important;
       }
 
-      .account-modal-overlay, .product-modal-overlay, .checkout-view-overlay, .payment-modal-overlay, .search-modal-overlay {
+      .account-modal-overlay, 
+      .product-modal-overlay, 
+      .checkout-view-overlay, 
+      .payment-modal-overlay, 
+      .search-modal-overlay,
+      .modal-overlay {
         z-index: 100000 !important;
       }
 
@@ -329,7 +334,6 @@
         gap: 16px !important;
       }
 
-      /* Mobile Sticky Dock Navigation Bar */
       .mobile-dock-nav {
         display: flex !important;
         position: fixed !important;
@@ -366,7 +370,6 @@
         color: var(--brand-emerald-dark, #00564b) !important;
       }
 
-      /* Completely Hide Chatbot Floating Widget on Mobile */
       #tawk-default-container,
       iframe[title*="chat"],
       .chat-widget,
@@ -857,11 +860,6 @@
               </div>
             </div>
 
-            <div class="checkout-input-group">
-              <label>Door / Street Address *</label>
-              <input type="text" id="new-addr-door" class="checkout-input" placeholder="Flat 201, Main Road, Near Clock Tower">
-            </div>
-
             <div class="checkout-row-3">
               <div class="checkout-input-group">
                 <label>Pincode *</label>
@@ -875,6 +873,11 @@
                 <label>State *</label>
                 <input type="text" id="new-addr-state" class="checkout-input" value="Andhra Pradesh">
               </div>
+            </div>
+
+            <div class="checkout-input-group">
+              <label>Door / Street Address *</label>
+              <input type="text" id="new-addr-door" class="checkout-input" placeholder="Flat 201, Main Road, Near Clock Tower">
             </div>
           </div>
         </div>
@@ -990,9 +993,73 @@
     </div>
   </div>
 
-  <script type="module" src="js/app.js?v=9.4"></script>
+  <!-- 1. PAYMENT FAILED MODAL -->
+  <div class="modal-overlay" id="payment-failed-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:100001; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
+    <div style="background:#ffffff; border-radius:14px; width:92%; max-width:480px; padding:28px 24px; box-shadow:0 12px 36px rgba(0,0,0,0.2); text-align:center; animation:popIn 0.25s ease-out;">
+      <div style="width:64px; height:64px; background:#fde8e8; color:#de350b; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin:0 auto 16px auto;">
+        ✕
+      </div>
+      <h2 style="color:#de350b; margin:0 0 6px 0; font-size:1.35rem; font-weight:800;">Payment Incomplete / Failed</h2>
+      <p style="color:#666; font-size:0.86rem; margin:0 0 18px 0;" id="pay-failed-reason">Your transaction could not be processed. Don't worry, your cart is safe!</p>
+      
+      <div style="background:#fdf2f2; border:1px solid #f8d7da; border-radius:10px; padding:14px; text-align:left; font-size:0.84rem; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="color:#777;">Order Ref:</span>
+          <strong id="fail-order-ref" style="color:#333;">-</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:#777;">Amount:</span>
+          <strong id="fail-order-amount" style="color:#333;">₹ 0</strong>
+        </div>
+      </div>
 
-  <!-- Mobile Search Controller Script -->
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button type="button" id="btn-retry-payment" style="background:#00564b; color:#ffffff; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:0.92rem; cursor:pointer; width:100%;">
+          🔄 Retry Payment
+        </button>
+        <button type="button" id="btn-close-failed-modal" style="background:transparent; color:#555; border:1px solid #ccc; padding:10px; border-radius:8px; font-weight:600; font-size:0.86rem; cursor:pointer; width:100%;">
+          Review Cart & Items
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. PAYMENT PENDING / PROCESSING MODAL -->
+  <div class="modal-overlay" id="payment-pending-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.65); z-index:100001; justify-content:center; align-items:center; backdrop-filter:blur(3px);">
+    <div style="background:#ffffff; border-radius:14px; width:92%; max-width:480px; padding:28px 24px; box-shadow:0 12px 36px rgba(0,0,0,0.2); text-align:center; animation:popIn 0.25s ease-out;">
+      <div style="width:64px; height:64px; background:#fff8e6; color:#c5a059; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:2rem; margin:0 auto 16px auto;">
+        ⏳
+      </div>
+      <h2 style="color:#00564b; margin:0 0 6px 0; font-size:1.35rem; font-weight:800;">Awaiting Bank Confirmation</h2>
+      <p style="color:#666; font-size:0.86rem; margin:0 0 18px 0;">
+        మీ ఖాతా నుండి డబ్బు కట్ అయితే, బ్యాంక్ కన్ఫర్మేషన్ కోసం 5-10 నిమిషాలు వేచి ఉండండి.
+      </p>
+
+      <div style="background:#fffbee; border:1px solid #ffeeba; border-radius:10px; padding:14px; text-align:left; font-size:0.84rem; margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <span style="color:#777;">Order ID:</span>
+          <strong id="pending-order-id" style="color:#00564b;">-</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          <span style="color:#777;">Status:</span>
+          <span style="background:#fff3cd; color:#856404; font-size:0.75rem; font-weight:700; padding:2px 8px; border-radius:10px;">Pending Verification</span>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <button type="button" id="btn-pending-my-orders" style="background:#00564b; color:#ffffff; border:none; padding:12px; border-radius:8px; font-weight:700; font-size:0.92rem; cursor:pointer; width:100%;">
+          📦 Track in My Orders
+        </button>
+        <button type="button" id="btn-check-status-now" style="background:transparent; color:#00564b; border:1px solid #00564b; padding:10px; border-radius:8px; font-weight:600; font-size:0.86rem; cursor:pointer; width:100%;">
+          🔄 Refresh Payment Status
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js?v=9.5"></script>
+
+  <!-- Mobile Search Controller & Global Payment Flow Handlers -->
   <script type="text/javascript">
     window.openMobileSearch = function() {
       const modal = document.getElementById('mobile-search-modal');
@@ -1012,6 +1079,141 @@
       }
     });
 
+    /* ================= PAYMENT STATUS HANDLERS (FAILED, PENDING, DROP-OFF) ================= */
+    let currentPendingOrder = null;
+
+    // 1. Payment Failed
+    window.handlePaymentFailure = async function(orderId, amount, reason = "Payment was cancelled or failed at the gateway.") {
+      console.warn("Payment Failed for Order:", orderId);
+      try {
+        if (window.supabase) {
+          await window.supabase
+            .from('orders')
+            .update({ payment_status: 'FAILED', updated_at: new Date() })
+            .eq('order_id', orderId);
+        }
+      } catch (err) {
+        console.error("Failed to update status in DB:", err);
+      }
+
+      const failModal = document.getElementById('payment-failed-modal');
+      const failRef = document.getElementById('fail-order-ref');
+      const failAmt = document.getElementById('fail-order-amount');
+      const failReason = document.getElementById('pay-failed-reason');
+
+      if (failRef) failRef.textContent = orderId || '-';
+      if (failAmt) failAmt.textContent = `₹ ${amount || 0}`;
+      if (failReason && reason) failReason.textContent = reason;
+
+      if (failModal) {
+        failModal.style.display = 'flex';
+      }
+    };
+
+    // 2. Payment Pending / Processing
+    window.handlePaymentPending = async function(orderId, amount) {
+      console.info("Payment Pending for Order:", orderId);
+      currentPendingOrder = { orderId, amount };
+
+      try {
+        if (window.supabase) {
+          await window.supabase
+            .from('orders')
+            .update({ payment_status: 'PENDING_CONFIRMATION', updated_at: new Date() })
+            .eq('order_id', orderId);
+        }
+      } catch (err) {
+        console.error("Failed to update DB:", err);
+      }
+
+      const pendingModal = document.getElementById('payment-pending-modal');
+      const pendingId = document.getElementById('pending-order-id');
+
+      if (pendingId) pendingId.textContent = orderId || '-';
+      if (pendingModal) {
+        pendingModal.style.display = 'flex';
+      }
+
+      pollPaymentStatus(orderId, 6);
+    };
+
+    // 3. User Drop-off
+    window.handleUserDropOff = async function(orderId) {
+      console.log("User dropped off / closed payment modal:", orderId);
+      try {
+        if (window.supabase && orderId) {
+          await window.supabase
+            .from('orders')
+            .update({ payment_status: 'DROPPED_OFF', updated_at: new Date() })
+            .eq('order_id', orderId);
+        }
+      } catch (err) {
+        console.error("DB error on drop-off:", err);
+      }
+
+      // Retain cart and reopen drawer so customer does not lose progress
+      const cartDrawer = document.getElementById('cart-drawer-overlay');
+      if (cartDrawer) {
+        cartDrawer.style.display = 'flex';
+      }
+    };
+
+    // Polling Helper
+    async function pollPaymentStatus(orderId, attemptsLeft) {
+      if (attemptsLeft <= 0) return;
+
+      setTimeout(async () => {
+        try {
+          if (window.supabase) {
+            const { data } = await window.supabase
+              .from('orders')
+              .select('payment_status, total_amount')
+              .eq('order_id', orderId)
+              .single();
+
+            if (data && (data.payment_status === 'PAID' || data.payment_status === 'SUCCESS')) {
+              document.getElementById('payment-pending-modal').style.display = 'none';
+              const successModal = document.getElementById('order-success-modal');
+              if (successModal) successModal.style.display = 'flex';
+              return;
+            } else if (data && data.payment_status === 'FAILED') {
+              document.getElementById('payment-pending-modal').style.display = 'none';
+              window.handlePaymentFailure(orderId, data.total_amount, "Bank rejected the transaction.");
+              return;
+            }
+          }
+          pollPaymentStatus(orderId, attemptsLeft - 1);
+        } catch (e) {
+          pollPaymentStatus(orderId, attemptsLeft - 1);
+        }
+      }, 8000);
+    }
+
+    // Modal UI Action Listeners
+    document.getElementById('btn-retry-payment')?.addEventListener('click', () => {
+      document.getElementById('payment-failed-modal').style.display = 'none';
+      const checkoutModal = document.getElementById('checkout-modal-overlay');
+      if (checkoutModal) checkoutModal.style.display = 'flex';
+    });
+
+    document.getElementById('btn-close-failed-modal')?.addEventListener('click', () => {
+      document.getElementById('payment-failed-modal').style.display = 'none';
+      const cartDrawer = document.getElementById('cart-drawer-overlay');
+      if (cartDrawer) cartDrawer.style.display = 'flex';
+    });
+
+    document.getElementById('btn-pending-my-orders')?.addEventListener('click', () => {
+      document.getElementById('payment-pending-modal').style.display = 'none';
+      document.getElementById('menu-item-orders')?.click();
+    });
+
+    document.getElementById('btn-check-status-now')?.addEventListener('click', () => {
+      if (currentPendingOrder) {
+        pollPaymentStatus(currentPendingOrder.orderId, 1);
+      }
+    });
+
+    /* ================= TAWK.TO CONTROLLER ================= */
     var Tawk_API = Tawk_API || {};
     var Tawk_LoadStart = new Date();
 
