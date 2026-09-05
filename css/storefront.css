@@ -257,6 +257,21 @@
   object-fit: cover;
 }
 
+/* Strict Hide for Banner Titles / Labels on Customer Interface */
+.hero-slide-title,
+.hero-banner-title,
+.hero-banner-caption,
+.hero-banner-overlay-text,
+.banner-name-badge,
+.hero-slider-wrap h2,
+.hero-slider-wrap h3,
+.hero-slider-wrap p,
+.hero-slider-wrap span:not(.slider-arrow) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
 /* Compact Products Grid */
 .products-grid {
   display: grid;
