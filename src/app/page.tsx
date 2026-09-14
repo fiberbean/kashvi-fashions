@@ -1,0 +1,203 @@
+import React from "react";
+import Link from "next/link";
+import {
+  Sparkles,
+  ShieldCheck,
+  Heart,
+  Gem,
+  Crown,
+} from "lucide-react";
+import FashionBubbleMenu from "@/modules/home/FashionBubbleMenu";
+import JewelleryBubbleMenu from "@/modules/home/JewelleryBubbleMenu";
+import FashionUnevenBanners from "@/modules/home/FashionUnevenBanners";
+import JewelleryUnevenBanners from "@/modules/home/JewelleryUnevenBanners";
+import HeaderBagButton from "@/components/common/HeaderBagButton";
+import HeaderUserButton from "@/components/common/HeaderUserButton";
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>;
+}) {
+  const params = await searchParams;
+  const isJewellery = params?.tab === "jewellery";
+
+  return (
+    <main className="min-h-screen bg-white text-neutral-900 pb-20 w-full overflow-x-hidden">
+      {/* 3-Column Luxury Unified Header */}
+      <header
+        className={`w-full sticky top-0 z-40 backdrop-blur-md transition-all duration-300 border-b bg-white/95 ${
+          isJewellery ? "border-[#0b3b2c]/15 shadow-xs" : "border-[#ff4d6d]/20 shadow-xs"
+        }`}
+      >
+        <div className="w-full max-w-7xl mx-auto px-4 py-2.5 md:py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          
+          {/* Row 1: Logo & Mobile Actions */}
+          <div className="flex items-center justify-between w-full md:w-auto md:flex-1">
+            <Link href="/" className="flex flex-col">
+              <span
+                className={`text-xl sm:text-2xl md:text-3xl font-serif font-bold tracking-[0.2em] transition-colors leading-none ${
+                  isJewellery ? "text-[#0b3b2c]" : "text-neutral-950"
+                }`}
+              >
+                KASHVI
+              </span>
+              <span
+                className={`text-[8px] sm:text-[9px] uppercase tracking-[0.3em] font-medium mt-0.5 transition-colors ${
+                  isJewellery ? "text-[#b38728]" : "text-[#ff4d6d]"
+                }`}
+              >
+                {isJewellery ? "Royal Vault" : "Haute Couture"}
+              </span>
+            </Link>
+
+            {/* Mobile Right Icons (Live User & Cart Buttons) */}
+            <div className="flex items-center gap-2 md:hidden">
+              <HeaderUserButton isJewellery={isJewellery} />
+              <button
+                type="button"
+                aria-label="Wishlist"
+                className="p-1.5 rounded-full text-neutral-700 hover:text-neutral-950"
+              >
+                <Heart className="w-4 h-4" />
+              </button>
+              <HeaderBagButton isJewellery={isJewellery} />
+            </div>
+          </div>
+
+          {/* Row 2: Mode Switcher */}
+          <div className="w-full md:w-auto md:flex-none">
+            <div
+              className={`grid grid-cols-2 p-1 rounded-2xl border transition-all duration-300 w-full md:w-80 ${
+                isJewellery
+                  ? "bg-[#f4f7f5] border-[#0b3b2c]/20 shadow-inner"
+                  : "bg-[#fff0f3] border-[#ff4d6d]/30 shadow-inner"
+              }`}
+            >
+              <Link
+                href="/?tab=fashions"
+                scroll={false}
+                className={`w-full py-2 px-3 rounded-xl text-xs uppercase tracking-wider font-bold transition-all duration-200 flex items-center justify-center gap-1.5 active:scale-95 ${
+                  !isJewellery
+                    ? "bg-[#ff4d6d] text-white shadow-md shadow-[#ff4d6d]/30"
+                    : "text-neutral-600 hover:text-[#ff4d6d]"
+                }`}
+              >
+                <Crown className="w-3.5 h-3.5 shrink-0" />
+                <span>Fashions</span>
+              </Link>
+
+              <Link
+                href="/?tab=jewellery"
+                scroll={false}
+                className={`w-full py-2 px-3 rounded-xl text-xs uppercase tracking-wider font-bold transition-all duration-200 flex items-center justify-center gap-1.5 active:scale-95 ${
+                  isJewellery
+                    ? "bg-[#0b3b2c] text-[#e5c07b] shadow-md shadow-[#0b3b2c]/30"
+                    : "text-neutral-600 hover:text-[#0b3b2c]"
+                }`}
+              >
+                <Gem className="w-3.5 h-3.5 shrink-0" />
+                <span>Jewellery</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* Desktop Right Icons */}
+          <div className="hidden md:flex flex-1 justify-end items-center gap-3">
+            {/* Desktop Live User Button with Dropdown & Modal */}
+            <HeaderUserButton isJewellery={isJewellery} />
+
+            <button
+              type="button"
+              aria-label="Wishlist"
+              className={`p-2 rounded-full transition-colors text-neutral-700 ${
+                isJewellery ? "hover:text-[#0b3b2c] hover:bg-[#f4f7f5]" : "hover:text-[#ff4d6d] hover:bg-[#fff0f3]"
+              }`}
+            >
+              <Heart className="w-5 h-5" />
+            </button>
+
+            {/* Desktop Live Cart Button */}
+            <HeaderBagButton isJewellery={isJewellery} />
+          </div>
+        </div>
+      </header>
+
+      {/* VIEW 1: KASHVI FASHIONS */}
+      {!isJewellery && (
+        <div className="w-full bg-white animate-in fade-in duration-300">
+          <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-4">
+            <div className="w-full overflow-hidden rounded-2xl md:rounded-3xl shadow-sm border border-[#ff4d6d]/20 bg-neutral-900">
+              <div className="relative aspect-[21/9] md:aspect-[3/1] w-full">
+                <img
+                  src="https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1600&q=80"
+                  alt="Kashvi Fashions Grand Festive Banner"
+                  className="w-full h-full object-cover"
+                  loading="eager"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/30 to-transparent flex items-center px-6 md:px-12">
+                  <div className="max-w-md text-white">
+                    <span className="inline-flex items-center gap-1 text-[10px] md:text-xs font-semibold uppercase tracking-[0.25em] bg-[#ff4d6d] text-white px-2.5 py-0.5 rounded-full shadow-sm mb-2">
+                      New Couture Drop
+                    </span>
+                    <h2 className="text-xl md:text-4xl font-serif font-bold mt-1 leading-tight text-white">
+                      Kashvi Silk Edit
+                    </h2>
+                    <p className="text-xs md:text-sm text-neutral-200 mt-1.5 line-clamp-2">
+                      Kanchipuram, Banarasi Zari Sarees & Contemporary Designer Wear.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <FashionBubbleMenu />
+          <FashionUnevenBanners />
+        </div>
+      )}
+
+      {/* VIEW 2: KASHVI JEWELLERY */}
+      {isJewellery && (
+        <div className="w-full bg-white animate-in fade-in duration-300">
+          <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-4">
+            <div className="w-full overflow-hidden rounded-2xl md:rounded-3xl shadow-sm border border-[#0b3b2c]/20 bg-neutral-900 relative">
+              <div className="relative aspect-[21/9] md:aspect-[3/1] w-full">
+                <img
+                  src="https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=1600&q=80"
+                  alt="Kashvi Royal Jewellery"
+                  className="w-full h-full object-cover opacity-85"
+                  loading="eager"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#0b3b2c]/90 via-[#0b3b2c]/40 to-transparent flex items-center px-6 md:px-12">
+                  <div className="max-w-lg">
+                    <span className="inline-flex items-center gap-1.5 text-[10px] md:text-xs font-bold uppercase tracking-[0.25em] bg-[#0b3b2c] border border-[#e5c07b]/40 text-[#e5c07b] px-3 py-1 rounded-full shadow-sm mb-2">
+                      <Sparkles className="w-3 h-3 text-[#e5c07b]" />
+                      Royal Heirloom Craft
+                    </span>
+                    <h2 className="text-xl md:text-4xl font-serif font-bold text-white leading-tight">
+                      Royal Jewellery Lounge
+                    </h2>
+                    <p className="text-xs md:text-sm text-neutral-200 mt-1.5 line-clamp-2">
+                      Handcrafted 22K Gold, Polki Sets, and Certified Antique Temple Collections.
+                    </p>
+                    <div className="mt-4 flex items-center gap-4 text-[11px] text-[#e5c07b] font-medium">
+                      <span className="flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5" /> 100% Certified Quality
+                      </span>
+                      <span>•</span>
+                      <span>Insured Express Shipping</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <JewelleryBubbleMenu />
+          <JewelleryUnevenBanners />
+        </div>
+      )}
+    </main>
+  );
+}
