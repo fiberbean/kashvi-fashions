@@ -18,6 +18,7 @@ import {
   Bookmark,
   Loader2,
 } from 'lucide-react';
+import { load } from '@cashfreepayments/cashfree-js';
 import { useCart } from '../../context/CartContext';
 import { supabase } from '../../lib/supabase';
 
@@ -76,6 +77,7 @@ export default function CartDrawer() {
 
   const [activeStep, setActiveStep] = useState<'cart' | 'address'>('cart');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [activeGatewayName, setActiveGatewayName] = useState<string>('Online Payment');
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>(() => {
     try {
@@ -111,6 +113,29 @@ export default function CartDrawer() {
     deliveryAvailable?: boolean;
     message?: string;
   } | null>(null);
+
+  // అడ్మిన్ ఆన్ చేసిన యాక్టివ్ గేట్‌వే పేరు తెలుసుకోవడం
+  useEffect(() => {
+    const fetchActiveGateway = async () => {
+      try {
+        const { data } = await supabase
+          .from('payment_gateway_configs')
+          .select('name')
+          .eq('is_active', true)
+          .limit(1)
+          .maybeSingle();
+
+        if (data?.name) {
+          setActiveGatewayName(data.name);
+        }
+      } catch (err) {
+        console.error('Error reading gateway config:', err);
+      }
+    };
+    if (isCartOpen) {
+      fetchActiveGateway();
+    }
+  }, [isCartOpen]);
 
   useEffect(() => {
     if (savedAddresses.length > 0) {
@@ -300,6 +325,7 @@ export default function CartDrawer() {
     setIsAddressModalOpen(false);
   };
 
+  // అడ్మిన్ ఆన్ చేసిన గేట్‌వే ఆధారంగా పేమెంట్ ప్రారంభించడం
   const handleInstantCheckout = async () => {
     if (!selectedAddressId) {
       alert('Please select a delivery address');
@@ -311,18 +337,42 @@ export default function CartDrawer() {
 
     setIsCheckingOut(true);
     try {
-      const orderId = `ORD-${Date.now().toString().slice(-8)}`;
+      const orderId = `KF_${Date.now()}`;
       const fullAddressText = `${currentAddress.door_no}, ${currentAddress.building_name ? currentAddress.building_name + ', ' : ''}${currentAddress.street}, ${currentAddress.area}, ${currentAddress.city}, ${currentAddress.state} - ${currentAddress.pincode}`;
-
       const resolvedEmail = currentAddress.email?.trim() || `${currentAddress.whatsapp_number}@kashvifashions.local`;
 
+      // 1. Edge Function నుండి యాక్టివ్ గేట్‌వే ఆర్డర్ సెషన్ పొందడం
+      const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
+        'create-payment-order',
+        {
+          body: {
+            orderId: orderId,
+            orderAmount: totalDue,
+            customerPhone: currentAddress.whatsapp_number,
+            customerName: currentAddress.name,
+            customerEmail: resolvedEmail,
+          },
+        }
+      );
+
+      if (sessionError || !sessionData) {
+        console.error('Payment initialization error:', sessionError || sessionData);
+        alert(sessionData?.error || 'Could not connect to the active Payment Gateway.');
+        setIsCheckingOut(false);
+        return;
+      }
+
+      const activeGateway = sessionData.gateway; // 'cashfree', 'razorpay', etc.
+      const usedGatewayName = sessionData.gatewayName || 'Online PG';
+
+      // 2. Supabase లో ఆర్డర్‌ను ఇనిషియలైజ్ చేయడం
       const orderPayload = {
         id: orderId,
         customer_id: currentAddress.whatsapp_number,
         status: 'new',
         order_status: 'new',
         payment_status: 'payment_pending',
-        payment_method: 'Cashfree PG',
+        payment_method: usedGatewayName,
         customer_name: currentAddress.name,
         customer_phone: currentAddress.whatsapp_number,
         customer_email: resolvedEmail,
@@ -345,39 +395,89 @@ export default function CartDrawer() {
           email: resolvedEmail,
         },
         payment: {
-          method: 'Cashfree PG',
+          method: usedGatewayName,
           status: 'pending',
         },
         history: [
           {
-            status: 'order_created',
+            status: 'order_initiated',
             time: new Date().toISOString(),
-            note: 'Order initialized via Instant Checkout',
+            note: `Order initiated using active gateway: ${usedGatewayName}`,
           },
         ],
       };
 
-      const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
+      await supabase.from('orders').insert([orderPayload]);
 
-      if (orderError) {
-        console.error('Supabase order insert error:', orderError);
-        alert('Order placement failed: ' + orderError.message);
-        return;
+      // 3. యాక్టివ్ గేట్‌వే ప్రకారం మోడల్ ఓపెన్ చేయడం
+      if (activeGateway === 'cashfree') {
+        const cashfreeMode = sessionData.environment === 'production' ? 'production' : 'sandbox';
+        const cashfree = await load({ mode: cashfreeMode });
+
+        cashfree.checkout({
+          paymentSessionId: sessionData.paymentSessionId,
+          redirectTarget: '_modal',
+        }).then(async (result: any) => {
+          if (result.error) {
+            alert(`Payment Failed or Cancelled: ${result.error.message}`);
+          }
+          if (result.paymentDetails) {
+            await supabase
+              .from('orders')
+              .update({
+                payment_status: 'paid',
+                order_status: 'confirmed',
+                payment_reference: sessionData.orderId,
+                payment_time: new Date().toISOString(),
+                payment_verified: true,
+              })
+              .eq('id', orderId);
+
+            alert(`Payment Successful! Your Order #${orderId} is confirmed.`);
+            clearCart();
+            closeCart();
+          }
+        });
+      } else if (activeGateway === 'razorpay') {
+        // Razorpay Checkout (Future Ready)
+        const options = {
+          key: sessionData.keyId,
+          amount: Math.round(totalDue * 100),
+          currency: 'INR',
+          name: 'Kashvi Fashions',
+          description: `Order #${orderId}`,
+          order_id: sessionData.razorpayOrderId,
+          handler: async (response: any) => {
+            await supabase
+              .from('orders')
+              .update({
+                payment_status: 'paid',
+                order_status: 'confirmed',
+                payment_reference: response.razorpay_payment_id,
+                payment_time: new Date().toISOString(),
+                payment_verified: true,
+              })
+              .eq('id', orderId);
+
+            alert(`Payment Successful! Order #${orderId} confirmed.`);
+            clearCart();
+            closeCart();
+          },
+          prefill: {
+            name: currentAddress.name,
+            contact: currentAddress.whatsapp_number,
+            email: resolvedEmail,
+          },
+          theme: { color: '#0b3b2c' },
+        };
+        const rzp = new (window as any).Razorpay(options);
+        rzp.open();
+      } else {
+        alert(`${usedGatewayName} is active but checkout handling is in progress.`);
       }
-
-      const { data: authData } = await supabase.auth.getUser();
-      if (authData?.user?.id) {
-        await supabase
-          .from('user_carts')
-          .upsert({ user_id: authData.user.id, cart_items: [] });
-      }
-
-      alert(`Order Placed Successfully!\nOrder ID: ${orderId}\nTotal: ₹${totalDue}`);
-      clearCart();
-      closeCart();
     } catch (err: any) {
-      console.error('Checkout error:', err);
-      alert('Failed to place order. Please try again.');
+      console.error('Checkout execution error:', err);
+      alert('An error occurred during checkout. Please try again.');
     } finally {
       setIsCheckingOut(false);
     }
@@ -686,7 +786,7 @@ export default function CartDrawer() {
                   <Zap className="w-4 h-4 fill-current animate-bounce relative z-10" />
                 )}
                 <span className="relative z-10 tracking-widest font-black drop-shadow-xs flex items-center gap-1.5">
-                  {isCheckingOut ? 'Placing Order...' : `Instant Checkout • ₹${totalDue.toLocaleString('en-IN')}`}
+                  {isCheckingOut ? 'Connecting Gateway...' : `Pay via ${activeGatewayName} • ₹${totalDue.toLocaleString('en-IN')}`}
                   {!isCheckingOut && <ArrowRight className="w-4 h-4" />}
                 </span>
               </button>
@@ -694,7 +794,7 @@ export default function CartDrawer() {
 
             <div className="flex items-center justify-center gap-2 text-[10px] text-neutral-400 pt-0.5">
               <ShieldCheck className="w-3.5 h-3.5 text-neutral-600" />
-              <span>100% Secure Encrypted Checkout</span>
+              <span>100% Secure Encrypted Checkout with {activeGatewayName}</span>
             </div>
           </div>
         )}
@@ -759,7 +859,7 @@ export default function CartDrawer() {
               {formData.address_type === 'Others' && (
                 <div className="animate-in fade-in duration-200">
                   <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
-                    Address Label Name * (e.g. Mom's House, Boutique, Farm House)
+                    Address Label Name * (e.g. Mom's House, Boutique)
                   </label>
                   <input
                     type="text"
@@ -810,7 +910,7 @@ export default function CartDrawer() {
 
               <div>
                 <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
-                  Email Address (For Order Status & Updates)
+                  Email Address (For Invoices & Tracking)
                 </label>
                 <input
                   type="email"

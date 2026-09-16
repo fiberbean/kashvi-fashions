@@ -1,0 +1,90 @@
+/* Compact KPI Grid */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kpi-card {
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+
+.kpi-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.kpi-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpi-icon-wrap {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: rgba(0, 86, 75, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.kpi-value {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--brand-emerald-dark);
+  margin-bottom: 4px;
+}
+
+.kpi-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+}
+
+.badge-emerald {
+  background: rgba(0, 135, 90, 0.12);
+  color: var(--stat-green);
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.badge-pink {
+  background: var(--brand-pink-light);
+  color: var(--brand-pink);
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* Compact Dashboard 2-Column Tables */
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+}
+
+.panel-container {
+  padding: 14px;
+  border-radius: 10px;
+}
+
+.panel-head {
+  margin-bottom: 10px;
+}
+
+.panel-head h3 {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--brand-emerald-dark);
+}
