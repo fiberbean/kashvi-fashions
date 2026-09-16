@@ -1,6 +1,6 @@
-import React, { Suspense, lazy } from 'react';
+import React from 'react';
 import { HashRouter as Router, Routes, Route, Link, useSearchParams } from 'react-router-dom';
-import { Sparkles, ShieldCheck, Heart, Gem, Crown, Loader2 } from 'lucide-react';
+import { Sparkles, ShieldCheck, Heart, Gem, Crown } from 'lucide-react';
 import FashionBubbleMenu from './modules/home/FashionBubbleMenu';
 import JewelleryBubbleMenu from './modules/home/JewelleryBubbleMenu';
 import FashionUnevenBanners from './modules/home/FashionUnevenBanners';
@@ -11,9 +11,6 @@ import CategoryProductListPage from './modules/products/CategoryProductListPage'
 import ProductDetailPage from './modules/products/ProductDetailPage';
 import { CartProvider } from './context/CartContext';
 import CartDrawer from './components/common/CartDrawer';
-
-// Ver2 Admin Panel (మీరు ప్రాజెక్ట్‌లో పెట్టిన అడ్మిన్ కాంపోనెంట్ పాత్ ప్రకారం లోడ్ అవుతుంది)
-const AdminPanel = lazy(() => import('./admin'));
 
 function HomePageContent() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -192,23 +189,6 @@ export default function App() {
     <CartProvider>
       <Router>
         <Routes>
-          {/* Secret Admin Route */}
-          <Route
-            path="/kfmama/*"
-            element={
-              <Suspense
-                fallback={
-                  <div className="min-h-screen flex items-center justify-center bg-neutral-900 text-white gap-2">
-                    <Loader2 className="w-6 h-6 animate-spin text-[#ff4d6d]" />
-                    <span className="text-sm font-medium">Loading Kashvi Admin...</span>
-                  </div>
-                }
-              >
-                <AdminPanel />
-              </Suspense>
-            }
-          />
-
           {/* Storefront Customer Routes */}
           <Route path="/" element={<HomePageContent />} />
           <Route path="/category/:slug" element={<CategoryProductListPage />} />
