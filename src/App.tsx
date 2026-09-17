@@ -37,14 +37,14 @@ function HomePageContent() {
         }`}
       >
         <div className="w-full max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center md:justify-between gap-2.5">
-          {/* Brand Identity - Only Big Square Logo (No Text) */}
+          {/* Brand Identity - Logo with Matching Background Color */}
           <div className="flex items-center justify-between w-full md:w-auto md:flex-1">
             <Link to="/" className="inline-flex items-center group py-0.5">
               <div
-                className={`relative h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border flex items-center justify-center shrink-0 ${
+                className={`relative h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-sm border flex items-center justify-center shrink-0 ${
                   isJewellery
-                    ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
-                    : 'border-[#ff4d6d]/20 group-hover:border-[#ff4d6d]'
+                    ? 'bg-[#1c3830] border-[#e5c07b]/40 shadow-[#1c3830]/20'
+                    : 'bg-white border-neutral-200 group-hover:border-neutral-400'
                 }`}
               >
                 <img
@@ -56,7 +56,7 @@ function HomePageContent() {
             </Link>
 
             {/* Mobile Action Buttons */}
-            <div className="flex items-center gap-2 md:hidden">
+            <div className="flex items-center gap-1 sm:gap-2 md:hidden">
               <HeaderUserButton isJewellery={isJewellery} />
               <HeaderHeartButton isJewellery={isJewellery} />
               <HeaderBagButton isJewellery={isJewellery} />
@@ -101,7 +101,7 @@ function HomePageContent() {
           </div>
 
           {/* Desktop Action Controls */}
-          <div className="hidden md:flex flex-1 justify-end items-center gap-3">
+          <div className="hidden md:flex flex-1 justify-end items-center gap-2 lg:gap-3">
             <HeaderUserButton isJewellery={isJewellery} />
             <HeaderHeartButton isJewellery={isJewellery} />
             <HeaderBagButton isJewellery={isJewellery} />

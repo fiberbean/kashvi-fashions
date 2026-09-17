@@ -31,12 +31,10 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDirectAuthOpen, setIsDirectAuthOpen] = useState(false);
 
-  // Logout Confirm & Toast Feedback States
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -54,7 +52,6 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
 
   const handleUserButtonClick = () => {
     if (!user) {
-      // 1. Context మెథడ్స్ అందుబాటులో ఉంటే కాల్ చేయడం
       if (typeof (authContext as any).openAuthModal === 'function') {
         (authContext as any).openAuthModal();
       } else if (typeof (authContext as any).setIsAuthOpen === 'function') {
@@ -62,11 +59,7 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
       } else if (typeof (authContext as any).setIsAuthModalOpen === 'function') {
         (authContext as any).setIsAuthModalOpen(true);
       }
-      
-      // 2. విండో ఈవెంట్ పంపడం
       window.dispatchEvent(new CustomEvent('open-auth-modal'));
-      
-      // 3. డైరెక్ట్ లోకల్ స్టేట్ ఫాల్‌బ్యాక్ (తప్పనిసరిగా పాప్-అప్ రావడానికి)
       setIsDirectAuthOpen(true);
     } else {
       setIsDropdownOpen((prev) => !prev);
@@ -80,7 +73,6 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
       setShowLogoutConfirm(false);
       setIsDropdownOpen(false);
 
-      // స్పష్టమైన సక్సెస్ టోస్ట్ ఫీడ్‌బ్యాక్
       setShowToast(true);
       setTimeout(() => {
         setShowToast(false);
@@ -97,34 +89,31 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
 
   return (
     <div id="user-menu-wrapper" className="relative inline-block">
-      {/* Main Header User Button */}
+      {/* Enhanced Larger Icon Button */}
       <button
         type="button"
         aria-label="User Account"
         onClick={handleUserButtonClick}
-        className={`relative p-2 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
+        className={`relative p-2.5 rounded-full transition-all flex items-center gap-1.5 cursor-pointer ${
           isJewellery
             ? 'text-neutral-700 hover:text-[#0b3b2c] hover:bg-[#f4f7f5]'
             : 'text-neutral-700 hover:text-[#ff4d6d] hover:bg-[#fff0f3]'
-        } ${user ? 'ring-1.5 ring-neutral-900/10' : ''}`}
+        } ${user ? 'ring-1.5 ring-neutral-900/10 bg-neutral-50' : ''}`}
       >
-        <div className="w-5 h-5 rounded-full flex items-center justify-center bg-neutral-100 text-neutral-800">
-          <User className="w-3.5 h-3.5" />
-        </div>
+        <User className="w-5 h-5 sm:w-6 sm:h-6 stroke-[1.8]" />
 
         {user && (
-          <span className="hidden sm:inline text-xs font-semibold text-neutral-800 max-w-[85px] truncate">
+          <span className="hidden sm:inline text-xs font-semibold text-neutral-800 max-w-[85px] truncate ml-0.5">
             {displayName}
           </span>
         )}
 
-        {user && <ChevronDown className="w-3 h-3 text-neutral-400 -ml-0.5" />}
+        {user && <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />}
       </button>
 
       {/* Dropdown Menu for Logged-in Customer */}
       {user && isDropdownOpen && (
         <div className="absolute right-0 mt-2 w-64 bg-white rounded-3xl shadow-2xl border border-neutral-100 py-3 z-50 animate-in fade-in zoom-in-95 duration-150">
-          {/* User Info Capsule */}
           <div className="px-5 py-2.5 border-b border-neutral-100">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-emerald-50 text-[#0b3b2c] font-bold text-xs flex items-center justify-center border border-emerald-100">
@@ -139,7 +128,6 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
             </div>
           </div>
 
-          {/* Navigation Links */}
           <div className="py-2 px-2 space-y-1 text-xs text-neutral-700 font-medium">
             <button
               type="button"
@@ -178,7 +166,6 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
             </button>
           </div>
 
-          {/* Sign Out Trigger */}
           <div className="pt-2 px-2 border-t border-neutral-100">
             <button
               type="button"
@@ -195,7 +182,7 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
         </div>
       )}
 
-      {/* 1. LOGOUT CONFIRMATION POPUP MODAL */}
+      {/* Confirmation Modal */}
       {showLogoutConfirm &&
         createPortal(
           <div
@@ -252,7 +239,7 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
           document.body
         )}
 
-      {/* 2. SUCCESS LOGOUT TOAST NOTIFICATION */}
+      {/* Toast */}
       {showToast &&
         createPortal(
           <div className="fixed top-5 inset-x-0 z-[10001] flex justify-center pointer-events-none px-4 animate-in slide-in-from-top-4 duration-300">
@@ -271,7 +258,6 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
           document.body
         )}
 
-      {/* Direct Auth Modal if not logged in */}
       {!user && isDirectAuthOpen && (
         <AuthModal
           isOpen={isDirectAuthOpen}
@@ -279,7 +265,6 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
         />
       )}
 
-      {/* Customer Modals */}
       <CustomerOrdersModal isOpen={isOrdersOpen} onClose={() => setIsOrdersOpen(false)} />
       <CustomerAddressesModal isOpen={isAddressesOpen} onClose={() => setIsAddressesOpen(false)} />
       <ProfileSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
