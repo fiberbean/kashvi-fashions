@@ -18,7 +18,7 @@ import CartDrawer from './components/common/CartDrawer';
 import CompleteProfileModal from './components/auth/CompleteProfileModal';
 import WishlistModal from './components/wishlist/WishlistModal';
 
-// src/assets నుండి నేరుగా import (బిల్డ్‌లో ఎప్పటికీ మిస్ అవ్వదు)
+// Assets నుండి నేరుగా ఇంపోర్ట్
 import fashionLogo from './assets/fashion-logo.png';
 import jewelleryLogo from './assets/jewellery-logo.png';
 
@@ -36,15 +36,15 @@ function HomePageContent() {
           isJewellery ? 'border-[#0b3b2c]/15 shadow-xs' : 'border-[#ff4d6d]/20 shadow-xs'
         }`}
       >
-        <div className="w-full max-w-7xl mx-auto px-4 py-2.5 md:py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          {/* Brand Identity with Square Logo */}
+        <div className="w-full max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center md:justify-between gap-2.5">
+          {/* Brand Identity - Only Big Square Logo (No Text) */}
           <div className="flex items-center justify-between w-full md:w-auto md:flex-1">
-            <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group">
+            <Link to="/" className="inline-flex items-center group py-0.5">
               <div
-                className={`relative h-11 w-11 sm:h-13 sm:w-13 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border flex items-center justify-center shrink-0 ${
+                className={`relative h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border flex items-center justify-center shrink-0 ${
                   isJewellery
                     ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
-                    : 'border-neutral-200 group-hover:border-neutral-400'
+                    : 'border-[#ff4d6d]/20 group-hover:border-[#ff4d6d]'
                 }`}
               >
                 <img
@@ -52,23 +52,6 @@ function HomePageContent() {
                   alt={brandAlt}
                   className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
                 />
-              </div>
-
-              <div className="flex flex-col text-left">
-                <span
-                  className={`text-lg sm:text-2xl font-serif font-bold tracking-[0.18em] transition-colors leading-none ${
-                    isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
-                  }`}
-                >
-                  KASHVI
-                </span>
-                <span
-                  className={`text-[8px] sm:text-[9px] uppercase tracking-[0.28em] font-medium mt-1 transition-colors ${
-                    isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
-                  }`}
-                >
-                  {isJewellery ? 'Royal Vault' : 'Haute Couture'}
-                </span>
               </div>
             </Link>
 
