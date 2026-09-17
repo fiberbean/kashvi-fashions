@@ -36,28 +36,25 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
       const userEmail = user.email?.trim().toLowerCase();
       const userPhone = customer?.mobile?.trim() || user.user_metadata?.whatsapp_number?.trim();
 
-      // బిల్డ్ క్లీన్ OR కండిషన్స్
-      const conditions: string[] = [];
-      if (userEmail) conditions.push(`customer_email.eq.${userEmail}`);
-      if (userPhone) {
-        conditions.push(`customer_phone.eq.${userPhone}`);
-        conditions.push(`customer_id.eq.${userPhone}`);
+      // Fetch by email first
+      let query = supabase.from('orders').select('*').order('created_at', { ascending: false });
+
+      if (userEmail && userPhone) {
+        query = query.or(`customer_email.ilike.%${userEmail}%,customer_phone.ilike.%${userPhone}%,customer_id.eq.${userPhone}`);
+      } else if (userEmail) {
+        query = query.ilike('customer_email', `%${userEmail}%`);
+      } else if (userPhone) {
+        query = query.or(`customer_phone.ilike.%${userPhone}%,customer_id.eq.${userPhone}`);
       }
-      conditions.push(`customer_id.eq.${user.id}`);
 
-      const filterQuery = conditions.join(',');
+      const { data, error } = await query.limit(25);
 
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*')
-        .or(filterQuery)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase fetch orders error:', error);
+      }
       setOrders(data || []);
     } catch (err) {
-      console.error('Error fetching customer orders:', err);
+      console.error('Fetch error:', err);
       setOrders([]);
     } finally {
       setLoading(false);
