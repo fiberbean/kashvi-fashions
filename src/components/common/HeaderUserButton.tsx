@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { User as UserIcon, LogOut, PackageCheck, Phone, ChevronDown } from 'lucide-react';
+import { User as UserIcon, LogOut, PackageCheck, Phone, ChevronDown, MapPin } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import CustomerOrdersModal from '../orders/CustomerOrdersModal';
+import CustomerAddressesModal from '../profile/CustomerAddressesModal';
 
 interface HeaderUserButtonProps {
   isJewellery?: boolean;
@@ -11,6 +12,7 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
   const { user, customer, openAuthModal, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
+  const [isAddressesOpen, setIsAddressesOpen] = useState(false);
 
   if (!user) {
     return (
@@ -113,6 +115,18 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
 
                 <button
                   type="button"
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    setIsAddressesOpen(true);
+                  }}
+                  className="w-full px-3 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100/80 hover:text-neutral-950 rounded-xl flex items-center gap-2.5 transition-colors cursor-pointer"
+                >
+                  <MapPin className="w-4 h-4 text-neutral-500" />
+                  <span>My Addresses</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={async () => {
                     setDropdownOpen(false);
                     await signOut();
@@ -131,6 +145,11 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
       <CustomerOrdersModal
         isOpen={isOrdersOpen}
         onClose={() => setIsOrdersOpen(false)}
+      />
+
+      <CustomerAddressesModal
+        isOpen={isAddressesOpen}
+        onClose={() => setIsAddressesOpen(false)}
       />
     </>
   );
