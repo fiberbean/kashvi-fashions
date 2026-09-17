@@ -483,7 +483,7 @@ export default function CartDrawer() {
         user?.email?.trim() ||
         `${currentAddress.whatsapp_number}@kashvifashions.local`;
 
-      // Call Edge Function
+      // Edge Function Call
       const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
         'create-payment-order',
         {
@@ -507,7 +507,7 @@ export default function CartDrawer() {
       const activeGateway = sessionData.gateway;
       const usedGatewayName = sessionData.gatewayName || 'Cashfree Payments';
 
-      // Insert Order into DB
+      // Insert Order in DB
       const orderPayload = {
         id: orderId,
         customer_id: currentAddress.whatsapp_number,
@@ -551,7 +551,7 @@ export default function CartDrawer() {
 
       await supabase.from('orders').insert([orderPayload]);
 
-      // Cashfree Checkout Flow
+      // Cashfree Checkout
       if (activeGateway === 'cashfree') {
         const cashfreeMode = sessionData.environment === 'production' ? 'production' : 'sandbox';
         const cashfree = await load({ mode: cashfreeMode });
@@ -643,6 +643,7 @@ export default function CartDrawer() {
       onClick={handleCloseModal}
       className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
     >
+      {/* 100% Center-Aligned Pop-up Dialog Box */}
       <div
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col"
@@ -1199,7 +1200,7 @@ export default function CartDrawer() {
                 onClick={() => setIsAddressModalOpen(false)}
                 className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
