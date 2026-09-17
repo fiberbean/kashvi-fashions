@@ -13,6 +13,7 @@ import { CartProvider } from './context/CartContext';
 import { AuthProvider } from './context/AuthContext';
 import AuthModal from './components/auth/AuthModal';
 import CartDrawer from './components/common/CartDrawer';
+import CompleteProfileModal from './components/auth/CompleteProfileModal';
 
 function HomePageContent() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -198,6 +199,7 @@ export default function App() {
           </Routes>
           <CartDrawer />
           <AuthModal />
+          <CompleteProfileModal />
         </Router>
       </CartProvider>
     </AuthProvider>
