@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export interface WishlistItem {
   id: string;
@@ -37,11 +38,26 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
 
   const [isWishlistOpen, setIsWishlistOpen] = useState(false);
 
+  // లాగౌట్ డిటెక్షన్: యూజర్ లాగౌట్ అవ్వగానే విష్‌లిస్ట్‌ను క్లియర్ చేయడం
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setWishlist([]);
+        localStorage.removeItem('kashvi_wishlist');
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Wishlist LocalStorage Sync
   useEffect(() => {
     try {
       localStorage.setItem('kashvi_wishlist', JSON.stringify(wishlist));
     } catch (err) {
-      console.error('Failed to save wishlist to local storage:', err);
+      console.error('Failed to save wishlist:', err);
     }
   }, [wishlist]);
 
