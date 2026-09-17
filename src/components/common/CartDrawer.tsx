@@ -447,6 +447,26 @@ export default function CartDrawer() {
       orderId,
     });
 
+    // Send instant confirmation email via Edge Function
+    const resolvedEmail = address.email?.trim() || user?.email?.trim();
+    if (resolvedEmail) {
+      supabase.functions
+        .invoke('send-order-email', {
+          body: {
+            orderId,
+            customerName: address.name,
+            customerEmail: resolvedEmail,
+            customerPhone: address.whatsapp_number,
+            shippingAddress: fullAddress,
+            totalAmount: amount,
+            subtotal,
+            deliveryFee: shippingCharge,
+            items: itemsSnapshot,
+          },
+        })
+        .catch((err) => console.error('Failed to trigger order confirmation email:', err));
+    }
+
     clearCart();
     setActiveStep('order_result');
   };
@@ -1261,7 +1281,7 @@ export default function CartDrawer() {
                 onClick={() => setIsAddressModalOpen(false)}
                 className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 

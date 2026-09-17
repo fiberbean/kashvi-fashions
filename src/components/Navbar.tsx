@@ -1,133 +1,168 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Search, Menu, X, Heart, User } from 'lucide-react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, Sparkles, SlidersHorizontal } from 'lucide-react';
+import HeaderUserButton from './common/HeaderUserButton';
+import HeaderHeartButton from './common/HeaderHeartButton';
+import HeaderBagButton from './common/HeaderBagButton';
 
-interface NavbarProps {
-  cartCount: number;
-}
-
-export const Navbar: React.FC<NavbarProps> = ({ cartCount }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+export default function Navbar() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
 
-  const categories = [
-    { name: 'All Products', path: '/category/all' },
-    { name: 'Sarees', path: '/category/sarees' },
-    { name: 'Kurtis', path: '/category/kurtis' },
-    { name: 'Dresses', path: '/category/dresses' },
-    { name: 'Lehengas', path: '/category/lehengas' },
-  ];
+  const currentTab = searchParams.get('tab') || 'fashions';
+  const isJewellery = currentTab === 'jewellery';
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/category/all?search=${encodeURIComponent(searchQuery.trim())}`);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  const handleTabSwitch = (tab: 'fashions' | 'jewellery') => {
+    if (location.pathname === '/') {
+      setSearchParams({ tab });
+    } else {
+      navigate(`/?tab=${tab}`);
     }
   };
 
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}&dept=${currentTab}`);
+    setIsSearchOpen(false);
+  };
+
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-rose-100 shadow-xs">
-      {/* టాప్ అనౌన్స్‌మెంట్ బార్ */}
-      <div className="bg-rose-600 text-white text-xs py-1.5 px-4 text-center font-medium tracking-wide">
-        Free Shipping on Orders Above ₹999 | Use Code: KASHVI10 for 10% Off
+    <header
+      className={`sticky top-0 z-40 w-full transition-all duration-300 backdrop-blur-md bg-white/95 border-b ${
+        isJewellery ? 'border-[#0b3b2c]/10 shadow-[0_4px_20px_-10px_rgba(11,59,44,0.08)]' : 'border-neutral-100 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]'
+      }`}
+    >
+      {/* Top Micro Strip (Notice Bar) */}
+      <div
+        className={`w-full py-1 text-center text-[10px] font-semibold tracking-widest uppercase transition-colors ${
+          isJewellery
+            ? 'bg-[#0b3b2c] text-[#e5c07b]'
+            : 'bg-neutral-950 text-neutral-300'
+        }`}
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <Sparkles className="w-2.5 h-2.5 opacity-80" />
+          <span>Complimentary Insured Delivery Across India</span>
+          <Sparkles className="w-2.5 h-2.5 opacity-80" />
+        </span>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20">
-          <div className="flex items-center gap-4">
+      {/* Main Navigation Bar */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
+        {/* Left Section: Department Switcher Capsule */}
+        <div className="flex items-center gap-2">
+          <div className="inline-flex p-1 rounded-full bg-neutral-100 border border-neutral-200/60 shadow-inner">
             <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="lg:hidden p-2 text-gray-700 hover:text-rose-600 focus:outline-hidden"
-              aria-label="Toggle Menu"
+              type="button"
+              onClick={() => handleTabSwitch('fashions')}
+              className={`px-3.5 sm:px-5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold tracking-wider uppercase transition-all duration-200 cursor-pointer ${
+                !isJewellery
+                  ? 'bg-white text-neutral-950 shadow-xs ring-1 ring-neutral-200'
+                  : 'text-neutral-500 hover:text-neutral-900'
+              }`}
             >
-              {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              Fashions
             </button>
-            <Link to="/" className="flex flex-col">
-              <span className="text-2xl sm:text-3xl font-bold tracking-tight text-rose-700 font-serif">
-                KASHVI
-              </span>
-              <span className="text-[10px] tracking-[0.3em] uppercase text-gray-500 font-sans -mt-1">
-                FASHIONS
-              </span>
-            </Link>
+            <button
+              type="button"
+              onClick={() => handleTabSwitch('jewellery')}
+              className={`px-3.5 sm:px-5 py-1.5 rounded-full text-[11px] sm:text-xs font-bold tracking-wider uppercase transition-all duration-200 cursor-pointer ${
+                isJewellery
+                  ? 'bg-[#0b3b2c] text-[#e5c07b] shadow-xs'
+                  : 'text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              Jewellery
+            </button>
           </div>
+        </div>
 
-          <nav className="hidden lg:flex items-center space-x-8">
-            <Link to="/" className="text-sm font-semibold text-gray-800 hover:text-rose-600 transition-colors">
-              Home
-            </Link>
-            {categories.map((cat) => (
-              <Link
-                key={cat.name}
-                to={cat.path}
-                className="text-sm font-semibold text-gray-700 hover:text-rose-600 transition-colors"
+        {/* Center Section: Luxury Brand Identity */}
+        <div className="flex flex-col items-center justify-center text-center">
+          <Link to={`/?tab=${currentTab}`} className="group flex flex-col items-center">
+            <span
+              className={`font-serif text-xl sm:text-2xl lg:text-3xl font-bold tracking-[0.25em] leading-none transition-colors ${
+                isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+              }`}
+            >
+              KASHVI
+            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="w-3 h-px bg-neutral-300" />
+              <span
+                className={`text-[8px] sm:text-[9px] uppercase tracking-[0.35em] font-medium transition-colors ${
+                  isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
+                }`}
               >
-                {cat.name}
-              </Link>
-            ))}
-          </nav>
+                {isJewellery ? 'The Royal Vault' : 'Haute Couture'}
+              </span>
+              <span className="w-3 h-px bg-neutral-300" />
+            </div>
+          </Link>
+        </div>
 
-          <div className="flex items-center space-x-3 sm:space-x-5">
-            <form onSubmit={handleSearch} className="hidden md:flex items-center relative">
-              <input
-                type="text"
-                placeholder="Search sarees, kurtis..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-48 lg:w-64 pl-9 pr-4 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-full focus:outline-hidden focus:border-rose-500 focus:bg-white transition-all"
-              />
-              <Search className="w-4 h-4 text-gray-400 absolute left-3 pointer-events-none" />
-            </form>
+        {/* Right Section: Action Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-3">
+          {/* Quick Search Trigger */}
+          <button
+            type="button"
+            aria-label="Search"
+            onClick={() => setIsSearchOpen(!isSearchOpen)}
+            className="p-2 rounded-full text-neutral-600 hover:text-neutral-950 hover:bg-neutral-100 transition-colors cursor-pointer"
+          >
+            <Search className="w-4 h-4 sm:w-5 sm:h-5 stroke-[1.8]" />
+          </button>
 
-            <Link to="/category/all" className="p-2 text-gray-700 hover:text-rose-600 transition-colors">
-              <Heart className="w-5 h-5" />
-            </Link>
+          {/* User Account Button */}
+          <HeaderUserButton isJewellery={isJewellery} />
 
-            <Link to="/cart" className="p-2 text-gray-700 hover:text-rose-600 relative transition-colors">
-              <ShoppingBag className="w-5 h-5" />
-              {cartCount > 0 && (
-                <span className="absolute top-1 right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold text-white bg-rose-600 rounded-full">
-                  {cartCount}
-                </span>
-              )}
-            </Link>
-          </div>
+          {/* Wishlist Heart Icon */}
+          <HeaderHeartButton isJewellery={isJewellery} />
+
+          {/* Shopping Bag Icon */}
+          <HeaderBagButton isJewellery={isJewellery} />
         </div>
       </div>
 
-      {/* మొబైల్ డ్రాయర్ */}
-      {isOpen && (
-        <div className="lg:hidden bg-white border-b border-rose-100 px-4 pt-3 pb-5 space-y-3">
-          <form onSubmit={handleSearch} className="flex items-center relative mb-3">
+      {/* Expandable Luxury Search Drawer */}
+      {isSearchOpen && (
+        <div className="w-full bg-neutral-50 border-t border-neutral-100 px-4 py-3 animate-in slide-in-from-top-2 duration-200">
+          <form
+            onSubmit={handleSearchSubmit}
+            className="max-w-2xl mx-auto flex items-center gap-2 bg-white rounded-2xl px-3.5 py-2 border border-neutral-200 focus-within:border-neutral-900 shadow-2xs transition-all"
+          >
+            <Search className="w-4 h-4 text-neutral-400 shrink-0" />
             <input
               type="text"
-              placeholder="Search products..."
+              autoFocus
+              placeholder={`Search handcrafted ${isJewellery ? 'jewellery, chokers, bangles...' : 'sarees, silks, lehengas...'}`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-hidden focus:border-rose-500"
+              className="w-full bg-transparent text-xs sm:text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-hidden"
             />
-            <Search className="w-4 h-4 text-gray-400 absolute left-3" />
-          </form>
-          <Link
-            to="/"
-            onClick={() => setIsOpen(false)}
-            className="block py-2 text-base font-medium text-gray-800 border-b border-gray-50"
-          >
-            Home
-          </Link>
-          {categories.map((cat) => (
-            <Link
-              key={cat.name}
-              to={cat.path}
-              onClick={() => setIsOpen(false)}
-              className="block py-2 text-base font-medium text-gray-700 border-b border-gray-50 hover:text-rose-600"
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="text-[11px] text-neutral-400 hover:text-neutral-900 font-semibold px-1"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="submit"
+              className="px-4 py-1.5 rounded-xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all cursor-pointer shrink-0"
             >
-              {cat.name}
-            </Link>
-          ))}
+              Search
+            </button>
+          </form>
         </div>
       )}
     </header>
   );
-};
+}
