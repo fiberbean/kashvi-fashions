@@ -9,13 +9,12 @@ import {
   CheckCircle2,
   XCircle,
   Truck,
-  Loader2,
   ChevronDown,
   ChevronUp,
   Package,
   MapPin,
-  ExternalLink,
   ShieldCheck,
+  RotateCcw,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -35,71 +34,56 @@ const ORDER_STAGES = [
 
 export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersModalProps) {
   const { user, customer } = useAuth();
-  const [orders, setOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  
+  // Instant Cache Initialization (మునుపటి సెషన్ నుండి వెంటనే చూపించడానికి)
+  const [orders, setOrders] = useState<any[]>(() => {
+    try {
+      const cached = localStorage.getItem('kashvi_cached_orders');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
 
-  const fetchOrdersFast = async () => {
+  const [loading, setLoading] = useState(orders.length === 0);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(orders[0]?.id || null);
+
+  const fetchOrdersSequentially = async () => {
     if (!user) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    const email = user.email?.trim().toLowerCase();
+    const phone = customer?.mobile?.trim() || user.user_metadata?.whatsapp_number?.trim();
+
     try {
-      const email = user.email?.trim().toLowerCase();
-      const phone = customer?.mobile?.trim() || user.user_metadata?.whatsapp_number?.trim();
+      // 1. Single Fast Query - Directly targeting user identifiers
+      let query = supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-      // ఫాస్ట్ పారలల్ ప్రామిస్ క్వెరీస్
-      const queries = [];
-      if (email) {
-        queries.push(
-          supabase
-            .from('orders')
-            .select('*')
-            .eq('customer_email', email)
-            .order('created_at', { ascending: false })
-            .limit(25)
-        );
-      }
-      if (phone) {
-        queries.push(
-          supabase
-            .from('orders')
-            .select('*')
-            .eq('customer_phone', phone)
-            .order('created_at', { ascending: false })
-            .limit(25)
-        );
-        queries.push(
-          supabase
-            .from('orders')
-            .select('*')
-            .eq('customer_id', phone)
-            .order('created_at', { ascending: false })
-            .limit(25)
-        );
+      if (email && phone) {
+        query = query.or(`customer_email.eq.${email},customer_phone.eq.${phone},customer_id.eq.${phone}`);
+      } else if (email) {
+        query = query.eq('customer_email', email);
+      } else if (phone) {
+        query = query.or(`customer_phone.eq.${phone},customer_id.eq.${phone}`);
       }
 
-      const results = await Promise.all(queries);
-      const combined = new Map<string, any>();
+      const { data, error } = await query;
 
-      results.forEach((res) => {
-        if (!res.error && res.data) {
-          res.data.forEach((ord: any) => combined.set(ord.id, ord));
+      if (!error && data) {
+        setOrders(data);
+        localStorage.setItem('kashvi_cached_orders', JSON.stringify(data));
+        if (data.length > 0 && !expandedOrderId) {
+          setExpandedOrderId(data[0].id);
         }
-      });
-
-      const sorted = Array.from(combined.values()).sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      setOrders(sorted);
-      if (sorted.length > 0 && !expandedOrderId) {
-        setExpandedOrderId(sorted[0].id);
       }
     } catch (err) {
-      console.error('Fast fetch error:', err);
+      console.error('Fast order fetch error:', err);
     } finally {
       setLoading(false);
     }
@@ -107,9 +91,10 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
   useEffect(() => {
     if (isOpen) {
-      fetchOrdersFast();
+      if (orders.length === 0) setLoading(true);
+      fetchOrdersSequentially();
     }
-  }, [isOpen, user, customer]);
+  }, [isOpen, user?.id, customer?.mobile]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -158,7 +143,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
-        <Clock3 className="w-3 h-3" /> Payment Pending
+        <Clock3 className="w-3 h-3" /> Pending
       </span>
     );
   };
@@ -166,11 +151,11 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
   const modalContent = (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150 cursor-pointer overflow-y-auto"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col"
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-white sticky top-0 z-10">
@@ -183,7 +168,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                 My Orders & Status
               </h2>
               <p className="text-[10px] text-neutral-400 font-medium">
-                Click any order to view live shipment timeline
+                Click any order to track shipment live
               </p>
             </div>
           </div>
@@ -197,28 +182,30 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
           </button>
         </div>
 
-        {/* Orders List Area */}
+        {/* Orders Area */}
         <div className="overflow-y-auto p-4 sm:p-6 space-y-4 flex-1">
-          {loading ? (
-            <div className="py-24 flex flex-col items-center justify-center gap-2 text-neutral-400">
-              <Loader2 className="w-6 h-6 animate-spin text-[#0b3b2c]" />
-              <span className="text-xs font-medium">Fetching orders instantly...</span>
+          {/* Skeleton Shimmer Placeholders (లోడింగ్ సమయంలో వెంటనే కనిపిస్తాయి) */}
+          {loading && orders.length === 0 && (
+            <div className="space-y-4 animate-pulse">
+              {[1, 2].map((n) => (
+                <div key={n} className="border-2 border-neutral-100 rounded-3xl p-5 bg-neutral-50/50 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div className="space-y-2">
+                      <div className="h-4 w-32 bg-neutral-200 rounded-md" />
+                      <div className="h-3 w-20 bg-neutral-200/60 rounded-md" />
+                    </div>
+                    <div className="h-5 w-16 bg-neutral-200 rounded-md" />
+                  </div>
+                  <div className="h-16 bg-white rounded-2xl border border-neutral-100" />
+                </div>
+              ))}
             </div>
-          ) : orders.length === 0 ? (
-            <div className="py-20 text-center space-y-3">
-              <div className="w-16 h-16 rounded-3xl bg-neutral-50 border border-neutral-100 flex items-center justify-center text-neutral-300 mx-auto">
-                <ShoppingBag className="w-8 h-8" />
-              </div>
-              <div>
-                <h4 className="font-serif font-bold text-neutral-800 text-base">No orders found</h4>
-                <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1">
-                  You haven't placed any orders yet. Discover our exclusive handpicked pieces.
-                </p>
-              </div>
-            </div>
-          ) : (
+          )}
+
+          {/* Real Orders Rendered One by One with Smooth Animations */}
+          {orders.length > 0 ? (
             <div className="space-y-4">
-              {orders.map((ord) => {
+              {orders.map((ord, index) => {
                 const isExpanded = expandedOrderId === ord.id;
                 const items = Array.isArray(ord.items) ? ord.items : [];
                 const currentStageIdx = getStageIndex(ord.order_status || ord.status);
@@ -235,13 +222,14 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                 return (
                   <div
                     key={ord.id}
-                    className={`border-2 rounded-3xl transition-all overflow-hidden ${
+                    style={{ animationDelay: `${index * 60}ms` }}
+                    className={`border-2 rounded-3xl transition-all overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 ${
                       isExpanded
                         ? 'border-[#0b3b2c] shadow-md bg-white'
                         : 'border-neutral-200/90 bg-white hover:border-neutral-300 shadow-2xs'
                     }`}
                   >
-                    {/* Clickable Card Header */}
+                    {/* Clickable Header */}
                     <div
                       onClick={() => setExpandedOrderId(isExpanded ? null : ord.id)}
                       className="p-4 sm:p-5 cursor-pointer flex flex-wrap items-center justify-between gap-3 select-none bg-neutral-50/40 hover:bg-neutral-50/80 transition-colors"
@@ -250,7 +238,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                         <div
                           className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
                             isExpanded
-                              ? 'bg-[#0b3b2c] text-white'
+                              ? 'bg-[#0b3b2c] text-white shadow-xs'
                               : 'bg-neutral-100 text-neutral-600'
                           }`}
                         >
@@ -288,10 +276,10 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                       </div>
                     </div>
 
-                    {/* Expandable Order Status & Tracking Timeline */}
+                    {/* Expanded Live Tracking Timeline */}
                     {isExpanded && (
                       <div className="p-4 sm:p-5 border-t border-neutral-100 space-y-5 animate-in fade-in duration-200">
-                        {/* 5-Step Status Progress Tracker */}
+                        {/* 5-Step Tracker */}
                         <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-2xl p-4">
                           <div className="flex items-center justify-between mb-3">
                             <span className="text-xs font-bold uppercase tracking-wider text-neutral-800 flex items-center gap-1.5">
@@ -303,7 +291,6 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                             </span>
                           </div>
 
-                          {/* Progress Line */}
                           <div className="relative flex items-center justify-between w-full px-2 pt-2 pb-1">
                             <div className="absolute left-4 right-4 top-4.5 h-1 bg-neutral-200 -z-0" />
                             <div
@@ -347,7 +334,6 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                             })}
                           </div>
 
-                          {/* Courier Tracking Details */}
                           {(ord.tracking_number || ord.courier_name) && (
                             <div className="mt-4 pt-3 border-t border-neutral-200/80 flex flex-wrap items-center justify-between gap-2 text-xs bg-white p-3 rounded-xl">
                               <div>
@@ -369,7 +355,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                                 </div>
                               ) : (
                                 <span className="text-[11px] text-neutral-400 italic">
-                                  Tracking number will be assigned once dispatched
+                                  Tracking ID will be assigned upon dispatch
                                 </span>
                               )}
                             </div>
@@ -412,7 +398,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                           </div>
                         </div>
 
-                        {/* Shipping & Payment Summary */}
+                        {/* Address & Payment Info */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1 border-t border-neutral-100">
                           <div className="bg-neutral-50/60 p-3 rounded-2xl border border-neutral-100 space-y-1">
                             <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block flex items-center gap-1">
@@ -448,6 +434,20 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                 );
               })}
             </div>
+          ) : (
+            !loading && (
+              <div className="py-20 text-center space-y-3">
+                <div className="w-16 h-16 rounded-3xl bg-neutral-50 border border-neutral-100 flex items-center justify-center text-neutral-300 mx-auto">
+                  <ShoppingBag className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="font-serif font-bold text-neutral-800 text-base">No orders found</h4>
+                  <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1">
+                    You haven't placed any orders yet.
+                  </p>
+                </div>
+              </div>
+            )
           )}
         </div>
       </div>
