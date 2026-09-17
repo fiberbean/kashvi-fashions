@@ -17,6 +17,8 @@ import {
   Briefcase,
   Bookmark,
   Loader2,
+  Sparkles,
+  PackageCheck,
 } from 'lucide-react';
 import { load } from '@cashfreepayments/cashfree-js';
 import { useCart } from '../../context/CartContext';
@@ -38,6 +40,16 @@ interface Address {
   custom_label?: string;
   zone_type?: string;
   is_default?: boolean;
+}
+
+interface ConfirmedOrderInfo {
+  orderId: string;
+  totalAmount: number;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  gateway: string;
+  itemsCount: number;
 }
 
 const COLOR_HEX_MAP: Record<string, string> = {
@@ -75,9 +87,10 @@ export default function CartDrawer() {
     totalDue,
   } = useCart();
 
-  const [activeStep, setActiveStep] = useState<'cart' | 'address'>('cart');
+  const [activeStep, setActiveStep] = useState<'cart' | 'address' | 'success'>('cart');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [activeGatewayName, setActiveGatewayName] = useState<string>('Online Payment');
+  const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderInfo | null>(null);
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>(() => {
     try {
@@ -156,13 +169,21 @@ export default function CartDrawer() {
         if (isAddressModalOpen) {
           setIsAddressModalOpen(false);
         } else if (isCartOpen) {
-          closeCart();
+          handleCloseDrawer();
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCartOpen, isAddressModalOpen, closeCart]);
+  }, [isCartOpen, isAddressModalOpen]);
+
+  const handleCloseDrawer = () => {
+    if (activeStep === 'success') {
+      setActiveStep('cart');
+      setConfirmedOrder(null);
+    }
+    closeCart();
+  };
 
   const fetchShippingByPincode = async (pincode: string): Promise<number> => {
     const cleanPin = pincode.trim();
@@ -335,6 +356,25 @@ export default function CartDrawer() {
     setIsAddressModalOpen(false);
   };
 
+  const handlePaymentSuccess = async (orderId: string, address: Address, amount: number, gwName: string) => {
+    const fullAddress = `${address.door_no}, ${
+      address.building_name ? address.building_name + ', ' : ''
+    }${address.street}, ${address.area}, ${address.city}, ${address.state} - ${address.pincode}`;
+
+    setConfirmedOrder({
+      orderId,
+      totalAmount: amount,
+      customerName: address.name,
+      customerPhone: address.whatsapp_number,
+      deliveryAddress: fullAddress,
+      gateway: gwName,
+      itemsCount: totalItems,
+    });
+
+    clearCart();
+    setActiveStep('success');
+  };
+
   const handleInstantCheckout = async () => {
     if (!selectedAddressId) {
       alert('Please select a delivery address');
@@ -377,7 +417,7 @@ export default function CartDrawer() {
       }
 
       const activeGateway = sessionData.gateway;
-      const usedGatewayName = sessionData.gatewayName || 'Online PG';
+      const usedGatewayName = sessionData.gatewayName || 'Cashfree Payments';
 
       // Insert order into DB
       const orderPayload = {
@@ -423,7 +463,7 @@ export default function CartDrawer() {
 
       await supabase.from('orders').insert([orderPayload]);
 
-      // Cashfree Checkout
+      // Cashfree Checkout Flow
       if (activeGateway === 'cashfree') {
         const cashfreeMode = sessionData.environment === 'production' ? 'production' : 'sandbox';
         const cashfree = await load({ mode: cashfreeMode });
@@ -449,9 +489,7 @@ export default function CartDrawer() {
                 })
                 .eq('id', orderId);
 
-              alert(`Payment Successful! Your Order #${orderId} is confirmed.`);
-              clearCart();
-              closeCart();
+              await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName);
             }
           });
       } else if (activeGateway === 'razorpay') {
@@ -474,9 +512,7 @@ export default function CartDrawer() {
               })
               .eq('id', orderId);
 
-            alert(`Payment Successful! Order #${orderId} confirmed.`);
-            clearCart();
-            closeCart();
+            await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName);
           },
           prefill: {
             name: currentAddress.name,
@@ -498,17 +534,29 @@ export default function CartDrawer() {
     }
   };
 
+  const handleNavigateToOrders = () => {
+    handleCloseDrawer();
+    // యూజర్ ఐకాన్ క్లిక్ చేసినప్పుడు ట్రిగ్గర్ అయ్యే ఈవెంట్ లేదా మోడల్
+    const userBtn = document.querySelector('[aria-label="User Account"]') as HTMLButtonElement | null;
+    if (userBtn) {
+      userBtn.click();
+    } else {
+      window.location.hash = '#/orders';
+    }
+  };
+
   if (!isCartOpen) return null;
 
   return (
     <div
-      onClick={closeCart}
+      onClick={handleCloseDrawer}
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/65 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
     >
       <div
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col"
       >
+        {/* Header */}
         <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-white sticky top-0 z-20">
           <div className="flex items-center gap-2">
             {activeStep === 'address' && (
@@ -522,9 +570,17 @@ export default function CartDrawer() {
               </button>
             )}
             <div className="flex items-center gap-2">
-              <ShoppingBag className="w-5 h-5 text-neutral-900" />
+              {activeStep === 'success' ? (
+                <PackageCheck className="w-5 h-5 text-emerald-600" />
+              ) : (
+                <ShoppingBag className="w-5 h-5 text-neutral-900" />
+              )}
               <h2 className="text-base sm:text-lg font-serif font-bold text-neutral-900">
-                {activeStep === 'cart' ? 'Your Shopping Bag' : 'Select Delivery Address'}
+                {activeStep === 'cart'
+                  ? 'Your Shopping Bag'
+                  : activeStep === 'address'
+                  ? 'Select Delivery Address'
+                  : 'Order Confirmation'}
               </h2>
             </div>
             {activeStep === 'cart' && totalItems > 0 && (
@@ -536,7 +592,7 @@ export default function CartDrawer() {
 
           <button
             type="button"
-            onClick={closeCart}
+            onClick={handleCloseDrawer}
             className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-600 hover:text-white transition-all cursor-pointer"
             aria-label="Close"
           >
@@ -544,8 +600,90 @@ export default function CartDrawer() {
           </button>
         </div>
 
+        {/* Body Content */}
         <div className="overflow-y-auto p-5 sm:p-6 space-y-5 flex-1">
-          {activeStep === 'cart' ? (
+          {activeStep === 'success' && confirmedOrder ? (
+            <div className="py-4 flex flex-col items-center text-center space-y-5 animate-in zoom-in-95 duration-300">
+              {/* Success Badge */}
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white shadow-xl shadow-emerald-500/30">
+                  <CheckCircle2 className="w-11 h-11 stroke-[2.2]" />
+                </div>
+                <div className="absolute -top-1 -right-1 bg-amber-400 text-neutral-950 p-1 rounded-full shadow-md">
+                  <Sparkles className="w-4 h-4 fill-amber-300" />
+                </div>
+              </div>
+
+              {/* Title & Thank You */}
+              <div className="space-y-1 max-w-md">
+                <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                  Payment Verified & Confirmed
+                </span>
+                <h3 className="text-xl sm:text-2xl font-serif font-bold text-neutral-950 pt-2">
+                  Thank You for Shopping!
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  Your order has been placed with <span className="font-semibold text-neutral-800">Kashvi Fashions</span>. An SMS / WhatsApp confirmation will be sent shortly.
+                </p>
+              </div>
+
+              {/* Order Details Card */}
+              <div className="w-full bg-neutral-50/80 border border-neutral-200/80 rounded-2xl p-4 text-left space-y-3">
+                <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
+                  <div>
+                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Order ID</span>
+                    <span className="text-xs sm:text-sm font-mono font-bold text-neutral-900">{confirmedOrder.orderId}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Amount Paid</span>
+                    <span className="text-sm sm:text-base font-serif font-black text-neutral-950">₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Payment Mode</span>
+                    <span className="font-semibold text-neutral-800">{confirmedOrder.gateway}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Order Status</span>
+                    <span className="inline-flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md text-[11px]">
+                      <CheckCircle2 className="w-3 h-3" /> Confirmed
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-neutral-200/80">
+                  <span className="text-[10px] text-neutral-400 uppercase tracking-wider block mb-0.5">Shipping To</span>
+                  <p className="text-xs text-neutral-700 font-medium leading-relaxed">
+                    <span className="font-bold text-neutral-900">{confirmedOrder.customerName}</span> ({confirmedOrder.customerPhone})
+                    <br />
+                    {confirmedOrder.deliveryAddress}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="w-full space-y-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={handleNavigateToOrders}
+                  className="w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#0b3b2c] via-[#14532d] to-[#0b3b2c] shadow-lg shadow-[#0b3b2c]/30 hover:shadow-emerald-900/40 active:scale-98 transition-all cursor-pointer"
+                >
+                  <PackageCheck className="w-4 h-4" />
+                  <span>My Orders</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCloseDrawer}
+                  className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-neutral-300 text-neutral-800 hover:bg-neutral-100 transition-all cursor-pointer"
+                >
+                  Continue Shopping
+                </button>
+              </div>
+            </div>
+          ) : activeStep === 'cart' ? (
             <>
               {cart.length === 0 ? (
                 <div className="py-16 flex flex-col items-center justify-center text-center space-y-3">
@@ -759,7 +897,8 @@ export default function CartDrawer() {
           )}
         </div>
 
-        {cart.length > 0 && (
+        {/* Footer (Only for Cart and Address Steps) */}
+        {cart.length > 0 && activeStep !== 'success' && (
           <div className="p-5 sm:p-6 border-t border-neutral-100 bg-white space-y-3.5">
             <div className="space-y-1.5 text-xs text-neutral-600">
               <div className="flex justify-between">
@@ -827,6 +966,7 @@ export default function CartDrawer() {
         )}
       </div>
 
+      {/* Address Form Modal */}
       {isAddressModalOpen && (
         <div
           onClick={() => setIsAddressModalOpen(false)}
