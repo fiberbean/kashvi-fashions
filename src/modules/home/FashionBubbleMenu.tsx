@@ -22,7 +22,6 @@ interface Category {
   sub_categories?: SubCategory[];
 }
 
-// ఇన్‌స్టంట్ లోడింగ్ కోసం గ్లోబల్ ఇన్-మెమరీ క్యాష్
 let fashionCache: Category[] | null = null;
 
 export default function FashionBubbleMenu() {
@@ -182,7 +181,7 @@ export default function FashionBubbleMenu() {
 
   return (
     <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-7 pb-2">
-      {/* 1. Header with Couture Title */}
+      {/* 1. Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <span className="text-[10px] uppercase tracking-[0.25em] text-[#ff4d6d] font-bold block">
@@ -197,7 +196,7 @@ export default function FashionBubbleMenu() {
         </span>
       </div>
 
-      {/* 2. Royal Arch / Vault Capsule Category Menu */}
+      {/* 2. Royal Arch Menu */}
       <div className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth">
         {categories.map((cat) => (
           <button
@@ -206,9 +205,8 @@ export default function FashionBubbleMenu() {
             onClick={() => setActiveCategory(cat)}
             className="group shrink-0 flex flex-col items-center w-[108px] sm:w-[122px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden"
           >
-            {/* Royal Arch Frame */}
+            {/* Arch Vault Frame */}
             <div className="relative w-full h-[142px] sm:h-[155px] rounded-t-[54px] rounded-b-2xl p-1 bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/25 shadow-2xs group-hover:border-[#ff4d6d] group-hover:shadow-md group-hover:shadow-[#ff4d6d]/15 transition-all duration-300 flex flex-col justify-between">
-              {/* Inner Arch Image */}
               <div className="w-full h-full rounded-t-[48px] rounded-b-xl overflow-hidden bg-neutral-100 relative">
                 <img
                   src={
@@ -223,20 +221,17 @@ export default function FashionBubbleMenu() {
               </div>
             </div>
 
-            {/* Labels */}
+            {/* Clean Category Label */}
             <div className="mt-2.5 w-full px-1">
               <h4 className="text-xs font-serif font-bold text-neutral-900 group-hover:text-[#ff4d6d] transition-colors truncate">
                 {cat.name}
               </h4>
-              <p className="text-[9px] text-neutral-400 uppercase tracking-widest font-semibold mt-0.5 truncate">
-                {cat.sub_categories?.length ? `${cat.sub_categories.length} Edits` : 'Explore'}
-              </p>
             </div>
           </button>
         ))}
       </div>
 
-      {/* 3. Subcategory Popup Showcase Modal */}
+      {/* 3. Subcategory Popup Modal */}
       {activeCategory && (
         <div
           onClick={() => setActiveCategory(null)}
