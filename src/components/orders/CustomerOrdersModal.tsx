@@ -10,6 +10,7 @@ import {
   XCircle,
   Truck,
   Loader2,
+  RotateCcw,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -24,34 +25,49 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!isOpen || !user) return;
+  const fetchOrders = async () => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
 
-    const fetchOrders = async () => {
-      setLoading(true);
-      try {
-        const identifiers = [user.id, user.email];
-        if (customer?.mobile) identifiers.push(customer.mobile);
+    setLoading(true);
+    try {
+      const userEmail = user.email?.trim().toLowerCase();
+      const userPhone = customer?.mobile?.trim() || user.user_metadata?.whatsapp_number?.trim();
 
-        const { data, error } = await supabase
-          .from('orders')
-          .select('*')
-          .or(
-            `customer_email.eq.${user.email},customer_phone.eq.${customer?.mobile || ''},customer_id.eq.${customer?.mobile || user.id}`
-          )
-          .order('created_at', { ascending: false });
-
-        if (!error && data) {
-          setOrders(data);
-        }
-      } catch (err) {
-        console.error('Error fetching customer orders:', err);
-      } finally {
-        setLoading(false);
+      // బిల్డ్ క్లీన్ OR కండిషన్స్
+      const conditions: string[] = [];
+      if (userEmail) conditions.push(`customer_email.eq.${userEmail}`);
+      if (userPhone) {
+        conditions.push(`customer_phone.eq.${userPhone}`);
+        conditions.push(`customer_id.eq.${userPhone}`);
       }
-    };
+      conditions.push(`customer_id.eq.${user.id}`);
 
-    fetchOrders();
+      const filterQuery = conditions.join(',');
+
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .or(filterQuery)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      setOrders(data || []);
+    } catch (err) {
+      console.error('Error fetching customer orders:', err);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchOrders();
+    }
   }, [isOpen, user, customer]);
 
   useEffect(() => {
@@ -136,7 +152,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
           {loading ? (
             <div className="py-20 flex flex-col items-center justify-center gap-2 text-neutral-400">
               <Loader2 className="w-6 h-6 animate-spin text-[#0b3b2c]" />
-              <span className="text-xs">Loading your orders...</span>
+              <span className="text-xs">Fetching your order history...</span>
             </div>
           ) : orders.length === 0 ? (
             <div className="py-16 text-center space-y-3">
@@ -149,6 +165,13 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                   You haven't placed any orders yet. Discover our exclusive handpicked pieces.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={fetchOrders}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-[#0b3b2c] hover:underline cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Refresh Orders
+              </button>
             </div>
           ) : (
             <div className="space-y-4">
