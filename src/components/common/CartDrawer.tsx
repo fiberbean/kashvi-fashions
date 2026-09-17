@@ -23,6 +23,7 @@ import {
   Clock3,
   RotateCcw,
   MessageCircle,
+  LogIn,
 } from 'lucide-react';
 import { load } from '@cashfreepayments/cashfree-js';
 import { useCart } from '../../context/CartContext';
@@ -101,7 +102,8 @@ export default function CartDrawer() {
     totalDue,
   } = useCart();
 
-  const { user, customer } = useAuth();
+  const authContext = useAuth();
+  const { user, customer } = authContext;
 
   const [activeStep, setActiveStep] = useState<'cart' | 'address' | 'order_result'>('cart');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -144,6 +146,36 @@ export default function CartDrawer() {
     deliveryAvailable?: boolean;
     message?: string;
   } | null>(null);
+
+  // లాగిన్ పాప్-అప్‌ను ట్రిగ్గర్ చేసే హెల్పర్
+  const triggerAuthModal = () => {
+    if (typeof (authContext as any).openAuthModal === 'function') {
+      (authContext as any).openAuthModal();
+    } else if (typeof (authContext as any).setIsAuthOpen === 'function') {
+      (authContext as any).setIsAuthOpen(true);
+    } else if (typeof (authContext as any).setIsAuthModalOpen === 'function') {
+      (authContext as any).setIsAuthModalOpen(true);
+    } else {
+      const userBtn = document.querySelector('[aria-label="User Account"]') as HTMLButtonElement | null;
+      if (userBtn) {
+        userBtn.click();
+      } else {
+        window.dispatchEvent(new CustomEvent('open-auth-modal'));
+      }
+    }
+  };
+
+  // యూజర్ లాగిన్ కాగానే ఫామ్‌ను అప్‌డేట్ చేయడం
+  useEffect(() => {
+    if (user || customer) {
+      setFormData((prev) => ({
+        ...prev,
+        name: prev.name || customer?.name || user?.user_metadata?.name || '',
+        whatsapp_number: prev.whatsapp_number || customer?.mobile || user?.user_metadata?.whatsapp_number || '',
+        email: prev.email || customer?.email || user?.email || '',
+      }));
+    }
+  }, [user, customer]);
 
   // Active Gateway fetch
   useEffect(() => {
@@ -328,6 +360,11 @@ export default function CartDrawer() {
   };
 
   const handleOpenAddAddressModal = () => {
+    if (!user) {
+      triggerAuthModal();
+      return;
+    }
+
     setFormData({
       name: customer?.name || user?.user_metadata?.name || '',
       whatsapp_number: customer?.mobile || user?.user_metadata?.whatsapp_number || '',
@@ -459,7 +496,23 @@ export default function CartDrawer() {
     setActiveStep('order_result');
   };
 
+  // అడ్రస్ స్క్రీన్‌కు వెళ్లేముందు లాగిన్ చెక్
+  const handleProceedToAddress = () => {
+    if (!user) {
+      triggerAuthModal();
+      return;
+    }
+    setActiveStep('address');
+  };
+
   const handleInstantCheckout = async () => {
+    // 1. తప్పనిసరిగా లాగిన్ అయి ఉండాలి
+    if (!user) {
+      triggerAuthModal();
+      return;
+    }
+
+    // 2. అడ్రస్ సెలెక్ట్ అయి ఉండాలి
     if (!selectedAddressId) {
       alert('Please select a delivery address');
       return;
@@ -643,7 +696,6 @@ export default function CartDrawer() {
       onClick={handleCloseModal}
       className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
     >
-      {/* 100% Center-Aligned Pop-up Dialog Box */}
       <div
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[90vh] flex flex-col"
@@ -1142,11 +1194,20 @@ export default function CartDrawer() {
             {activeStep === 'cart' ? (
               <button
                 type="button"
-                onClick={() => setActiveStep('address')}
+                onClick={handleProceedToAddress}
                 className="relative w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#ff4d6d] via-[#e63956] to-[#ff2a55] shadow-xl shadow-[#ff4d6d]/40 hover:shadow-rose-500/60 transition-all duration-300 active:scale-98 cursor-pointer"
               >
-                <Zap className="w-4 h-4 fill-current animate-bounce" />
-                <span>Proceed to Delivery Address</span>
+                {!user ? (
+                  <>
+                    <LogIn className="w-4 h-4" />
+                    <span>Login to Place Order</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 fill-current animate-bounce" />
+                    <span>Proceed to Delivery Address</span>
+                  </>
+                )}
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
@@ -1200,7 +1261,7 @@ export default function CartDrawer() {
                 onClick={() => setIsAddressModalOpen(false)}
                 className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
