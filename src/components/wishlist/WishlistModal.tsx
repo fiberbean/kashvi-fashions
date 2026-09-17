@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Heart, ShoppingBag, Trash2, ArrowRight } from 'lucide-react';
+import { X, Heart, ShoppingBag, Trash2 } from 'lucide-react';
 import { useWishlist } from '../../context/WishlistContext';
 import { useCart } from '../../context/CartContext';
 
@@ -50,7 +50,6 @@ export default function WishlistModal() {
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[88vh] flex flex-col"
       >
-        {/* Header */}
         <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-white sticky top-0 z-10">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full bg-rose-50 text-[#ff4d6d] flex items-center justify-center">
@@ -82,7 +81,6 @@ export default function WishlistModal() {
           </div>
         </div>
 
-        {/* Content Area */}
         <div className="overflow-y-auto p-4 sm:p-6 space-y-3 flex-1">
           {wishlist.length === 0 ? (
             <div className="py-20 text-center space-y-3">
@@ -158,7 +156,7 @@ export default function WishlistModal() {
                           onClick={() => handleMoveToBag(item)}
                           className="px-3 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
                         >
-                          <ShoppingBag className="w-3 h-3" />
+                          <ShoppingBag className="w-3.5 h-3.5" />
                           <span>Move to Bag</span>
                         </button>
                       </div>

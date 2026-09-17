@@ -80,7 +80,6 @@ export default function ProductCard({
       onClick={handleCardClick}
       className="group relative flex flex-col bg-white rounded-2xl overflow-hidden border border-neutral-100 hover:border-neutral-200 transition-all duration-300 shadow-2xs hover:shadow-md cursor-pointer"
     >
-      {/* Product Image Container */}
       <div className="relative aspect-3/4 w-full overflow-hidden bg-neutral-50">
         <img
           src={image}
@@ -89,7 +88,6 @@ export default function ProductCard({
           loading="lazy"
         />
 
-        {/* Badge */}
         {badge && (
           <span
             className={`absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shadow-xs ${
@@ -102,12 +100,11 @@ export default function ProductCard({
           </span>
         )}
 
-        {/* Wishlist Heart Button */}
         <button
           type="button"
           aria-label={isFavorited ? 'Remove from Wishlist' : 'Add to Wishlist'}
           onClick={handleWishlistToggle}
-          className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center shadow-xs transition-transform active:scale-90 hover:bg-white z-10"
+          className="absolute top-2.5 right-2.5 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center shadow-xs transition-transform active:scale-90 hover:bg-white z-10 cursor-pointer"
         >
           <Heart
             className={`w-4 h-4 transition-colors ${
@@ -118,18 +115,16 @@ export default function ProductCard({
           />
         </button>
 
-        {/* Quick Add to Bag Overlay Button */}
         <button
           type="button"
           onClick={handleQuickAdd}
-          className="absolute bottom-2.5 left-2.5 right-2.5 py-2 rounded-xl bg-white/95 backdrop-blur-xs text-neutral-900 text-xs font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200 flex items-center justify-center gap-1.5 shadow-md hover:bg-neutral-900 hover:text-white"
+          className="absolute bottom-2.5 left-2.5 right-2.5 py-2 rounded-xl bg-white/95 backdrop-blur-xs text-neutral-900 text-xs font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-200 flex items-center justify-center gap-1.5 shadow-md hover:bg-neutral-900 hover:text-white cursor-pointer"
         >
           <ShoppingBag className="w-3.5 h-3.5" />
           <span>Quick Add</span>
         </button>
       </div>
 
-      {/* Product Details */}
       <div className="p-3 sm:p-4 flex flex-col flex-1 justify-between gap-1.5">
         <div>
           {fabric && (
