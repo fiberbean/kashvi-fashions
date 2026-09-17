@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Sparkles, ChevronRight } from 'lucide-react';
+import { X, Sparkles, ArrowRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface SubCategory {
@@ -184,7 +184,7 @@ export default function FashionBubbleMenu() {
         ))}
       </div>
 
-      {/* 3. Compact Half-Sized Modal for Sub-Categories */}
+      {/* 3. Half-Sized Arch Menu Modal */}
       {activeCategory && (
         <div
           onClick={() => setActiveCategory(null)}
@@ -192,33 +192,36 @@ export default function FashionBubbleMenu() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-neutral-100 cursor-default animate-in zoom-in-95 duration-200 flex flex-col"
+            className="relative w-full max-w-lg bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-[#ff4d6d]/20 cursor-default animate-in zoom-in-95 duration-200 flex flex-col"
           >
-            {/* Header with Title & Close Button */}
-            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 shrink-0">
-              <div>
-                <span className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-[#ff4d6d] block">
-                  Select Style
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-neutral-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-full bg-[#fff0f3] text-[#ff4d6d]">
+                  <Sparkles className="w-3.5 h-3.5" />
                 </span>
-                <h3 className="text-lg sm:text-xl font-serif font-bold text-neutral-950 leading-tight mt-0.5">
-                  {activeCategory.name}
-                </h3>
+                <div>
+                  <h3 className="text-base sm:text-lg font-serif font-bold text-neutral-950 leading-none">
+                    {activeCategory.name}
+                  </h3>
+                  <span className="text-[10px] text-neutral-400 font-medium">Select Sub-category</span>
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setActiveCategory(null)}
-                className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-600 hover:text-white transition-all cursor-pointer"
+                className="p-1.5 rounded-full bg-neutral-100 hover:bg-[#ff4d6d] text-neutral-600 hover:text-white transition-all cursor-pointer"
                 aria-label="Close"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Compact 2-Column Capsule Pills List */}
-            <div className="overflow-y-auto max-h-[50vh] py-3.5 no-scrollbar flex-1">
+            {/* Half-Size Mini Arch Grid (Exact Menu Style in Half Scale) */}
+            <div className="overflow-y-auto max-h-[55vh] py-4 no-scrollbar flex-1">
               {activeCategory.sub_categories && activeCategory.sub_categories.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+                <div className="grid grid-cols-4 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
                   {activeCategory.sub_categories.map((sub) => {
                     const categoryTarget = activeCategory.slug || activeCategory.id;
 
@@ -227,24 +230,27 @@ export default function FashionBubbleMenu() {
                         key={sub.id}
                         to={`/category/${categoryTarget}?sub=${encodeURIComponent(sub.name)}`}
                         onClick={() => setActiveCategory(null)}
-                        className="group flex items-center gap-2 p-1.5 rounded-2xl bg-neutral-50 hover:bg-[#fff0f3] border border-neutral-200/70 hover:border-[#ff4d6d]/40 transition-all cursor-pointer active:scale-95 shadow-2xs"
+                        className="group flex flex-col items-center w-[68px] sm:w-[76px] text-center cursor-pointer active:scale-95 transition-all"
                       >
-                        {/* Micro Image Thumbnail */}
-                        <div className="w-8 h-8 rounded-xl overflow-hidden bg-neutral-200 shrink-0">
-                          <img
-                            src={
-                              sub.image_url ||
-                              activeCategory.image_url ||
-                              'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=150&q=80'
-                            }
-                            alt={sub.name}
-                            className="w-full h-full object-cover"
-                            loading="lazy"
-                          />
+                        {/* Half-Sized Arch Frame (50% scale of main menu) */}
+                        <div className="relative w-full h-[88px] sm:h-[96px] rounded-t-[32px] rounded-b-xl p-0.5 bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/25 shadow-2xs group-hover:border-[#ff4d6d] group-hover:shadow-sm transition-all duration-300">
+                          <div className="w-full h-full rounded-t-[28px] rounded-b-lg overflow-hidden bg-neutral-100 relative">
+                            <img
+                              src={
+                                sub.image_url ||
+                                activeCategory.image_url ||
+                                'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=200&q=80'
+                              }
+                              alt={sub.name}
+                              className="w-full h-full object-cover object-top group-hover:scale-108 transition-transform duration-500"
+                              loading="lazy"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-50 group-hover:opacity-20 transition-opacity" />
+                          </div>
                         </div>
 
-                        {/* Label */}
-                        <span className="text-xs font-semibold text-neutral-800 group-hover:text-[#ff4d6d] transition-colors truncate">
+                        {/* Title */}
+                        <span className="mt-1.5 text-[10px] font-serif font-bold text-neutral-800 group-hover:text-[#ff4d6d] transition-colors line-clamp-1 w-full text-center">
                           {sub.name}
                         </span>
                       </Link>
@@ -252,21 +258,21 @@ export default function FashionBubbleMenu() {
                   })}
                 </div>
               ) : (
-                <div className="py-6 text-center text-xs text-neutral-400">
-                  No sub-categories available
+                <div className="py-8 text-center text-xs text-neutral-400">
+                  No sub-categories found
                 </div>
               )}
             </div>
 
-            {/* Compact Footer Link */}
+            {/* Footer */}
             <div className="pt-3 border-t border-neutral-100 text-center shrink-0">
               <Link
                 to={`/category/${activeCategory.slug || activeCategory.id}`}
                 onClick={() => setActiveCategory(null)}
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-700 hover:text-[#ff4d6d] transition-colors uppercase tracking-wider"
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#ff4d6d] hover:text-neutral-950 transition-colors uppercase tracking-wider"
               >
                 <span>View All {activeCategory.name}</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
