@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X, Sparkles, ArrowRight } from 'lucide-react';
+import { X, Sparkles, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface SubCategory {
@@ -151,7 +151,7 @@ export default function FashionBubbleMenu() {
         </span>
       </div>
 
-      {/* 2. Royal Arch Menu Track */}
+      {/* 2. Main Royal Arch Menu Track */}
       <div className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth">
         {categories.map((cat) => (
           <button
@@ -160,7 +160,6 @@ export default function FashionBubbleMenu() {
             onClick={() => setActiveCategory(cat)}
             className="group shrink-0 flex flex-col items-center w-[108px] sm:w-[122px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden"
           >
-            {/* Arch Vault Frame */}
             <div className="relative w-full h-[142px] sm:h-[155px] rounded-t-[54px] rounded-b-2xl p-1 bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/25 shadow-2xs group-hover:border-[#ff4d6d] group-hover:shadow-md group-hover:shadow-[#ff4d6d]/15 transition-all duration-300 flex flex-col justify-between">
               <div className="w-full h-full rounded-t-[48px] rounded-b-xl overflow-hidden bg-neutral-100 relative">
                 <img
@@ -176,7 +175,6 @@ export default function FashionBubbleMenu() {
               </div>
             </div>
 
-            {/* Clean Category Label */}
             <div className="mt-2.5 w-full px-1">
               <h4 className="text-xs font-serif font-bold text-neutral-900 group-hover:text-[#ff4d6d] transition-colors truncate">
                 {cat.name}
@@ -186,44 +184,41 @@ export default function FashionBubbleMenu() {
         ))}
       </div>
 
-      {/* 3. Luxury Royal Arch Vault Sub-Menu Modal */}
+      {/* 3. Compact Half-Sized Modal for Sub-Categories */}
       {activeCategory && (
         <div
           onClick={() => setActiveCategory(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-2xl bg-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-[#ff4d6d]/20 cursor-default animate-in zoom-in-95 duration-200 max-h-[86vh] flex flex-col"
+            className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-neutral-100 cursor-default animate-in zoom-in-95 duration-200 flex flex-col"
           >
-            {/* Elegant Close Button */}
-            <button
-              type="button"
-              onClick={() => setActiveCategory(null)}
-              className="absolute top-5 right-5 p-2 rounded-full bg-neutral-100 hover:bg-[#ff4d6d] text-neutral-600 hover:text-white transition-all shadow-xs cursor-pointer z-10"
-              aria-label="Close Modal"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {/* Header with Title & Close Button */}
+            <div className="flex items-center justify-between pb-3 border-b border-neutral-100 shrink-0">
+              <div>
+                <span className="text-[9px] font-extrabold uppercase tracking-[0.2em] text-[#ff4d6d] block">
+                  Select Style
+                </span>
+                <h3 className="text-lg sm:text-xl font-serif font-bold text-neutral-950 leading-tight mt-0.5">
+                  {activeCategory.name}
+                </h3>
+              </div>
 
-            {/* Modal Brand Header */}
-            <div className="text-center pb-5 border-b border-neutral-100 shrink-0">
-              <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-[0.25em] text-[#ff4d6d] bg-[#fff0f3] px-3 py-1 rounded-full">
-                <Sparkles className="w-3 h-3" />
-                Haute Couture Edition
-              </span>
-              <h3 className="text-2xl sm:text-3xl font-serif font-bold text-neutral-950 mt-2">
-                {activeCategory.name}
-              </h3>
-              <p className="text-xs text-neutral-500 mt-1">
-                Select your preferred style, silhouette or collection
-              </p>
+              <button
+                type="button"
+                onClick={() => setActiveCategory(null)}
+                className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-600 hover:text-white transition-all cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            {/* Sub-Categories Arch Grid */}
-            <div className="overflow-y-auto py-6 px-1 flex-1">
+            {/* Compact 2-Column Capsule Pills List */}
+            <div className="overflow-y-auto max-h-[50vh] py-3.5 no-scrollbar flex-1">
               {activeCategory.sub_categories && activeCategory.sub_categories.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-5">
+                <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
                   {activeCategory.sub_categories.map((sub) => {
                     const categoryTarget = activeCategory.slug || activeCategory.id;
 
@@ -232,27 +227,24 @@ export default function FashionBubbleMenu() {
                         key={sub.id}
                         to={`/category/${categoryTarget}?sub=${encodeURIComponent(sub.name)}`}
                         onClick={() => setActiveCategory(null)}
-                        className="group flex flex-col items-center text-center cursor-pointer active:scale-95 transition-all"
+                        className="group flex items-center gap-2 p-1.5 rounded-2xl bg-neutral-50 hover:bg-[#fff0f3] border border-neutral-200/70 hover:border-[#ff4d6d]/40 transition-all cursor-pointer active:scale-95 shadow-2xs"
                       >
-                        {/* Mini Royal Arch Vault Capsule */}
-                        <div className="relative w-full aspect-[4/5] rounded-t-[42px] rounded-b-2xl p-1 bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/20 shadow-2xs group-hover:border-[#ff4d6d] group-hover:shadow-md group-hover:shadow-[#ff4d6d]/15 transition-all duration-300">
-                          <div className="w-full h-full rounded-t-[38px] rounded-b-xl overflow-hidden bg-neutral-100 relative">
-                            <img
-                              src={
-                                sub.image_url ||
-                                activeCategory.image_url ||
-                                'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80'
-                              }
-                              alt={sub.name}
-                              className="w-full h-full object-cover object-top group-hover:scale-108 transition-transform duration-500"
-                              loading="lazy"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60 group-hover:opacity-20 transition-opacity" />
-                          </div>
+                        {/* Micro Image Thumbnail */}
+                        <div className="w-8 h-8 rounded-xl overflow-hidden bg-neutral-200 shrink-0">
+                          <img
+                            src={
+                              sub.image_url ||
+                              activeCategory.image_url ||
+                              'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=150&q=80'
+                            }
+                            alt={sub.name}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
                         </div>
 
-                        {/* Subcategory Name */}
-                        <span className="mt-2 text-xs font-serif font-bold text-neutral-900 group-hover:text-[#ff4d6d] transition-colors line-clamp-1">
+                        {/* Label */}
+                        <span className="text-xs font-semibold text-neutral-800 group-hover:text-[#ff4d6d] transition-colors truncate">
                           {sub.name}
                         </span>
                       </Link>
@@ -260,23 +252,21 @@ export default function FashionBubbleMenu() {
                   })}
                 </div>
               ) : (
-                <div className="py-12 text-center">
-                  <p className="text-sm text-neutral-400">
-                    Explore all products in this collection
-                  </p>
+                <div className="py-6 text-center text-xs text-neutral-400">
+                  No sub-categories available
                 </div>
               )}
             </div>
 
-            {/* Modal Bottom View All Link */}
-            <div className="pt-4 border-t border-neutral-100 text-center shrink-0">
+            {/* Compact Footer Link */}
+            <div className="pt-3 border-t border-neutral-100 text-center shrink-0">
               <Link
                 to={`/category/${activeCategory.slug || activeCategory.id}`}
                 onClick={() => setActiveCategory(null)}
-                className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#ff4d6d] hover:text-neutral-950 transition-colors"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-700 hover:text-[#ff4d6d] transition-colors uppercase tracking-wider"
               >
-                <span>View All {activeCategory.name} Products</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>View All {activeCategory.name}</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
