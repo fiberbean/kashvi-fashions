@@ -5,6 +5,10 @@ import HeaderUserButton from './common/HeaderUserButton';
 import HeaderHeartButton from './common/HeaderHeartButton';
 import HeaderBagButton from './common/HeaderBagButton';
 
+// లోగోలను డైరెక్ట్‌గా import చేయడం (బిల్డ్ ఎర్రర్స్ లేకుండా 100% లోడ్ అవుతాయి)
+import fashionLogo from '../assets/fashion-logo.png';
+import jewelleryLogo from '../assets/jewellery-logo.png';
+
 export default function Navbar() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -16,8 +20,8 @@ export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // లోగో పాత్‌లు
-  const currentLogo = isJewellery ? '/jewellery-logo.png' : '/fashion-logo.png';
+  // ట్యాబ్‌ను బట్టి కరెక్ట్ లోగో సెలెక్ట్ చేయడం
+  const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
   const handleTabSwitch = (tab: 'fashions' | 'jewellery') => {
@@ -60,8 +64,44 @@ export default function Navbar() {
 
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
-        {/* Left Section: Department Switcher Capsule */}
-        <div className="flex items-center gap-2">
+        {/* Left Section: Square Logo with High Visibility */}
+        <div className="flex items-center">
+          <Link to={`/?tab=${currentTab}`} className="group flex items-center gap-3">
+            <div
+              className={`relative h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border flex items-center justify-center ${
+                isJewellery
+                  ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
+                  : 'border-neutral-200 group-hover:border-neutral-400'
+              }`}
+            >
+              <img
+                src={currentLogo}
+                alt={brandAlt}
+                className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+              />
+            </div>
+
+            <div className="hidden md:flex flex-col text-left">
+              <span
+                className={`font-serif text-lg sm:text-xl font-bold tracking-[0.18em] leading-none ${
+                  isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+                }`}
+              >
+                KASHVI
+              </span>
+              <span
+                className={`text-[8px] uppercase tracking-[0.25em] font-semibold mt-1 ${
+                  isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
+                }`}
+              >
+                {isJewellery ? 'Royal Vault' : 'Haute Couture'}
+              </span>
+            </div>
+          </Link>
+        </div>
+
+        {/* Center Section: Department Switcher Capsule */}
+        <div className="flex items-center justify-center">
           <div className="inline-flex p-1 rounded-full bg-neutral-100 border border-neutral-200/60 shadow-inner">
             <button
               type="button"
@@ -86,47 +126,6 @@ export default function Navbar() {
               Jewellery
             </button>
           </div>
-        </div>
-
-        {/* Center Section: Square Logo with High Visibility */}
-        <div className="flex items-center justify-center">
-          <Link to={`/?tab=${currentTab}`} className="group flex items-center gap-3">
-            <div
-              className={`relative h-11 w-11 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border ${
-                isJewellery
-                  ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
-                  : 'border-neutral-200 group-hover:border-neutral-400'
-              }`}
-            >
-              <img
-                src={currentLogo}
-                alt={brandAlt}
-                className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
-                onError={(e) => {
-                  // ఒకవేళ లోగో ఇమేజ్ ఇంకా పెట్టకపోతే టెక్స్ట్ ఫాల్‌బ్యాక్
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-            </div>
-
-            {/* Micro Tagline Alongside Logo */}
-            <div className="hidden md:flex flex-col text-left">
-              <span
-                className={`font-serif text-lg sm:text-xl font-bold tracking-[0.18em] leading-none ${
-                  isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
-                }`}
-              >
-                KASHVI
-              </span>
-              <span
-                className={`text-[8px] uppercase tracking-[0.25em] font-semibold mt-1 ${
-                  isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
-                }`}
-              >
-                {isJewellery ? 'Royal Vault' : 'Haute Couture'}
-              </span>
-            </div>
-          </Link>
         </div>
 
         {/* Right Section: Action Controls */}
