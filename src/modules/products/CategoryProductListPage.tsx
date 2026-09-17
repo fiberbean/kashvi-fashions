@@ -26,6 +26,10 @@ import HeaderHeartButton from '../../components/common/HeaderHeartButton';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
 
+// Assets నుండి నేరుగా ఇంపోర్ట్
+import fashionLogo from '../../assets/fashion-logo.png';
+import jewelleryLogo from '../../assets/jewellery-logo.png';
+
 interface Product {
   id: string;
   name: string;
@@ -48,6 +52,7 @@ interface SubCategory {
   name: string;
   category_id?: string | null;
   category_name?: string | null;
+  image_url?: string | null;
 }
 
 interface ComboItem {
@@ -114,6 +119,8 @@ export default function CategoryProductListPage() {
   const [isZoomOpen, setIsZoomOpen] = useState<boolean>(false);
 
   const isJewellery = department === 'jewellery' || slug?.toLowerCase().includes('jewel');
+  const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
+  const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
   // 1. స్వతంత్రంగా కేటగిరీ మరియు సబ్‌-మెనూలను లోడ్ చేయడం
   useEffect(() => {
@@ -171,7 +178,7 @@ export default function CategoryProductListPage() {
       } else {
         const { data } = await supabase
           .from('sub_categories')
-          .select('id, name, category_id, category_name')
+          .select('id, name, category_id, category_name, image_url')
           .eq('active', true);
 
         const filtered = (data || []).filter((sub) => {
@@ -493,43 +500,42 @@ export default function CategoryProductListPage() {
 
   return (
     <div className={`min-h-screen ${isJewellery ? 'bg-[#fcfdfd]' : 'bg-[#fffafb]'}`}>
-      {/* 1. Global Header */}
+      {/* 1. Global Header with Logo Matching Homepage */}
       <header
         className={`w-full sticky top-0 z-40 backdrop-blur-md transition-all duration-300 border-b bg-white/95 ${
           isJewellery ? 'border-[#0b3b2c]/15 shadow-xs' : 'border-[#ff4d6d]/20 shadow-xs'
         }`}
       >
-        <div className="w-full max-w-7xl mx-auto px-4 py-2.5 md:py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="w-full max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="p-1.5 rounded-full hover:bg-neutral-100 text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer"
+              className="p-2 rounded-full hover:bg-neutral-100 text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer"
               title="Go Back"
               aria-label="Go Back"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
-            <Link to={`/?tab=${department}`} className="flex flex-col">
-              <span
-                className={`text-xl sm:text-2xl md:text-3xl font-serif font-bold tracking-[0.2em] leading-none ${
-                  isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+            <Link to={`/?tab=${department}`} className="inline-flex items-center group py-0.5">
+              <div
+                className={`relative h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-sm border flex items-center justify-center shrink-0 ${
+                  isJewellery
+                    ? 'bg-[#1c3830] border-[#e5c07b]/40 shadow-[#1c3830]/20'
+                    : 'bg-white border-neutral-200 group-hover:border-neutral-400'
                 }`}
               >
-                KASHVI
-              </span>
-              <span
-                className={`text-[8px] sm:text-[9px] uppercase tracking-[0.3em] font-medium mt-0.5 ${
-                  isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
-                }`}
-              >
-                {isJewellery ? 'Royal Vault' : 'Haute Couture'}
-              </span>
+                <img
+                  src={currentLogo}
+                  alt={brandAlt}
+                  className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
             </Link>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-2">
             <HeaderUserButton isJewellery={isJewellery} />
             <HeaderHeartButton isJewellery={isJewellery} />
             <HeaderBagButton isJewellery={isJewellery} />
@@ -537,9 +543,9 @@ export default function CategoryProductListPage() {
         </div>
       </header>
 
-      {/* 2. Breadcrumbs & Category Title Banner */}
+      {/* 2. Breadcrumbs & Category Title Banner with Royal Arch Vault Sub-Menu */}
       <div
-        className={`w-full py-6 sm:py-10 px-4 md:px-8 border-b transition-all duration-300 ${
+        className={`w-full py-5 sm:py-8 px-4 md:px-8 border-b transition-all duration-300 ${
           isJewellery
             ? 'bg-gradient-to-b from-[#0b3b2c]/10 via-[#0b3b2c]/5 to-transparent border-[#0b3b2c]/15'
             : 'bg-gradient-to-b from-rose-100/50 via-rose-50/30 to-transparent border-rose-200/40'
@@ -568,7 +574,7 @@ export default function CategoryProductListPage() {
             )}
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
             <div>
               <span
                 className={`text-[11px] font-bold uppercase tracking-[0.25em] flex items-center gap-1.5 ${
@@ -596,34 +602,76 @@ export default function CategoryProductListPage() {
             </span>
           </div>
 
-          {/* Sub-category Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-2 min-h-[38px]">
+          {/* Sub-category Royal Arch Vault Menu Track */}
+          <div className="flex items-stretch gap-3 overflow-x-auto pb-2 pt-2 scrollbar-none scroll-smooth">
             {headerLoading && subCategories.length === 0 ? (
               <>
-                {[1, 2, 3, 4, 5].map((i) => (
+                {[1, 2, 3, 4, 5, 6].map((i) => (
                   <div
                     key={i}
-                    className="h-8 w-24 bg-white/70 rounded-full animate-pulse border border-neutral-200/50 shrink-0"
+                    className="w-[74px] h-[98px] rounded-t-[32px] rounded-b-xl bg-white/70 animate-pulse border border-neutral-200/50 shrink-0"
                   />
                 ))}
               </>
             ) : (
               subCategories.map((sub) => {
-                const isActive = selectedSub === sub.name;
+                const isActive = selectedSub?.toLowerCase().trim() === sub.name.toLowerCase().trim();
+
                 return (
                   <button
                     key={sub.id}
                     type="button"
                     onClick={() => handleSubSelect(sub.name)}
-                    className={`text-xs px-4 py-1.5 rounded-full font-medium transition-all shrink-0 cursor-pointer ${
-                      isActive
-                        ? isJewellery
-                          ? 'bg-[#0b3b2c] text-[#e5c07b] shadow-sm'
-                          : 'bg-[#ff4d6d] text-white shadow-sm'
-                        : 'bg-white text-neutral-700 border border-neutral-200 hover:border-neutral-400'
-                    }`}
+                    className="group shrink-0 flex flex-col items-center w-[74px] sm:w-[82px] text-center cursor-pointer transition-all duration-300 active:scale-95"
                   >
-                    {sub.name}
+                    {/* Arch Capsule Frame */}
+                    <div
+                      className={`relative w-full h-[96px] sm:h-[106px] rounded-t-[36px] rounded-b-xl p-0.5 transition-all duration-300 flex flex-col justify-between ${
+                        isActive
+                          ? isJewellery
+                            ? 'bg-gradient-to-b from-[#e5c07b] to-[#0b3b2c] border-2 border-[#b38728] shadow-md scale-105'
+                            : 'bg-gradient-to-b from-[#ff4d6d] to-white border-2 border-[#ff4d6d] shadow-md scale-105'
+                          : isJewellery
+                          ? 'bg-gradient-to-b from-[#f8f5eb] to-white border border-[#e5c07b]/60 shadow-2xs group-hover:border-[#b38728]'
+                          : 'bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/25 shadow-2xs group-hover:border-[#ff4d6d]'
+                      }`}
+                    >
+                      <div className="w-full h-full rounded-t-[32px] rounded-b-lg overflow-hidden bg-neutral-100 relative">
+                        <img
+                          src={
+                            sub.image_url ||
+                            (isJewellery
+                              ? 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'
+                              : 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80')
+                          }
+                          alt={sub.name}
+                          className="w-full h-full object-cover object-center group-hover:scale-108 transition-transform duration-500"
+                          loading="lazy"
+                        />
+                        <div
+                          className={`absolute inset-0 transition-opacity ${
+                            isActive
+                              ? isJewellery
+                                ? 'bg-[#0b3b2c]/30'
+                                : 'bg-[#ff4d6d]/25'
+                              : 'bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-60 group-hover:opacity-30'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Label */}
+                    <span
+                      className={`mt-1.5 text-[11px] font-serif font-bold truncate w-full px-0.5 transition-colors ${
+                        isActive
+                          ? isJewellery
+                            ? 'text-[#0b3b2c]'
+                            : 'text-[#ff4d6d]'
+                          : 'text-neutral-800 group-hover:text-neutral-950'
+                      }`}
+                    >
+                      {sub.name}
+                    </span>
                   </button>
                 );
               })
@@ -655,7 +703,7 @@ export default function CategoryProductListPage() {
         </div>
       </div>
 
-      {/* 4. Products Grid with Luxury Cards */}
+      {/* 4. Products Grid */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         {productsLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -796,7 +844,6 @@ export default function CategoryProductListPage() {
                         )}
                       </div>
 
-                      {/* Micro Pill for Instant Bag Touch */}
                       <span
                         className={`text-[10px] font-bold uppercase tracking-wider py-1 px-2.5 rounded-full transition-all ${
                           isJewellery
