@@ -26,7 +26,6 @@ import HeaderHeartButton from '../../components/common/HeaderHeartButton';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
 
-// Assets నుండి నేరుగా ఇంపోర్ట్
 import fashionLogo from '../../assets/fashion-logo.png';
 import jewelleryLogo from '../../assets/jewellery-logo.png';
 
@@ -87,7 +86,6 @@ const isLightColor = (colorName: string): boolean => {
   return ['white', 'beige', 'skin', 'yellow', 'nude'].includes(lower);
 };
 
-// మెటాడేటా & క్వెరీ క్యాష్
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
 const subCategoryCache = new Map<string, SubCategory[]>();
 
@@ -115,6 +113,7 @@ export default function CategoryProductListPage() {
   const [selectedImage, setSelectedImage] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
+  const [singleQty, setSingleQty] = useState<number>(1);
   const [comboList, setComboList] = useState<ComboItem[]>([]);
   const [isZoomOpen, setIsZoomOpen] = useState<boolean>(false);
 
@@ -122,7 +121,7 @@ export default function CategoryProductListPage() {
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
-  // 1. స్వతంత్రంగా కేటగిరీ మరియు సబ్‌-మెనూలను లోడ్ చేయడం
+  // కేటగిరీ మెటాడేటా & సబ్‌కేటగిరీల లోడింగ్
   useEffect(() => {
     let isCurrent = true;
 
@@ -202,7 +201,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 2. ప్రొడక్ట్స్‌ను లోడ్ చేయడం
+  // ప్రొడక్ట్స్‌ను లోడ్ చేయడం
   useEffect(() => {
     let isCurrent = true;
 
@@ -282,26 +281,36 @@ export default function CategoryProductListPage() {
     return fallback;
   };
 
+  // ఖచ్చితమైన కలర్స్ ఫిల్టర్ - జ్యువెలరీకి ఖాళీగా ఉంచుతుంది
   const getProductColors = (prod: Product | null): string[] => {
-    if (!prod) return ['Pink', 'Beige', 'Black'];
+    if (!prod) return [];
+    const isProdJewellery =
+      isJewellery ||
+      prod.category?.toLowerCase().includes('jewel') ||
+      prod.sub_category?.toLowerCase().includes('jewel');
+
+    if (isProdJewellery) return [];
+
     if (prod.colour && prod.colour.trim().length > 0) {
       return prod.colour.split(',').map((c) => c.trim()).filter(Boolean);
     }
     if (prod.variants?.colours && Array.isArray(prod.variants.colours)) {
       return prod.variants.colours;
     }
-    return ['Pink', 'Beige', 'Black'];
+    return [];
   };
 
+  // ఖచ్చితమైన సైజుల ఫిల్టర్ - బ్రా సైజుల వంటి డిఫాల్ట్‌లు రాకుండా అసలైన సైజులనే తీసుకుంటుంది
   const getProductSizes = (prod: Product | null): string[] => {
-    if (!prod) return ['32B', '34B', '36B', '38B'];
+    if (!prod) return [];
+
     if (prod.size && prod.size.trim().length > 0) {
       return prod.size.split(',').map((s) => s.trim()).filter(Boolean);
     }
     if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
       return prod.variants.sizes;
     }
-    return ['32B', '34B', '36B', '38B'];
+    return [];
   };
 
   const handleWishlistToggle = (e: React.MouseEvent, product: Product) => {
@@ -320,8 +329,8 @@ export default function CategoryProductListPage() {
         price: product.selling_price || 0,
         originalPrice: product.mrp || undefined,
         image: pImage,
-        color: colors[0],
-        size: sizes[0],
+        color: colors.length > 0 ? colors[0] : undefined,
+        size: sizes.length > 0 ? sizes[0] : undefined,
         fabric: product.fabric || undefined,
         department,
       });
@@ -331,6 +340,7 @@ export default function CategoryProductListPage() {
   const handleOpenPopModel = (product: Product) => {
     setActiveProduct(product);
     setComboList([]);
+    setSingleQty(1);
 
     let parsedImgs: { url: string; color?: string }[] = [];
     if (Array.isArray(product.images)) {
@@ -357,8 +367,8 @@ export default function CategoryProductListPage() {
 
     const colors = getProductColors(product);
     const sizes = getProductSizes(product);
-    setSelectedColor(colors[0] || 'Pink');
-    setSelectedSize(sizes[0] || '32B');
+    setSelectedColor(colors.length > 0 ? colors[0] : '');
+    setSelectedSize(sizes.length > 0 ? sizes[0] : '');
   };
 
   const handleColorShadeClick = (colorName: string) => {
@@ -384,8 +394,8 @@ export default function CategoryProductListPage() {
   };
 
   const handleAddVariant = () => {
-    if (!selectedColor || !selectedSize) return;
-    const variantId = `${selectedSize}-${selectedColor}`;
+    if (!selectedColor && !selectedSize) return;
+    const variantId = `${selectedSize || 'Standard'}-${selectedColor || 'Original'}`;
 
     setComboList((prev) => {
       const existing = prev.find((item) => item.id === variantId);
@@ -398,8 +408,8 @@ export default function CategoryProductListPage() {
         ...prev,
         {
           id: variantId,
-          color: selectedColor,
-          size: selectedSize,
+          color: selectedColor || '',
+          size: selectedSize || '',
           fabric: activeProduct?.fabric || undefined,
           qty: 1,
         },
@@ -430,14 +440,14 @@ export default function CategoryProductListPage() {
 
     if (comboList.length > 0) {
       const itemsToAdd = comboList.map((item) => ({
-        id: `${activeProduct.id}-${item.size}-${item.color}`,
+        id: `${activeProduct.id}-${item.size || 'std'}-${item.color || 'orig'}`,
         productId: activeProduct.id,
         name: activeProduct.name,
         price: activeProduct.selling_price || 0,
         mrp: activeProduct.mrp,
         image: selectedImage,
-        color: item.color,
-        size: item.size,
+        color: item.color || undefined,
+        size: item.size || undefined,
         fabric: item.fabric,
         qty: item.qty,
         department,
@@ -445,16 +455,16 @@ export default function CategoryProductListPage() {
       addToCart(itemsToAdd);
     } else {
       addToCart({
-        id: `${activeProduct.id}-${selectedSize}-${selectedColor}`,
+        id: `${activeProduct.id}-${selectedSize || 'std'}-${selectedColor || 'orig'}`,
         productId: activeProduct.id,
         name: activeProduct.name,
         price: activeProduct.selling_price || 0,
         mrp: activeProduct.mrp,
         image: selectedImage,
-        color: selectedColor,
-        size: selectedSize,
+        color: selectedColor || undefined,
+        size: selectedSize || undefined,
         fabric: activeProduct.fabric,
-        qty: 1,
+        qty: singleQty,
         department,
       });
     }
@@ -500,7 +510,7 @@ export default function CategoryProductListPage() {
 
   return (
     <div className={`min-h-screen ${isJewellery ? 'bg-[#fcfdfd]' : 'bg-[#fffafb]'}`}>
-      {/* 1. Global Header with Logo Matching Homepage */}
+      {/* 1. Global Header with Matching Square Logo */}
       <header
         className={`w-full sticky top-0 z-40 backdrop-blur-md transition-all duration-300 border-b bg-white/95 ${
           isJewellery ? 'border-[#0b3b2c]/15 shadow-xs' : 'border-[#ff4d6d]/20 shadow-xs'
@@ -624,7 +634,6 @@ export default function CategoryProductListPage() {
                     onClick={() => handleSubSelect(sub.name)}
                     className="group shrink-0 flex flex-col items-center w-[74px] sm:w-[82px] text-center cursor-pointer transition-all duration-300 active:scale-95"
                   >
-                    {/* Arch Capsule Frame */}
                     <div
                       className={`relative w-full h-[96px] sm:h-[106px] rounded-t-[36px] rounded-b-xl p-0.5 transition-all duration-300 flex flex-col justify-between ${
                         isActive
@@ -660,7 +669,6 @@ export default function CategoryProductListPage() {
                       </div>
                     </div>
 
-                    {/* Label */}
                     <span
                       className={`mt-1.5 text-[11px] font-serif font-bold truncate w-full px-0.5 transition-colors ${
                         isActive
@@ -754,7 +762,6 @@ export default function CategoryProductListPage() {
                   }}
                   className="group relative bg-white rounded-3xl overflow-hidden border border-neutral-200/60 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col cursor-pointer animate-in fade-in-50 slide-in-from-bottom-3 duration-400"
                 >
-                  {/* Luxury Portrait Aspect 3:4 */}
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-100">
                     <img
                       src={imageUrl}
@@ -763,7 +770,6 @@ export default function CategoryProductListPage() {
                       loading="lazy"
                     />
 
-                    {/* Glass Wishlist Heart Button */}
                     <button
                       type="button"
                       aria-label={isFav ? 'Remove from Wishlist' : 'Add to Wishlist'}
@@ -781,7 +787,6 @@ export default function CategoryProductListPage() {
                       />
                     </button>
 
-                    {/* Department Tag & Discount Badge */}
                     <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
                       {discountPercent > 0 && (
                         <span
@@ -801,7 +806,6 @@ export default function CategoryProductListPage() {
                       )}
                     </div>
 
-                    {/* Slide-Up Quick View Bar */}
                     <div className="absolute inset-x-0 bottom-0 py-2.5 px-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-center gap-1.5 text-white transform translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out">
                       <Eye className="w-3.5 h-3.5" />
                       <span className="text-[11px] font-bold uppercase tracking-widest">
@@ -810,7 +814,6 @@ export default function CategoryProductListPage() {
                     </div>
                   </div>
 
-                  {/* Card Content Details */}
                   <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                     <div>
                       {product.sub_category && (
@@ -827,7 +830,6 @@ export default function CategoryProductListPage() {
                       </h3>
                     </div>
 
-                    {/* Pricing */}
                     <div className="pt-2 border-t border-neutral-100/80 flex items-baseline justify-between">
                       <div className="flex items-baseline gap-2">
                         <span
@@ -862,7 +864,7 @@ export default function CategoryProductListPage() {
         )}
       </div>
 
-      {/* 5. QUICK VIEW POP MODEL */}
+      {/* 5. QUICK VIEW POP MODEL (CORRECTED FOR JEWELLERY & FASHIONS) */}
       {activeProduct && (
         <div
           onClick={() => setActiveProduct(null)}
@@ -905,7 +907,6 @@ export default function CategoryProductListPage() {
                   </div>
                 )}
 
-                {/* Main Image Container */}
                 <div
                   onClick={() => setIsZoomOpen(true)}
                   className="flex-1 w-full relative aspect-[3/4] max-h-[440px] rounded-2xl overflow-hidden bg-neutral-100 border border-neutral-100 group cursor-zoom-in shadow-xs"
@@ -963,93 +964,123 @@ export default function CategoryProductListPage() {
 
                   <hr className="border-neutral-100" />
 
-                  {/* 1. Color Shade Selection */}
-                  <div className="space-y-2">
-                    <span className="text-xs font-semibold text-neutral-800 block">
-                      Color Shade: <b className="capitalize text-neutral-950">{selectedColor}</b>
-                    </span>
+                  {/* 1. Color Shade Selection (FASHIONS ONLY) */}
+                  {!isJewellery && modalColorOptions.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-neutral-800 block">
+                        Color Shade: <b className="capitalize text-neutral-950">{selectedColor || modalColorOptions[0]}</b>
+                      </span>
 
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      {modalColorOptions.map((cName) => {
-                        const lower = cName.toLowerCase().trim();
-                        const hex = COLOR_HEX_MAP[lower] || lower;
-                        const isSelected = selectedColor.toLowerCase() === lower;
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        {modalColorOptions.map((cName) => {
+                          const lower = cName.toLowerCase().trim();
+                          const hex = COLOR_HEX_MAP[lower] || lower;
+                          const isSelected = (selectedColor || modalColorOptions[0]).toLowerCase() === lower;
 
-                        return (
-                          <button
-                            key={cName}
-                            type="button"
-                            onClick={() => handleColorShadeClick(cName)}
-                            title={cName}
-                            className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-2xs ${
-                              isSelected
-                                ? 'ring-2 ring-offset-2 ring-neutral-900 scale-110'
-                                : 'hover:scale-105 border border-neutral-300'
-                            }`}
-                            style={{ backgroundColor: hex }}
-                          >
-                            {isSelected && (
-                              <Check
-                                className={`w-3.5 h-3.5 ${
-                                  ['white', 'beige', 'yellow', 'skin'].includes(lower)
-                                    ? 'text-neutral-900'
-                                    : 'text-white'
-                                }`}
-                              />
-                            )}
-                          </button>
-                        );
-                      })}
+                          return (
+                            <button
+                              key={cName}
+                              type="button"
+                              onClick={() => handleColorShadeClick(cName)}
+                              title={cName}
+                              className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-2xs ${
+                                isSelected
+                                  ? 'ring-2 ring-offset-2 ring-neutral-900 scale-110'
+                                  : 'hover:scale-105 border border-neutral-300'
+                              }`}
+                              style={{ backgroundColor: hex }}
+                            >
+                              {isSelected && (
+                                <Check
+                                  className={`w-3.5 h-3.5 ${
+                                    ['white', 'beige', 'yellow', 'skin'].includes(lower)
+                                      ? 'text-neutral-900'
+                                      : 'text-white'
+                                  }`}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* 2. Size Selection */}
-                  <div className="space-y-2 pt-1">
-                    <span className="text-xs font-semibold text-neutral-800 block">
-                      Select Size: <b className="text-neutral-950">{selectedSize}</b>
-                    </span>
+                  {/* 2. Size Selection (కచ్చితంగా సైజులు ఉంటేనే కనిపిస్తుంది) */}
+                  {modalSizeOptions.length > 0 && (
+                    <div className="space-y-2 pt-1">
+                      <span className="text-xs font-semibold text-neutral-800 block">
+                        Select Size: <b className="text-neutral-950">{selectedSize || modalSizeOptions[0]}</b>
+                      </span>
 
-                    <div className="flex flex-wrap gap-2">
-                      {modalSizeOptions.map((sz) => {
-                        const isSelected = selectedSize === sz;
-                        return (
-                          <button
-                            key={sz}
-                            type="button"
-                            onClick={() => setSelectedSize(sz)}
-                            className={`min-w-11 h-9 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                              isSelected
-                                ? isJewellery
-                                  ? 'bg-[#0b3b2c] text-[#e5c07b] border-[#0b3b2c] shadow-xs'
-                                  : 'bg-[#ff4d6d] text-white border-[#ff4d6d] shadow-xs'
-                                : 'bg-white text-neutral-800 border-neutral-200 hover:border-neutral-400'
-                            }`}
-                          >
-                            {sz}
-                          </button>
-                        );
-                      })}
+                      <div className="flex flex-wrap gap-2">
+                        {modalSizeOptions.map((sz) => {
+                          const isSelected = (selectedSize || modalSizeOptions[0]) === sz;
+                          return (
+                            <button
+                              key={sz}
+                              type="button"
+                              onClick={() => setSelectedSize(sz)}
+                              className={`min-w-11 h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                isSelected
+                                  ? isJewellery
+                                    ? 'bg-[#0b3b2c] text-[#e5c07b] border-[#0b3b2c] shadow-xs'
+                                    : 'bg-[#ff4d6d] text-white border-[#ff4d6d] shadow-xs'
+                                  : 'bg-white text-neutral-800 border-neutral-200 hover:border-neutral-400'
+                              }`}
+                            >
+                              {sz}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* 3. Add Variant Button */}
-                  <div className="pt-1">
-                    <button
-                      type="button"
-                      onClick={handleAddVariant}
-                      className={`w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 ${
-                        isJewellery
-                          ? 'border-[#0b3b2c] text-[#0b3b2c] hover:bg-[#0b3b2c] hover:text-[#e5c07b]'
-                          : 'border-[#ff4d6d] text-[#ff4d6d] hover:bg-[#ff4d6d] hover:text-white'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Variant ({selectedSize} • {selectedColor})</span>
-                    </button>
-                  </div>
+                  {/* 3. Quantity Counter (జ్యువెలరీ లేదా సింగిల్ ఐటమ్ కోసం) */}
+                  {isJewellery && (
+                    <div className="space-y-1.5 pt-1">
+                      <span className="text-xs font-semibold text-neutral-800 block">
+                        Quantity:
+                      </span>
+                      <div className="inline-flex items-center border border-neutral-200 rounded-xl p-1 bg-white">
+                        <button
+                          type="button"
+                          onClick={() => setSingleQty((prev) => Math.max(1, prev - 1))}
+                          className="w-7 h-7 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors cursor-pointer"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="w-8 text-center text-xs font-bold text-neutral-900">
+                          {singleQty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSingleQty((prev) => prev + 1)}
+                          className="w-7 h-7 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-                  {/* 4. Variants Grid */}
-                  {comboList.length > 0 && (
+                  {/* 4. "Add Variant" Button (కేవలం కలర్స్ లేదా సైజులు ఉన్న ఫ్యాషన్ ఉత్పత్తులకే) */}
+                  {!isJewellery && modalColorOptions.length > 0 && (
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={handleAddVariant}
+                        className="w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 border-[#ff4d6d] text-[#ff4d6d] hover:bg-[#ff4d6d] hover:text-white"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Add Variant ({selectedSize || 'Std'} • {selectedColor || 'Original'})</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 5. Variants Grid */}
+                  {!isJewellery && comboList.length > 0 && (
                     <div className="space-y-2 pt-1">
                       <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block">
                         Selected Variants ({comboList.length})
@@ -1090,7 +1121,6 @@ export default function CategoryProductListPage() {
                                     type="button"
                                     onClick={() => updateComboQty(item.id, -1)}
                                     className="p-0.5 hover:scale-115 transition-transform cursor-pointer"
-                                    aria-label="Decrease quantity"
                                   >
                                     <Minus className="w-2.5 h-2.5" />
                                   </button>
@@ -1101,7 +1131,6 @@ export default function CategoryProductListPage() {
                                     type="button"
                                     onClick={() => updateComboQty(item.id, 1)}
                                     className="p-0.5 hover:scale-115 transition-transform cursor-pointer"
-                                    aria-label="Increase quantity"
                                   >
                                     <Plus className="w-2.5 h-2.5" />
                                   </button>
@@ -1125,8 +1154,8 @@ export default function CategoryProductListPage() {
                     </div>
                   )}
 
-                  {/* 5. Total Bar */}
-                  {totalComboItems > 0 && (
+                  {/* 6. Total Bar for Combos */}
+                  {!isJewellery && totalComboItems > 0 && (
                     <div className="p-3 rounded-xl bg-neutral-900 text-white flex items-center justify-between animate-in fade-in duration-200">
                       <div>
                         <span className="text-[9px] uppercase tracking-wider text-neutral-400 block font-bold">
@@ -1144,7 +1173,7 @@ export default function CategoryProductListPage() {
                     </div>
                   )}
 
-                  {/* 6. Action Buttons */}
+                  {/* 7. Action Buttons */}
                   <div className="flex items-center gap-3 pt-2">
                     <button
                       type="button"
@@ -1222,7 +1251,7 @@ export default function CategoryProductListPage() {
             />
             {activeProduct && (
               <p className="text-xs text-neutral-300 mt-2 font-medium">
-                {activeProduct.name} — {selectedColor || 'Original'}
+                {activeProduct.name}
               </p>
             )}
           </div>
