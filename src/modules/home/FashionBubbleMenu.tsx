@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { X, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface SubCategory {
@@ -42,7 +42,6 @@ export default function FashionBubbleMenu() {
     let isMounted = true;
 
     async function fetchFashionMenu() {
-      // ఒకవేళ క్యాష్‌లో డేటా ఉంటే మళ్లీ నెట్‌వర్క్ కాల్ చేయదు
       if (fashionCache && fashionCache.length > 0) {
         setCategories(fashionCache);
         setLoading(false);
@@ -51,7 +50,6 @@ export default function FashionBubbleMenu() {
 
       setLoading(true);
       try {
-        // రెండు క్వెరీలను ఏకకాలంలో (Parallel) ఫెచ్ చేయడం + కేవలం కావాల్సిన ఫీల్డ్స్ మాత్రమే
         const [catResponse, subResponse] = await Promise.all([
           supabase
             .from('categories')
@@ -66,7 +64,6 @@ export default function FashionBubbleMenu() {
         const subData = subResponse.data || [];
 
         if (catData.length > 0) {
-          // ఫ్యాషన్ కేటగిరీల ఫిల్టర్
           const fashionCats = catData.filter((c) => {
             const nameLower = (c.name || '').toLowerCase();
             const slugLower = (c.slug || '').toLowerCase();
@@ -80,7 +77,6 @@ export default function FashionBubbleMenu() {
             return !isJewellery && c.active !== false;
           });
 
-          // ఫాస్ట్ మ్యాపింగ్ కోసం Map డేటా స్ట్రక్చర్
           const subByCatId = new Map<string, SubCategory[]>();
           const subByCatName = new Map<string, SubCategory[]>();
 
@@ -100,8 +96,7 @@ export default function FashionBubbleMenu() {
           const mappedCategories: Category[] = fashionCats.map((cat) => {
             const byId = subByCatId.get(String(cat.id).trim()) || [];
             const byName = subByCatName.get((cat.name || '').toLowerCase().trim()) || [];
-            
-            // డూప్లికేట్స్ లేకుండా మెర్జ్ చేయడం
+
             const combined = [...byId];
             byName.forEach((item) => {
               if (!combined.some((c) => c.id === item.id)) {
@@ -186,39 +181,66 @@ export default function FashionBubbleMenu() {
   }
 
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 py-6 overflow-x-auto no-scrollbar relative">
-      {/* 1. Base Horizontal Bubble Menu */}
-      <div className="flex items-center gap-4 sm:gap-6 min-w-max md:justify-center">
+    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-7 pb-2">
+      {/* 1. Header with Couture Title */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <span className="text-[10px] uppercase tracking-[0.25em] text-[#ff4d6d] font-bold block">
+            Haute Couture
+          </span>
+          <h3 className="text-lg sm:text-xl font-serif font-bold text-neutral-900 tracking-tight">
+            Curated Boutiques
+          </h3>
+        </div>
+        <span className="text-[11px] text-neutral-400 font-medium tracking-wider uppercase hidden sm:inline-block">
+          Select collection →
+        </span>
+      </div>
+
+      {/* 2. Royal Arch / Vault Capsule Category Menu */}
+      <div className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth">
         {categories.map((cat) => (
           <button
             key={cat.id}
             type="button"
             onClick={() => setActiveCategory(cat)}
-            className="flex flex-col items-center gap-2 group text-center cursor-pointer focus:outline-hidden"
+            className="group shrink-0 flex flex-col items-center w-[108px] sm:w-[122px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden"
           >
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full overflow-hidden border-2 border-[#ff4d6d]/30 group-hover:border-[#ff4d6d] p-0.5 transition-all shadow-xs group-hover:scale-105 bg-neutral-50">
-              <img
-                src={
-                  cat.image_url ||
-                  'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80'
-                }
-                alt={cat.name}
-                className="w-full h-full object-cover rounded-full"
-                loading="eager"
-              />
+            {/* Royal Arch Frame */}
+            <div className="relative w-full h-[142px] sm:h-[155px] rounded-t-[54px] rounded-b-2xl p-1 bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/25 shadow-2xs group-hover:border-[#ff4d6d] group-hover:shadow-md group-hover:shadow-[#ff4d6d]/15 transition-all duration-300 flex flex-col justify-between">
+              {/* Inner Arch Image */}
+              <div className="w-full h-full rounded-t-[48px] rounded-b-xl overflow-hidden bg-neutral-100 relative">
+                <img
+                  src={
+                    cat.image_url ||
+                    'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80'
+                  }
+                  alt={cat.name}
+                  className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-108"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-60 group-hover:opacity-30 transition-opacity" />
+              </div>
             </div>
-            <span className="text-xs font-medium text-neutral-800 group-hover:text-[#ff4d6d] transition-colors">
-              {cat.name}
-            </span>
+
+            {/* Labels */}
+            <div className="mt-2.5 w-full px-1">
+              <h4 className="text-xs font-serif font-bold text-neutral-900 group-hover:text-[#ff4d6d] transition-colors truncate">
+                {cat.name}
+              </h4>
+              <p className="text-[9px] text-neutral-400 uppercase tracking-widest font-semibold mt-0.5 truncate">
+                {cat.sub_categories?.length ? `${cat.sub_categories.length} Edits` : 'Explore'}
+              </p>
+            </div>
           </button>
         ))}
       </div>
 
-      {/* 2. Pop-up Showcase with Center Alignment & Close Button */}
+      {/* 3. Subcategory Popup Showcase Modal */}
       {activeCategory && (
         <div
           onClick={() => setActiveCategory(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -227,16 +249,17 @@ export default function FashionBubbleMenu() {
             <button
               type="button"
               onClick={() => setActiveCategory(null)}
-              className="absolute -top-12 sm:-top-14 right-0 p-2.5 rounded-full bg-white/90 hover:bg-[#ff4d6d] text-neutral-800 hover:text-white transition-all shadow-lg hover:scale-110 cursor-pointer z-50 flex items-center gap-1 text-xs font-bold"
+              className="absolute -top-12 sm:-top-14 right-0 p-2.5 rounded-full bg-white/95 hover:bg-[#ff4d6d] text-neutral-800 hover:text-white transition-all shadow-lg hover:scale-110 cursor-pointer z-50 flex items-center gap-1 text-xs font-bold"
               aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
               <span className="pr-1">Close</span>
             </button>
 
             <div className="relative w-[340px] h-[340px] sm:w-[420px] sm:h-[420px] rounded-full bg-white border-4 border-[#ff4d6d] shadow-2xl animate-in zoom-in-95 duration-300 overflow-hidden">
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-0 px-8 text-center">
-                <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff4d6d]">
+                <span className="inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-[0.25em] text-[#ff4d6d]">
+                  <Sparkles className="w-2.5 h-2.5" />
                   Collection
                 </span>
                 <h3 className="text-xl sm:text-2xl font-serif font-bold text-neutral-900 mt-0.5 leading-tight">
