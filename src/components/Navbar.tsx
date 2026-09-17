@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, Sparkles, SlidersHorizontal } from 'lucide-react';
+import { Search, Sparkles } from 'lucide-react';
 import HeaderUserButton from './common/HeaderUserButton';
 import HeaderHeartButton from './common/HeaderHeartButton';
 import HeaderBagButton from './common/HeaderBagButton';
@@ -15,6 +15,10 @@ export default function Navbar() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // లోగో పాత్‌లు
+  const currentLogo = isJewellery ? '/jewellery-logo.png' : '/fashion-logo.png';
+  const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
   const handleTabSwitch = (tab: 'fashions' | 'jewellery') => {
     if (location.pathname === '/') {
@@ -34,7 +38,9 @@ export default function Navbar() {
   return (
     <header
       className={`sticky top-0 z-40 w-full transition-all duration-300 backdrop-blur-md bg-white/95 border-b ${
-        isJewellery ? 'border-[#0b3b2c]/10 shadow-[0_4px_20px_-10px_rgba(11,59,44,0.08)]' : 'border-neutral-100 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]'
+        isJewellery
+          ? 'border-[#0b3b2c]/10 shadow-[0_4px_20px_-10px_rgba(11,59,44,0.08)]'
+          : 'border-neutral-100 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]'
       }`}
     >
       {/* Top Micro Strip (Notice Bar) */}
@@ -82,33 +88,49 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Center Section: Luxury Brand Identity */}
-        <div className="flex flex-col items-center justify-center text-center">
-          <Link to={`/?tab=${currentTab}`} className="group flex flex-col items-center">
-            <span
-              className={`font-serif text-xl sm:text-2xl lg:text-3xl font-bold tracking-[0.25em] leading-none transition-colors ${
-                isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+        {/* Center Section: Square Logo with High Visibility */}
+        <div className="flex items-center justify-center">
+          <Link to={`/?tab=${currentTab}`} className="group flex items-center gap-3">
+            <div
+              className={`relative h-11 w-11 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border ${
+                isJewellery
+                  ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
+                  : 'border-neutral-200 group-hover:border-neutral-400'
               }`}
             >
-              KASHVI
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-3 h-px bg-neutral-300" />
+              <img
+                src={currentLogo}
+                alt={brandAlt}
+                className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                onError={(e) => {
+                  // ఒకవేళ లోగో ఇమేజ్ ఇంకా పెట్టకపోతే టెక్స్ట్ ఫాల్‌బ్యాక్
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            </div>
+
+            {/* Micro Tagline Alongside Logo */}
+            <div className="hidden md:flex flex-col text-left">
               <span
-                className={`text-[8px] sm:text-[9px] uppercase tracking-[0.35em] font-medium transition-colors ${
+                className={`font-serif text-lg sm:text-xl font-bold tracking-[0.18em] leading-none ${
+                  isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+                }`}
+              >
+                KASHVI
+              </span>
+              <span
+                className={`text-[8px] uppercase tracking-[0.25em] font-semibold mt-1 ${
                   isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
                 }`}
               >
-                {isJewellery ? 'The Royal Vault' : 'Haute Couture'}
+                {isJewellery ? 'Royal Vault' : 'Haute Couture'}
               </span>
-              <span className="w-3 h-px bg-neutral-300" />
             </div>
           </Link>
         </div>
 
         {/* Right Section: Action Controls */}
         <div className="flex items-center gap-1.5 sm:gap-3">
-          {/* Quick Search Trigger */}
           <button
             type="button"
             aria-label="Search"
@@ -118,13 +140,8 @@ export default function Navbar() {
             <Search className="w-4 h-4 sm:w-5 sm:h-5 stroke-[1.8]" />
           </button>
 
-          {/* User Account Button */}
           <HeaderUserButton isJewellery={isJewellery} />
-
-          {/* Wishlist Heart Icon */}
           <HeaderHeartButton isJewellery={isJewellery} />
-
-          {/* Shopping Bag Icon */}
           <HeaderBagButton isJewellery={isJewellery} />
         </div>
       </div>
