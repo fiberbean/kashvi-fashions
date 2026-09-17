@@ -18,9 +18,16 @@ import CartDrawer from './components/common/CartDrawer';
 import CompleteProfileModal from './components/auth/CompleteProfileModal';
 import WishlistModal from './components/wishlist/WishlistModal';
 
+// src/assets నుండి నేరుగా import (బిల్డ్‌లో ఎప్పటికీ మిస్ అవ్వదు)
+import fashionLogo from './assets/fashion-logo.png';
+import jewelleryLogo from './assets/jewellery-logo.png';
+
 function HomePageContent() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isJewellery = searchParams.get('tab') === 'jewellery';
+
+  const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
+  const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
   return (
     <main className="min-h-screen bg-white text-neutral-900 pb-20 w-full overflow-x-hidden">
@@ -30,24 +37,42 @@ function HomePageContent() {
         }`}
       >
         <div className="w-full max-w-7xl mx-auto px-4 py-2.5 md:py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          {/* Brand Identity with Square Logo */}
           <div className="flex items-center justify-between w-full md:w-auto md:flex-1">
-            <Link to="/" className="flex flex-col">
-              <span
-                className={`text-xl sm:text-2xl md:text-3xl font-serif font-bold tracking-[0.2em] transition-colors leading-none ${
-                  isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+            <Link to="/" className="flex items-center gap-2.5 sm:gap-3 group">
+              <div
+                className={`relative h-11 w-11 sm:h-13 sm:w-13 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border flex items-center justify-center shrink-0 ${
+                  isJewellery
+                    ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
+                    : 'border-neutral-200 group-hover:border-neutral-400'
                 }`}
               >
-                KASHVI
-              </span>
-              <span
-                className={`text-[8px] sm:text-[9px] uppercase tracking-[0.3em] font-medium mt-0.5 transition-colors ${
-                  isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
-                }`}
-              >
-                {isJewellery ? 'Royal Vault' : 'Haute Couture'}
-              </span>
+                <img
+                  src={currentLogo}
+                  alt={brandAlt}
+                  className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
+
+              <div className="flex flex-col text-left">
+                <span
+                  className={`text-lg sm:text-2xl font-serif font-bold tracking-[0.18em] transition-colors leading-none ${
+                    isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+                  }`}
+                >
+                  KASHVI
+                </span>
+                <span
+                  className={`text-[8px] sm:text-[9px] uppercase tracking-[0.28em] font-medium mt-1 transition-colors ${
+                    isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
+                  }`}
+                >
+                  {isJewellery ? 'Royal Vault' : 'Haute Couture'}
+                </span>
+              </div>
             </Link>
 
+            {/* Mobile Action Buttons */}
             <div className="flex items-center gap-2 md:hidden">
               <HeaderUserButton isJewellery={isJewellery} />
               <HeaderHeartButton isJewellery={isJewellery} />
@@ -55,6 +80,7 @@ function HomePageContent() {
             </div>
           </div>
 
+          {/* Center: Department Switcher Capsule */}
           <div className="w-full md:w-auto md:flex-none">
             <div
               className={`grid grid-cols-2 p-1 rounded-2xl border transition-all duration-300 w-full md:w-80 ${
@@ -91,6 +117,7 @@ function HomePageContent() {
             </div>
           </div>
 
+          {/* Desktop Action Controls */}
           <div className="hidden md:flex flex-1 justify-end items-center gap-3">
             <HeaderUserButton isJewellery={isJewellery} />
             <HeaderHeartButton isJewellery={isJewellery} />
@@ -146,7 +173,7 @@ function HomePageContent() {
                 <div className="absolute inset-0 bg-gradient-to-r from-[#0b3b2c]/90 via-[#0b3b2c]/40 to-transparent flex items-center px-6 md:px-12">
                   <div className="max-w-lg">
                     <span className="inline-flex items-center gap-1.5 text-[10px] md:text-xs font-bold uppercase tracking-[0.25em] bg-[#0b3b2c] border border-[#e5c07b]/40 text-[#e5c07b] px-3 py-1 rounded-full shadow-xs mb-2">
-                      <Sparkles className="w-3 h-3 text-[#e5c07b]" />
+                      <Sparkles className="w-3.5 h-3.5 text-[#e5c07b]" />
                       Royal Heirloom Craft
                     </span>
                     <h2 className="text-xl md:text-4xl font-serif font-bold text-white leading-tight">
