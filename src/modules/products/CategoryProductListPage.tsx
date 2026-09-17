@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Truck,
   RotateCcw,
+  Eye,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import HeaderBagButton from '../../components/common/HeaderBagButton';
@@ -99,7 +100,6 @@ export default function CategoryProductListPage() {
   const [categoryName, setCategoryName] = useState<string>('');
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
 
-  // వేర్వేరు లోడింగ్ స్టేట్స్
   const [headerLoading, setHeaderLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc'>('featured');
@@ -115,7 +115,7 @@ export default function CategoryProductListPage() {
 
   const isJewellery = department === 'jewellery' || slug?.toLowerCase().includes('jewel');
 
-  // 1. స్వతంత్రంగా కేటగిరీ మరియు సబ్‌-మెనూలను వేగంగా లోడ్ చేయడం
+  // 1. స్వతంత్రంగా కేటగిరీ మరియు సబ్‌-మెనూలను లోడ్ చేయడం
   useEffect(() => {
     let isCurrent = true;
 
@@ -166,7 +166,6 @@ export default function CategoryProductListPage() {
         setHeaderLoading(false);
       }
 
-      // సబ్-కేటగిరీల ఫెచింగ్
       if (subCategoryCache.has(activeCatId)) {
         if (isCurrent) setSubCategories(subCategoryCache.get(activeCatId)!);
       } else {
@@ -298,7 +297,6 @@ export default function CategoryProductListPage() {
     return ['32B', '34B', '36B', '38B'];
   };
 
-  // Wishlist Toggle Handler
   const handleWishlistToggle = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
     const pid = String(product.id);
@@ -657,16 +655,16 @@ export default function CategoryProductListPage() {
         </div>
       </div>
 
-      {/* 4. Products Grid */}
+      {/* 4. Products Grid with Luxury Cards */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         {productsLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
               <div
                 key={idx}
-                className="bg-white rounded-2xl overflow-hidden border border-neutral-100 shadow-2xs p-3 space-y-3 animate-pulse"
+                className="bg-white rounded-3xl overflow-hidden border border-neutral-100 shadow-2xs p-3 space-y-3 animate-pulse"
               >
-                <div className="w-full aspect-[3/4] bg-neutral-200/70 rounded-xl" />
+                <div className="w-full aspect-[3/4] bg-neutral-200/70 rounded-2xl" />
                 <div className="space-y-2 pt-1">
                   <div className="w-1/3 h-3 bg-neutral-200/60 rounded-full" />
                   <div className="w-4/5 h-4 bg-neutral-200/80 rounded-full" />
@@ -688,14 +686,15 @@ export default function CategoryProductListPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
             {sortedProducts.map((product, index) => {
               const currentPrice = product.selling_price || 0;
               const originalPrice = product.mrp && product.mrp > currentPrice ? product.mrp : null;
+              const discountPercent = originalPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0;
               const imageUrl = getProductImage(product.images);
               const isFav = isInWishlist(String(product.id));
 
-              const staggerDelay = `${Math.min(index * 60, 600)}ms`;
+              const staggerDelay = `${Math.min(index * 50, 500)}ms`;
 
               return (
                 <div
@@ -705,71 +704,108 @@ export default function CategoryProductListPage() {
                     animationDelay: staggerDelay,
                     animationFillMode: 'both',
                   }}
-                  className="group relative bg-white rounded-2xl overflow-hidden border border-neutral-100 shadow-2xs hover:shadow-lg transition-all duration-300 flex flex-col cursor-pointer animate-in fade-in-50 slide-in-from-bottom-4 duration-500"
+                  className="group relative bg-white rounded-3xl overflow-hidden border border-neutral-200/60 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col cursor-pointer animate-in fade-in-50 slide-in-from-bottom-3 duration-400"
                 >
-                  <div className="relative aspect-3/4 overflow-hidden bg-neutral-100">
+                  {/* Luxury Portrait Aspect 3:4 */}
+                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-100">
                     <img
                       src={imageUrl}
                       alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-108"
                       loading="lazy"
                     />
 
-                    {/* Active Wishlist Toggle Button */}
+                    {/* Glass Wishlist Heart Button */}
                     <button
                       type="button"
                       aria-label={isFav ? 'Remove from Wishlist' : 'Add to Wishlist'}
                       onClick={(e) => handleWishlistToggle(e, product)}
-                      className="absolute top-2.5 right-2.5 p-2 rounded-full bg-white/90 hover:bg-white text-neutral-600 transition-all shadow-2xs backdrop-blur-xs cursor-pointer z-10 active:scale-90"
+                      className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/85 hover:bg-white text-neutral-600 transition-all shadow-md backdrop-blur-md flex items-center justify-center z-10 active:scale-90"
                     >
                       <Heart
                         className={`w-4 h-4 transition-colors ${
-                          isFav ? 'fill-[#ff4d6d] text-[#ff4d6d]' : 'text-neutral-500 hover:text-neutral-900'
+                          isFav
+                            ? isJewellery
+                              ? 'fill-[#0b3b2c] text-[#0b3b2c]'
+                              : 'fill-[#ff4d6d] text-[#ff4d6d]'
+                            : 'text-neutral-500 hover:text-neutral-900'
                         }`}
                       />
                     </button>
 
-                    {originalPrice && (
-                      <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-black/70 text-white tracking-wider">
-                        SALE
-                      </span>
-                    )}
+                    {/* Department Tag & Discount Badge */}
+                    <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
+                      {discountPercent > 0 && (
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shadow-xs backdrop-blur-md ${
+                            isJewellery
+                              ? 'bg-[#0b3b2c] text-[#e5c07b] border border-[#e5c07b]/40'
+                              : 'bg-[#ff4d6d] text-white'
+                          }`}
+                        >
+                          {discountPercent}% OFF
+                        </span>
+                      )}
+                      {product.fabric && (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-medium bg-black/60 text-white backdrop-blur-xs w-max">
+                          {product.fabric}
+                        </span>
+                      )}
+                    </div>
 
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2 text-center opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-[11px] font-bold text-white uppercase tracking-wider">Quick View</span>
+                    {/* Slide-Up Quick View Bar */}
+                    <div className="absolute inset-x-0 bottom-0 py-2.5 px-3 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-center gap-1.5 text-white transform translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out">
+                      <Eye className="w-3.5 h-3.5" />
+                      <span className="text-[11px] font-bold uppercase tracking-widest">
+                        Quick View
+                      </span>
                     </div>
                   </div>
 
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-2">
+                  {/* Card Content Details */}
+                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                     <div>
                       {product.sub_category && (
-                        <span className="text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
+                        <span
+                          className={`text-[9px] uppercase tracking-[0.2em] font-bold block mb-1 ${
+                            isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
+                          }`}
+                        >
                           {product.sub_category}
                         </span>
                       )}
-                      <h3 className="text-xs sm:text-sm font-semibold text-neutral-900 group-hover:text-neutral-600 line-clamp-2 mt-0.5">
+                      <h3 className="text-xs sm:text-sm font-serif font-bold text-neutral-900 group-hover:text-neutral-600 line-clamp-2 leading-snug transition-colors">
                         {product.name}
                       </h3>
-                      {product.fabric && (
-                        <span className="text-[11px] text-neutral-500 block mt-0.5">
-                          Fabric: {product.fabric}
-                        </span>
-                      )}
                     </div>
 
-                    <div className="flex items-baseline gap-2 pt-1 border-t border-neutral-100">
+                    {/* Pricing */}
+                    <div className="pt-2 border-t border-neutral-100/80 flex items-baseline justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span
+                          className={`text-sm sm:text-base font-bold ${
+                            isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-950'
+                          }`}
+                        >
+                          ₹{currentPrice.toLocaleString('en-IN')}
+                        </span>
+                        {originalPrice && (
+                          <span className="text-[11px] text-neutral-400 line-through">
+                            ₹{originalPrice.toLocaleString('en-IN')}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Micro Pill for Instant Bag Touch */}
                       <span
-                        className={`text-sm sm:text-base font-bold ${
-                          isJewellery ? 'text-[#0b3b2c]' : 'text-neutral-900'
+                        className={`text-[10px] font-bold uppercase tracking-wider py-1 px-2.5 rounded-full transition-all ${
+                          isJewellery
+                            ? 'bg-[#f4f7f5] text-[#0b3b2c] group-hover:bg-[#0b3b2c] group-hover:text-[#e5c07b]'
+                            : 'bg-[#fff0f3] text-[#ff4d6d] group-hover:bg-[#ff4d6d] group-hover:text-white'
                         }`}
                       >
-                        ₹{currentPrice.toLocaleString('en-IN')}
+                        Select
                       </span>
-                      {originalPrice && (
-                        <span className="text-xs text-neutral-400 line-through">
-                          ₹{originalPrice.toLocaleString('en-IN')}
-                        </span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -783,13 +819,12 @@ export default function CategoryProductListPage() {
       {activeProduct && (
         <div
           onClick={() => setActiveProduct(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/65 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
         >
           <div
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col"
           >
-            {/* Close Button */}
             <button
               type="button"
               onClick={() => setActiveProduct(null)}
@@ -800,7 +835,7 @@ export default function CategoryProductListPage() {
             </button>
 
             <div className="overflow-y-auto p-4 sm:p-8 grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-              {/* Left Column */}
+              {/* Left Column: Image Stack */}
               <div className="md:col-span-6 flex flex-col-reverse sm:flex-row gap-3 items-start">
                 {modalImages.length > 1 && (
                   <div className="flex sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto no-scrollbar max-h-[440px]">
@@ -840,7 +875,7 @@ export default function CategoryProductListPage() {
                 </div>
               </div>
 
-              {/* Right Column */}
+              {/* Right Column: Customization Details */}
               <div className="md:col-span-6 flex flex-col justify-between space-y-4">
                 <div className="space-y-4">
                   <div>
@@ -950,7 +985,7 @@ export default function CategoryProductListPage() {
                     </div>
                   </div>
 
-                  {/* 3. "Add Variant" Button */}
+                  {/* 3. Add Variant Button */}
                   <div className="pt-1">
                     <button
                       type="button"
@@ -1093,7 +1128,7 @@ export default function CategoryProductListPage() {
                     </button>
                   </div>
 
-                  {/* Badges */}
+                  {/* Trust Badges */}
                   <div className="pt-2 border-t border-neutral-100 grid grid-cols-3 gap-1 text-center text-neutral-500">
                     <div className="flex flex-col items-center gap-0.5">
                       <ShieldCheck className="w-3.5 h-3.5 text-neutral-700" />
