@@ -7,27 +7,29 @@ import {
   MapPin,
   Settings,
   ChevronDown,
-  ShieldCheck,
-  CheckCircle2,
   AlertTriangle,
   Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import CustomerOrdersModal from '../orders/CustomerOrdersModal';
 import CustomerAddressesModal from '../profile/CustomerAddressesModal';
 import ProfileSettingsModal from '../profile/ProfileSettingsModal';
+import AuthModal from '../auth/AuthModal';
 
 interface HeaderUserButtonProps {
   isJewellery?: boolean;
 }
 
 export default function HeaderUserButton({ isJewellery = false }: HeaderUserButtonProps) {
-  const { user, customer, signOut } = useAuth();
+  const authContext = useAuth();
+  const { user, customer, signOut } = authContext;
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isOrdersOpen, setIsOrdersOpen] = useState(false);
   const [isAddressesOpen, setIsAddressesOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDirectAuthOpen, setIsDirectAuthOpen] = useState(false);
 
   // Logout Confirm & Toast Feedback States
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -52,8 +54,20 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
 
   const handleUserButtonClick = () => {
     if (!user) {
-      // లాగిన్ అయి లేకపోతే డైరెక్ట్ AuthModal ట్రిగ్గర్ అవుతుంది
+      // 1. Context మెథడ్స్ అందుబాటులో ఉంటే కాల్ చేయడం
+      if (typeof (authContext as any).openAuthModal === 'function') {
+        (authContext as any).openAuthModal();
+      } else if (typeof (authContext as any).setIsAuthOpen === 'function') {
+        (authContext as any).setIsAuthOpen(true);
+      } else if (typeof (authContext as any).setIsAuthModalOpen === 'function') {
+        (authContext as any).setIsAuthModalOpen(true);
+      }
+      
+      // 2. విండో ఈవెంట్ పంపడం
       window.dispatchEvent(new CustomEvent('open-auth-modal'));
+      
+      // 3. డైరెక్ట్ లోకల్ స్టేట్ ఫాల్‌బ్యాక్ (తప్పనిసరిగా పాప్-అప్ రావడానికి)
+      setIsDirectAuthOpen(true);
     } else {
       setIsDropdownOpen((prev) => !prev);
     }
@@ -65,7 +79,7 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
       await signOut();
       setShowLogoutConfirm(false);
       setIsDropdownOpen(false);
-      
+
       // స్పష్టమైన సక్సెస్ టోస్ట్ ఫీడ్‌బ్యాక్
       setShowToast(true);
       setTimeout(() => {
@@ -257,7 +271,15 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
           document.body
         )}
 
-      {/* Modals */}
+      {/* Direct Auth Modal if not logged in */}
+      {!user && isDirectAuthOpen && (
+        <AuthModal
+          isOpen={isDirectAuthOpen}
+          onClose={() => setIsDirectAuthOpen(false)}
+        />
+      )}
+
+      {/* Customer Modals */}
       <CustomerOrdersModal isOpen={isOrdersOpen} onClose={() => setIsOrdersOpen(false)} />
       <CustomerAddressesModal isOpen={isAddressesOpen} onClose={() => setIsAddressesOpen(false)} />
       <ProfileSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
