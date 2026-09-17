@@ -114,7 +114,7 @@ export default function CartDrawer() {
     message?: string;
   } | null>(null);
 
-  // అడ్మిన్ ఆన్ చేసిన యాక్టివ్ గేట్‌వే పేరు తెలుసుకోవడం
+  // Read active gateway from DB
   useEffect(() => {
     const fetchActiveGateway = async () => {
       try {
@@ -180,7 +180,13 @@ export default function CartDrawer() {
       if (pinError) console.error('Error fetching pincode:', pinError);
 
       const isAvailable = pinData ? pinData.delivery_available !== false : true;
-      const detectedZone = pinData?.zone_type || (cleanPin.startsWith('533') ? 'Local' : cleanPin.startsWith('5') ? 'Within State' : 'Other States');
+      const detectedZone =
+        pinData?.zone_type ||
+        (cleanPin.startsWith('533')
+          ? 'Local'
+          : cleanPin.startsWith('5')
+          ? 'Within State'
+          : 'Other States');
 
       if (!isAvailable) {
         setPincodeStatus({
@@ -229,7 +235,11 @@ export default function CartDrawer() {
       }
 
       if (calculatedRate === 0) {
-        calculatedRate = zoneNorm.includes('local') ? 30 : zoneNorm.includes('within state') ? 50 : 70;
+        calculatedRate = zoneNorm.includes('local')
+          ? 30
+          : zoneNorm.includes('within state')
+          ? 50
+          : 70;
       }
 
       setShippingCharge(calculatedRate);
@@ -325,7 +335,6 @@ export default function CartDrawer() {
     setIsAddressModalOpen(false);
   };
 
-  // అడ్మిన్ ఆన్ చేసిన గేట్‌వే ఆధారంగా పేమెంట్ ప్రారంభించడం
   const handleInstantCheckout = async () => {
     if (!selectedAddressId) {
       alert('Please select a delivery address');
@@ -338,10 +347,15 @@ export default function CartDrawer() {
     setIsCheckingOut(true);
     try {
       const orderId = `KF_${Date.now()}`;
-      const fullAddressText = `${currentAddress.door_no}, ${currentAddress.building_name ? currentAddress.building_name + ', ' : ''}${currentAddress.street}, ${currentAddress.area}, ${currentAddress.city}, ${currentAddress.state} - ${currentAddress.pincode}`;
-      const resolvedEmail = currentAddress.email?.trim() || `${currentAddress.whatsapp_number}@kashvifashions.local`;
+      const fullAddressText = `${currentAddress.door_no}, ${
+        currentAddress.building_name ? currentAddress.building_name + ', ' : ''
+      }${currentAddress.street}, ${currentAddress.area}, ${currentAddress.city}, ${
+        currentAddress.state
+      } - ${currentAddress.pincode}`;
+      const resolvedEmail =
+        currentAddress.email?.trim() || `${currentAddress.whatsapp_number}@kashvifashions.local`;
 
-      // 1. Edge Function నుండి యాక్టివ్ గేట్‌వే ఆర్డర్ సెషన్ పొందడం
+      // Edge Function Call
       const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
         'create-payment-order',
         {
@@ -362,10 +376,10 @@ export default function CartDrawer() {
         return;
       }
 
-      const activeGateway = sessionData.gateway; // 'cashfree', 'razorpay', etc.
+      const activeGateway = sessionData.gateway;
       const usedGatewayName = sessionData.gatewayName || 'Online PG';
 
-      // 2. Supabase లో ఆర్డర్‌ను ఇనిషియలైజ్ చేయడం
+      // Insert order into DB
       const orderPayload = {
         id: orderId,
         customer_id: currentAddress.whatsapp_number,
@@ -409,37 +423,38 @@ export default function CartDrawer() {
 
       await supabase.from('orders').insert([orderPayload]);
 
-      // 3. యాక్టివ్ గేట్‌వే ప్రకారం మోడల్ ఓపెన్ చేయడం
+      // Cashfree Checkout
       if (activeGateway === 'cashfree') {
         const cashfreeMode = sessionData.environment === 'production' ? 'production' : 'sandbox';
         const cashfree = await load({ mode: cashfreeMode });
 
-        cashfree.checkout({
-          paymentSessionId: sessionData.paymentSessionId,
-          redirectTarget: '_modal',
-        }).then(async (result: any) => {
-          if (result.error) {
-            alert(`Payment Failed or Cancelled: ${result.error.message}`);
-          }
-          if (result.paymentDetails) {
-            await supabase
-              .from('orders')
-              .update({
-                payment_status: 'paid',
-                order_status: 'confirmed',
-                payment_reference: sessionData.orderId,
-                payment_time: new Date().toISOString(),
-                payment_verified: true,
-              })
-              .eq('id', orderId);
+        cashfree
+          .checkout({
+            paymentSessionId: sessionData.paymentSessionId,
+            redirectTarget: '_modal',
+          })
+          .then(async (result: any) => {
+            if (result.error) {
+              alert(`Payment Failed or Cancelled: ${result.error.message}`);
+            }
+            if (result.paymentDetails) {
+              await supabase
+                .from('orders')
+                .update({
+                  payment_status: 'paid',
+                  order_status: 'confirmed',
+                  payment_reference: sessionData.orderId,
+                  payment_time: new Date().toISOString(),
+                  payment_verified: true,
+                })
+                .eq('id', orderId);
 
-            alert(`Payment Successful! Your Order #${orderId} is confirmed.`);
-            clearCart();
-            closeCart();
-          }
-        });
+              alert(`Payment Successful! Your Order #${orderId} is confirmed.`);
+              clearCart();
+              closeCart();
+            }
+          });
       } else if (activeGateway === 'razorpay') {
-        // Razorpay Checkout (Future Ready)
         const options = {
           key: sessionData.keyId,
           amount: Math.round(totalDue * 100),
@@ -552,8 +567,9 @@ export default function CartDrawer() {
               ) : (
                 <div className="space-y-3 max-h-80 overflow-y-auto pr-1 no-scrollbar">
                   {cart.map((item) => {
-                    const hex = COLOR_HEX_MAP[item.color.toLowerCase()] || item.color.toLowerCase();
-                    const isJewelleryItem = item.department === 'jewellery';
+                    const itemColor = (item?.color || '').toLowerCase();
+                    const hex = COLOR_HEX_MAP[itemColor] || itemColor || '#e83e8c';
+                    const isJewelleryItem = item?.department === 'jewellery';
 
                     return (
                       <div
@@ -585,14 +601,22 @@ export default function CartDrawer() {
                             </div>
 
                             <div className="flex items-center gap-1.5 mt-1">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full border border-black/10 shrink-0"
-                                style={{ backgroundColor: hex }}
-                              />
-                              <span className="text-[11px] font-bold text-neutral-800">{item.size}</span>
-                              <span className="text-[10px] text-neutral-500 capitalize">
-                                ({item.color})
-                              </span>
+                              {item.color && (
+                                <>
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full border border-black/10 shrink-0"
+                                    style={{ backgroundColor: hex }}
+                                  />
+                                  <span className="text-[10px] text-neutral-500 capitalize">
+                                    ({item.color})
+                                  </span>
+                                </>
+                              )}
+                              {item.size && (
+                                <span className="text-[11px] font-bold text-neutral-800">
+                                  {item.size}
+                                </span>
+                              )}
                               {item.fabric && (
                                 <span className="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-neutral-200 text-neutral-700 font-semibold">
                                   {item.fabric}
@@ -668,9 +692,10 @@ export default function CartDrawer() {
                 <div className="grid grid-cols-1 gap-3 max-h-80 overflow-y-auto pr-1 no-scrollbar">
                   {savedAddresses.map((addr) => {
                     const isSelected = selectedAddressId === addr.id;
-                    const displayLabel = addr.address_type === 'Others' && addr.custom_label 
-                      ? addr.custom_label 
-                      : (addr.address_type || 'Home');
+                    const displayLabel =
+                      addr.address_type === 'Others' && addr.custom_label
+                        ? addr.custom_label
+                        : addr.address_type || 'Home';
 
                     return (
                       <div
@@ -697,7 +722,9 @@ export default function CartDrawer() {
                               <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-700 border border-neutral-200 flex items-center gap-1">
                                 {addr.address_type === 'Work' && <Briefcase className="w-2.5 h-2.5" />}
                                 {addr.address_type === 'Home' && <Home className="w-2.5 h-2.5" />}
-                                {addr.address_type === 'Others' && <Bookmark className="w-2.5 h-2.5 text-[#ff4d6d]" />}
+                                {addr.address_type === 'Others' && (
+                                  <Bookmark className="w-2.5 h-2.5 text-[#ff4d6d]" />
+                                )}
                                 <span>{displayLabel}</span>
                               </span>
                             </div>
@@ -745,9 +772,7 @@ export default function CartDrawer() {
                   <Truck className="w-3.5 h-3.5 text-neutral-500" />
                   Shipping Charges {pincodeStatus?.zoneType ? `(${pincodeStatus.zoneType})` : ''}
                 </span>
-                <span className="font-bold text-neutral-900">
-                  ₹{shippingCharge}
-                </span>
+                <span className="font-bold text-neutral-900">₹{shippingCharge}</span>
               </div>
 
               <div className="flex justify-between text-sm font-bold text-neutral-900 pt-2 border-t border-neutral-100">
@@ -786,7 +811,9 @@ export default function CartDrawer() {
                   <Zap className="w-4 h-4 fill-current animate-bounce relative z-10" />
                 )}
                 <span className="relative z-10 tracking-widest font-black drop-shadow-xs flex items-center gap-1.5">
-                  {isCheckingOut ? 'Connecting Gateway...' : `Pay via ${activeGatewayName} • ₹${totalDue.toLocaleString('en-IN')}`}
+                  {isCheckingOut
+                    ? 'Connecting Gateway...'
+                    : `Pay via ${activeGatewayName} • ₹${totalDue.toLocaleString('en-IN')}`}
                   {!isCheckingOut && <ArrowRight className="w-4 h-4" />}
                 </span>
               </button>
