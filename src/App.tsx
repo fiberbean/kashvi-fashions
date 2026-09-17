@@ -1,19 +1,22 @@
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Link, useSearchParams } from 'react-router-dom';
-import { Sparkles, ShieldCheck, Heart, Gem, Crown } from 'lucide-react';
+import { Sparkles, ShieldCheck, Gem, Crown } from 'lucide-react';
 import FashionBubbleMenu from './modules/home/FashionBubbleMenu';
 import JewelleryBubbleMenu from './modules/home/JewelleryBubbleMenu';
 import FashionUnevenBanners from './modules/home/FashionUnevenBanners';
 import JewelleryUnevenBanners from './modules/home/JewelleryUnevenBanners';
 import HeaderBagButton from './components/common/HeaderBagButton';
 import HeaderUserButton from './components/common/HeaderUserButton';
+import HeaderHeartButton from './components/common/HeaderHeartButton';
 import CategoryProductListPage from './modules/products/CategoryProductListPage';
 import ProductDetailPage from './modules/products/ProductDetailPage';
 import { CartProvider } from './context/CartContext';
 import { AuthProvider } from './context/AuthContext';
+import { WishlistProvider } from './context/WishlistContext';
 import AuthModal from './components/auth/AuthModal';
 import CartDrawer from './components/common/CartDrawer';
 import CompleteProfileModal from './components/auth/CompleteProfileModal';
+import WishlistModal from './components/wishlist/WishlistModal';
 
 function HomePageContent() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -47,13 +50,7 @@ function HomePageContent() {
 
             <div className="flex items-center gap-2 md:hidden">
               <HeaderUserButton isJewellery={isJewellery} />
-              <button
-                type="button"
-                aria-label="Wishlist"
-                className="p-1.5 rounded-full text-neutral-700 hover:text-neutral-950"
-              >
-                <Heart className="w-4 h-4" />
-              </button>
+              <HeaderHeartButton isJewellery={isJewellery} />
               <HeaderBagButton isJewellery={isJewellery} />
             </div>
           </div>
@@ -96,15 +93,7 @@ function HomePageContent() {
 
           <div className="hidden md:flex flex-1 justify-end items-center gap-3">
             <HeaderUserButton isJewellery={isJewellery} />
-            <button
-              type="button"
-              aria-label="Wishlist"
-              className={`p-2 rounded-full transition-colors text-neutral-700 ${
-                isJewellery ? 'hover:text-[#0b3b2c] hover:bg-[#f4f7f5]' : 'hover:text-[#ff4d6d] hover:bg-[#fff0f3]'
-              }`}
-            >
-              <Heart className="w-5 h-5" />
-            </button>
+            <HeaderHeartButton isJewellery={isJewellery} />
             <HeaderBagButton isJewellery={isJewellery} />
           </div>
         </div>
@@ -190,18 +179,21 @@ function HomePageContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <CartProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<HomePageContent />} />
-            <Route path="/category/:slug" element={<CategoryProductListPage />} />
-            <Route path="/product/:id" element={<ProductDetailPage />} />
-          </Routes>
-          <CartDrawer />
-          <AuthModal />
-          <CompleteProfileModal />
-        </Router>
-      </CartProvider>
+      <WishlistProvider>
+        <CartProvider>
+          <Router>
+            <Routes>
+              <Route path="/" element={<HomePageContent />} />
+              <Route path="/category/:slug" element={<CategoryProductListPage />} />
+              <Route path="/product/:id" element={<ProductDetailPage />} />
+            </Routes>
+            <CartDrawer />
+            <WishlistModal />
+            <AuthModal />
+            <CompleteProfileModal />
+          </Router>
+        </CartProvider>
+      </WishlistProvider>
     </AuthProvider>
   );
 }
