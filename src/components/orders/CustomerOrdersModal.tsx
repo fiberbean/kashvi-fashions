@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -14,7 +14,10 @@ import {
   Package,
   MapPin,
   ShieldCheck,
-  RotateCcw,
+  Download,
+  Search,
+  Filter,
+  FileText,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -34,8 +37,12 @@ const ORDER_STAGES = [
 
 export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersModalProps) {
   const { user, customer } = useAuth();
-  
-  // Instant Cache Initialization (మునుపటి సెషన్ నుండి వెంటనే చూపించడానికి)
+
+  const [activeTab, setActiveTab] = useState<'active' | 'past'>('active');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFilter, setDateFilter] = useState<'all' | '30days' | '6months' | 'year'>('all');
+
+  // Instant Cache Initialization
   const [orders, setOrders] = useState<any[]>(() => {
     try {
       const cached = localStorage.getItem('kashvi_cached_orders');
@@ -46,9 +53,9 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
   });
 
   const [loading, setLoading] = useState(orders.length === 0);
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(orders[0]?.id || null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
-  const fetchOrdersSequentially = async () => {
+  const fetchOrders = async () => {
     if (!user) {
       setLoading(false);
       return;
@@ -58,12 +65,11 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
     const phone = customer?.mobile?.trim() || user.user_metadata?.whatsapp_number?.trim();
 
     try {
-      // 1. Single Fast Query - Directly targeting user identifiers
       let query = supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(50);
 
       if (email && phone) {
         query = query.or(`customer_email.eq.${email},customer_phone.eq.${phone},customer_id.eq.${phone}`);
@@ -78,12 +84,9 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
       if (!error && data) {
         setOrders(data);
         localStorage.setItem('kashvi_cached_orders', JSON.stringify(data));
-        if (data.length > 0 && !expandedOrderId) {
-          setExpandedOrderId(data[0].id);
-        }
       }
     } catch (err) {
-      console.error('Fast order fetch error:', err);
+      console.error('Order fetch error:', err);
     } finally {
       setLoading(false);
     }
@@ -92,10 +95,11 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
   useEffect(() => {
     if (isOpen) {
       if (orders.length === 0) setLoading(true);
-      fetchOrdersSequentially();
+      fetchOrders();
     }
   }, [isOpen, user?.id, customer?.mobile]);
 
+  // Handle Escape Key & Body Scroll Lock
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -110,8 +114,6 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
-
   const getStageIndex = (status: string) => {
     const s = (status || '').toLowerCase();
     if (s.includes('deliver')) return 4;
@@ -119,6 +121,177 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
     if (s.includes('pack')) return 2;
     if (s.includes('confirm') || s.includes('paid')) return 1;
     return 0;
+  };
+
+  const isDelivered = (order: any) => {
+    const s = (order.order_status || order.status || '').toLowerCase();
+    return s.includes('deliver');
+  };
+
+  // Split Active and Past Orders
+  const activeOrders = useMemo(() => orders.filter((o) => !isDelivered(o)), [orders]);
+  const pastOrdersRaw = useMemo(() => orders.filter((o) => isDelivered(o)), [orders]);
+
+  // Filter Past Orders based on Search and Time Filter
+  const filteredPastOrders = useMemo(() => {
+    return pastOrdersRaw.filter((ord) => {
+      // 1. Search Query Filter (Matches Order ID or Item Names)
+      const query = searchTerm.trim().toLowerCase();
+      const matchesSearch =
+        !query ||
+        ord.id.toLowerCase().includes(query) ||
+        (Array.isArray(ord.items) &&
+          ord.items.some((it: any) => it.name?.toLowerCase().includes(query)));
+
+      if (!matchesSearch) return false;
+
+      // 2. Date Filter
+      if (dateFilter === 'all') return true;
+      const orderDate = new Date(ord.created_at).getTime();
+      const now = Date.now();
+      const dayDiff = (now - orderDate) / (1000 * 3600 * 24);
+
+      if (dateFilter === '30days') return dayDiff <= 30;
+      if (dateFilter === '6months') return dayDiff <= 180;
+      if (dateFilter === 'year') return dayDiff <= 365;
+
+      return true;
+    });
+  }, [pastOrdersRaw, searchTerm, dateFilter]);
+
+  // Set default expanded order when tab switches
+  useEffect(() => {
+    if (activeTab === 'active' && activeOrders.length > 0) {
+      setExpandedOrderId(activeOrders[0].id);
+    } else if (activeTab === 'past' && filteredPastOrders.length > 0) {
+      setExpandedOrderId(null);
+    }
+  }, [activeTab]);
+
+  if (!isOpen) return null;
+
+  // Invoice Generation & Print Handler
+  const handleDownloadInvoice = (order: any) => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    const formattedDate = new Date(order.created_at).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Pop-up was blocked. Please allow pop-ups to download invoice.');
+      return;
+    }
+
+    const invoiceHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Tax Invoice - ${order.id}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1f2937; padding: 40px; margin: 0; }
+          .header { display: flex; justify-content: space-between; border-b: 2px solid #0b3b2c; padding-bottom: 20px; }
+          .brand { font-size: 24px; font-weight: 900; letter-spacing: 2px; color: #0b3b2c; }
+          .tagline { font-size: 10px; text-transform: uppercase; color: #b38728; letter-spacing: 1px; }
+          .invoice-title { font-size: 20px; font-weight: bold; text-align: right; color: #111; }
+          .meta-grid { display: flex; justify-content: space-between; margin: 30px 0; font-size: 12px; }
+          .meta-col { width: 45%; }
+          .meta-col strong { color: #111; font-size: 13px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th { background: #f8fafc; text-align: left; padding: 12px 10px; font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; }
+          td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
+          .totals-table { width: 40%; margin-left: auto; margin-top: 20px; font-size: 12px; }
+          .totals-table td { border: none; padding: 6px 10px; }
+          .grand-total { font-weight: bold; font-size: 15px; color: #0b3b2c; border-top: 2px solid #0b3b2c !important; }
+          .footer { margin-top: 50px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px dashed #cbd5e1; padding-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="brand">KASHVI FASHIONS</div>
+            <div class="tagline">Haute Couture & Royal Vault • Kakinada</div>
+            <div style="font-size: 11px; color: #64748b; margin-top: 5px;">GSTIN: 37AAEFK1234F1Z5 • Support: +91 8686353574</div>
+          </div>
+          <div class="invoice-title">
+            TAX INVOICE
+            <div style="font-size: 12px; font-weight: normal; color: #64748b; margin-top: 4px;">Invoice ID: INV-${order.id}</div>
+            <div style="font-size: 12px; font-weight: normal; color: #64748b;">Date: ${formattedDate}</div>
+          </div>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-col">
+            <strong>Billed & Shipped To:</strong><br/>
+            ${order.customer_name || 'Valued Customer'}<br/>
+            WhatsApp: ${order.customer_phone || ''}<br/>
+            ${order.shipping_address || 'Address on file'}
+          </div>
+          <div class="meta-col" style="text-align: right;">
+            <strong>Payment Summary:</strong><br/>
+            Payment Mode: ${order.payment_method || 'Online PG'}<br/>
+            Status: Confirmed & Paid<br/>
+            Reference: ${order.payment_reference || order.id}
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Item Description</th>
+              <th>Specifications</th>
+              <th style="text-align: center;">Qty</th>
+              <th style="text-align: right;">Rate</th>
+              <th style="text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items
+              .map(
+                (item: any) => `
+              <tr>
+                <td><strong>${item.name}</strong></td>
+                <td>${item.size ? 'Size: ' + item.size : ''} ${item.color ? '• Color: ' + item.color : ''}</td>
+                <td style="text-align: center;">${item.qty}</td>
+                <td style="text-align: right;">₹${item.price.toLocaleString('en-IN')}</td>
+                <td style="text-align: right;">₹${(item.price * item.qty).toLocaleString('en-IN')}</td>
+              </tr>
+            `
+              )
+              .join('')}
+          </tbody>
+        </table>
+
+        <table class="totals-table">
+          <tr>
+            <td>Subtotal:</td>
+            <td style="text-align: right;">₹${(order.subtotal || 0).toLocaleString('en-IN')}</td>
+          </tr>
+          <tr>
+            <td>Delivery / Shipping:</td>
+            <td style="text-align: right;">₹${order.delivery_fee || 0}</td>
+          </tr>
+          <tr class="grand-total">
+            <td>Total Paid:</td>
+            <td style="text-align: right;">₹${(order.total_amount || order.total || 0).toLocaleString('en-IN')}</td>
+          </tr>
+        </table>
+
+        <div class="footer">
+          This is a computer-generated invoice and requires no physical signature.<br/>
+          Thank you for choosing <strong>Kashvi Fashions</strong>. For returns or support, contact help@kashvifashions.in.
+        </div>
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(invoiceHtml);
+    printWindow.document.close();
   };
 
   const renderStatusBadge = (status: string, paymentStatus: string) => {
@@ -148,6 +321,8 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
     );
   };
 
+  const currentDisplayList = activeTab === 'active' ? activeOrders : filteredPastOrders;
+
   const modalContent = (
     <div
       onClick={onClose}
@@ -165,10 +340,10 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-serif font-bold text-neutral-900 leading-tight">
-                My Orders & Status
+                My Orders
               </h2>
               <p className="text-[10px] text-neutral-400 font-medium">
-                Click any order to track shipment live
+                Track live packages and download tax invoices
               </p>
             </div>
           </div>
@@ -182,9 +357,72 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
           </button>
         </div>
 
-        {/* Orders Area */}
+        {/* Tab Selector: Active vs Past */}
+        <div className="px-6 pt-3 pb-2 bg-neutral-50/50 border-b border-neutral-100 flex items-center justify-between gap-2">
+          <div className="grid grid-cols-2 p-1 rounded-2xl bg-neutral-200/60 w-full sm:w-80">
+            <button
+              type="button"
+              onClick={() => setActiveTab('active')}
+              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTab === 'active'
+                  ? 'bg-white text-neutral-950 shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5 text-[#0b3b2c]" />
+              <span>Active Orders ({activeOrders.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('past')}
+              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTab === 'past'
+                  ? 'bg-white text-neutral-950 shadow-xs'
+                  : 'text-neutral-600 hover:text-neutral-900'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 text-[#ff4d6d]" />
+              <span>Past Orders ({pastOrdersRaw.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Filters for Past Orders */}
+        {activeTab === 'past' && pastOrdersRaw.length > 0 && (
+          <div className="px-6 py-2.5 bg-neutral-50 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-150">
+            {/* Search Box */}
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search by Order ID or item name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8.5 pr-3 py-1.5 text-xs rounded-xl border border-neutral-200 bg-white focus:outline-hidden focus:border-neutral-900"
+              />
+            </div>
+
+            {/* Time Filter Select */}
+            <div className="flex items-center gap-1.5 text-xs">
+              <Filter className="w-3.5 h-3.5 text-neutral-500" />
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value as any)}
+                className="bg-white border border-neutral-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-neutral-800 focus:outline-hidden cursor-pointer"
+              >
+                <option value="all">All Time</option>
+                <option value="30days">Last 30 Days</option>
+                <option value="6months">Last 6 Months</option>
+                <option value="year">This Year</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Orders List Area */}
         <div className="overflow-y-auto p-4 sm:p-6 space-y-4 flex-1">
-          {/* Skeleton Shimmer Placeholders (లోడింగ్ సమయంలో వెంటనే కనిపిస్తాయి) */}
+          {/* Skeleton Loader */}
           {loading && orders.length === 0 && (
             <div className="space-y-4 animate-pulse">
               {[1, 2].map((n) => (
@@ -202,28 +440,27 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
             </div>
           )}
 
-          {/* Real Orders Rendered One by One with Smooth Animations */}
-          {orders.length > 0 ? (
+          {/* Current Orders List */}
+          {currentDisplayList.length > 0 ? (
             <div className="space-y-4">
-              {orders.map((ord, index) => {
+              {currentDisplayList.map((ord, index) => {
                 const isExpanded = expandedOrderId === ord.id;
                 const items = Array.isArray(ord.items) ? ord.items : [];
                 const currentStageIdx = getStageIndex(ord.order_status || ord.status);
+                const orderDelivered = isDelivered(ord);
                 const orderDate = ord.created_at
                   ? new Date(ord.created_at).toLocaleDateString('en-IN', {
                       day: 'numeric',
                       month: 'short',
                       year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
                     })
                   : 'Recent';
 
                 return (
                   <div
                     key={ord.id}
-                    style={{ animationDelay: `${index * 60}ms` }}
-                    className={`border-2 rounded-3xl transition-all overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+                    style={{ animationDelay: `${index * 50}ms` }}
+                    className={`border-2 rounded-3xl transition-all overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-200 ${
                       isExpanded
                         ? 'border-[#0b3b2c] shadow-md bg-white'
                         : 'border-neutral-200/90 bg-white hover:border-neutral-300 shadow-2xs'
@@ -237,7 +474,9 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                       <div className="flex items-center gap-3 min-w-0">
                         <div
                           className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
-                            isExpanded
+                            orderDelivered
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : isExpanded
                               ? 'bg-[#0b3b2c] text-white shadow-xs'
                               : 'bg-neutral-100 text-neutral-600'
                           }`}
@@ -260,7 +499,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                       <div className="flex items-center gap-3 shrink-0 ml-auto">
                         <div className="text-right">
                           <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">
-                            Amount Paid
+                            Total Paid
                           </span>
                           <span className="font-serif font-black text-sm sm:text-base text-neutral-950">
                             ₹{Number(ord.total_amount || ord.total || 0).toLocaleString('en-IN')}
@@ -276,10 +515,10 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                       </div>
                     </div>
 
-                    {/* Expanded Live Tracking Timeline */}
+                    {/* Expandable Order Details & Tracking Timeline */}
                     {isExpanded && (
                       <div className="p-4 sm:p-5 border-t border-neutral-100 space-y-5 animate-in fade-in duration-200">
-                        {/* 5-Step Tracker */}
+                        {/* Status Progress Tracker (Active Orders) */}
                         <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-2xl p-4">
                           <div className="flex items-center justify-between mb-3">
                             <span className="text-xs font-bold uppercase tracking-wider text-neutral-800 flex items-center gap-1.5">
@@ -287,7 +526,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                               Order Status Tracker
                             </span>
                             <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full capitalize">
-                              Current: {ord.order_status || 'Processing'}
+                              {orderDelivered ? 'Delivered Successfully' : `Status: ${ord.order_status || 'Processing'}`}
                             </span>
                           </div>
 
@@ -334,6 +573,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                             })}
                           </div>
 
+                          {/* Courier Tracking Details */}
                           {(ord.tracking_number || ord.courier_name) && (
                             <div className="mt-4 pt-3 border-t border-neutral-200/80 flex flex-wrap items-center justify-between gap-2 text-xs bg-white p-3 rounded-xl">
                               <div>
@@ -398,6 +638,29 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                           </div>
                         </div>
 
+                        {/* Download Invoice Button for Delivered Orders */}
+                        {orderDelivered && (
+                          <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3">
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                Tax Invoice Available
+                              </span>
+                              <p className="text-[11px] text-emerald-700">
+                                Official invoice with GST details for your records.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadInvoice(ord)}
+                              className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Download Invoice</span>
+                            </button>
+                          </div>
+                        )}
+
                         {/* Address & Payment Info */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1 border-t border-neutral-100">
                           <div className="bg-neutral-50/60 p-3 rounded-2xl border border-neutral-100 space-y-1">
@@ -441,9 +704,13 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                   <ShoppingBag className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="font-serif font-bold text-neutral-800 text-base">No orders found</h4>
+                  <h4 className="font-serif font-bold text-neutral-800 text-base">
+                    {activeTab === 'active' ? 'No active orders right now' : 'No past orders match your filter'}
+                  </h4>
                   <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1">
-                    You haven't placed any orders yet.
+                    {activeTab === 'active'
+                      ? 'Your placed orders will show up here until they are delivered to your doorstep.'
+                      : 'Try changing the date filter or searching for another term.'}
                   </p>
                 </div>
               </div>
