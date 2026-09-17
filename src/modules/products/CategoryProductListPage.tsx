@@ -79,11 +79,16 @@ const COLOR_HEX_MAP: Record<string, string> = {
   purple: '#9333ea',
   yellow: '#eab308',
   grey: '#4b5563',
+  gold: '#d4af37',
+  antique: '#996515',
+  silver: '#c0c0c0',
+  ruby: '#9b111e',
+  emerald: '#50c878',
 };
 
 const isLightColor = (colorName: string): boolean => {
   const lower = colorName.toLowerCase().trim();
-  return ['white', 'beige', 'skin', 'yellow', 'nude'].includes(lower);
+  return ['white', 'beige', 'skin', 'yellow', 'nude', 'gold', 'silver'].includes(lower);
 };
 
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
@@ -107,7 +112,7 @@ export default function CategoryProductListPage() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc'>('featured');
 
-  // Pop Model States
+  // Modal State
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [modalImages, setModalImages] = useState<{ url: string; color?: string }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>('');
@@ -121,7 +126,7 @@ export default function CategoryProductListPage() {
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
-  // కేటగిరీ మెటాడేటా & సబ్‌కేటగిరీల లోడింగ్
+  // Load Meta and Subs
   useEffect(() => {
     let isCurrent = true;
 
@@ -201,7 +206,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // ప్రొడక్ట్స్‌ను లోడ్ చేయడం
+  // Load Products
   useEffect(() => {
     let isCurrent = true;
 
@@ -281,36 +286,65 @@ export default function CategoryProductListPage() {
     return fallback;
   };
 
-  // ఖచ్చితమైన కలర్స్ ఫిల్టర్ - జ్యువెలరీకి ఖాళీగా ఉంచుతుంది
+  // ఖచ్చితంగా డేటాబేస్ ఆధారంగా కలర్స్ తీసుకునే ఫంక్షన్ (నో ఫాల్‌బ్యాక్)
   const getProductColors = (prod: Product | null): string[] => {
     if (!prod) return [];
-    const isProdJewellery =
-      isJewellery ||
-      prod.category?.toLowerCase().includes('jewel') ||
-      prod.sub_category?.toLowerCase().includes('jewel');
+    const colorsSet = new Set<string>();
 
-    if (isProdJewellery) return [];
+    if (prod.colour && typeof prod.colour === 'string') {
+      prod.colour.split(',').forEach((c) => {
+        const clean = c.trim();
+        if (clean) colorsSet.add(clean);
+      });
+    }
 
-    if (prod.colour && prod.colour.trim().length > 0) {
-      return prod.colour.split(',').map((c) => c.trim()).filter(Boolean);
+    if (prod.variants) {
+      let vars = prod.variants;
+      if (typeof vars === 'string') {
+        try { vars = JSON.parse(vars); } catch {}
+      }
+      if (Array.isArray(vars?.colours)) {
+        vars.colours.forEach((c: string) => { if (c && c.trim()) colorsSet.add(c.trim()); });
+      }
+      if (Array.isArray(vars)) {
+        vars.forEach((v: any) => {
+          if (v?.colour && typeof v.colour === 'string') colorsSet.add(v.colour.trim());
+          if (v?.color && typeof v.color === 'string') colorsSet.add(v.color.trim());
+        });
+      }
     }
-    if (prod.variants?.colours && Array.isArray(prod.variants.colours)) {
-      return prod.variants.colours;
-    }
-    return [];
+
+    return Array.from(colorsSet);
   };
 
-  // ఖచ్చితమైన సైజుల ఫిల్టర్ - బ్రా సైజుల వంటి డిఫాల్ట్‌లు రాకుండా అసలైన సైజులనే తీసుకుంటుంది
+  // ఖచ్చితంగా డేటాబేస్ ఆధారంగా సైజులు తీసుకునే ఫంక్షన్ (నో ఫాల్‌బ్యాక్)
   const getProductSizes = (prod: Product | null): string[] => {
     if (!prod) return [];
+    const sizesSet = new Set<string>();
 
-    if (prod.size && prod.size.trim().length > 0) {
-      return prod.size.split(',').map((s) => s.trim()).filter(Boolean);
+    if (prod.size && typeof prod.size === 'string') {
+      prod.size.split(',').forEach((s) => {
+        const clean = s.trim();
+        if (clean) sizesSet.add(clean);
+      });
     }
-    if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
-      return prod.variants.sizes;
+
+    if (prod.variants) {
+      let vars = prod.variants;
+      if (typeof vars === 'string') {
+        try { vars = JSON.parse(vars); } catch {}
+      }
+      if (Array.isArray(vars?.sizes)) {
+        vars.sizes.forEach((s: string) => { if (s && s.trim()) sizesSet.add(s.trim()); });
+      }
+      if (Array.isArray(vars)) {
+        vars.forEach((v: any) => {
+          if (v?.size && typeof v.size === 'string') sizesSet.add(v.size.trim());
+        });
+      }
     }
-    return [];
+
+    return Array.from(sizesSet);
   };
 
   const handleWishlistToggle = (e: React.MouseEvent, product: Product) => {
@@ -329,8 +363,8 @@ export default function CategoryProductListPage() {
         price: product.selling_price || 0,
         originalPrice: product.mrp || undefined,
         image: pImage,
-        color: colors.length > 0 ? colors[0] : undefined,
-        size: sizes.length > 0 ? sizes[0] : undefined,
+        color: colors[0] || undefined,
+        size: sizes[0] || undefined,
         fabric: product.fabric || undefined,
         department,
       });
@@ -367,6 +401,7 @@ export default function CategoryProductListPage() {
 
     const colors = getProductColors(product);
     const sizes = getProductSizes(product);
+
     setSelectedColor(colors.length > 0 ? colors[0] : '');
     setSelectedSize(sizes.length > 0 ? sizes[0] : '');
   };
@@ -386,16 +421,12 @@ export default function CategoryProductListPage() {
       setSelectedImage(urlMatched.url);
       return;
     }
-
-    const colorIdx = ['pink', 'beige', 'skin', 'black'].indexOf(colorLower);
-    if (colorIdx >= 0 && modalImages[colorIdx]) {
-      setSelectedImage(modalImages[colorIdx].url);
-    }
   };
 
   const handleAddVariant = () => {
-    if (!selectedColor && !selectedSize) return;
-    const variantId = `${selectedSize || 'Standard'}-${selectedColor || 'Original'}`;
+    const colorVal = selectedColor || 'Standard';
+    const sizeVal = selectedSize || 'Free Size';
+    const variantId = `${sizeVal}-${colorVal}`;
 
     setComboList((prev) => {
       const existing = prev.find((item) => item.id === variantId);
@@ -502,15 +533,17 @@ export default function CategoryProductListPage() {
   const activeSellingPrice = activeProduct?.selling_price || 0;
   const activeMrp = activeProduct?.mrp || 0;
   const activeDiscount = activeMrp > activeSellingPrice ? Math.round(((activeMrp - activeSellingPrice) / activeMrp) * 100) : 0;
+  
   const modalColorOptions = getProductColors(activeProduct);
   const modalSizeOptions = getProductSizes(activeProduct);
+  const hasVariants = modalColorOptions.length > 0 || modalSizeOptions.length > 0;
 
   const totalComboItems = comboList.reduce((acc, item) => acc + item.qty, 0);
   const totalComboPrice = totalComboItems * activeSellingPrice;
 
   return (
     <div className={`min-h-screen ${isJewellery ? 'bg-[#fcfdfd]' : 'bg-[#fffafb]'}`}>
-      {/* 1. Global Header with Matching Square Logo */}
+      {/* 1. Global Header */}
       <header
         className={`w-full sticky top-0 z-40 backdrop-blur-md transition-all duration-300 border-b bg-white/95 ${
           isJewellery ? 'border-[#0b3b2c]/15 shadow-xs' : 'border-[#ff4d6d]/20 shadow-xs'
@@ -553,7 +586,7 @@ export default function CategoryProductListPage() {
         </div>
       </header>
 
-      {/* 2. Breadcrumbs & Category Title Banner with Royal Arch Vault Sub-Menu */}
+      {/* 2. Banner & Arch Submenu */}
       <div
         className={`w-full py-5 sm:py-8 px-4 md:px-8 border-b transition-all duration-300 ${
           isJewellery
@@ -612,7 +645,7 @@ export default function CategoryProductListPage() {
             </span>
           </div>
 
-          {/* Sub-category Royal Arch Vault Menu Track */}
+          {/* Sub-category Arch Track */}
           <div className="flex items-stretch gap-3 overflow-x-auto pb-2 pt-2 scrollbar-none scroll-smooth">
             {headerLoading && subCategories.length === 0 ? (
               <>
@@ -750,17 +783,11 @@ export default function CategoryProductListPage() {
               const imageUrl = getProductImage(product.images);
               const isFav = isInWishlist(String(product.id));
 
-              const staggerDelay = `${Math.min(index * 50, 500)}ms`;
-
               return (
                 <div
                   key={product.id}
                   onClick={() => handleOpenPopModel(product)}
-                  style={{
-                    animationDelay: staggerDelay,
-                    animationFillMode: 'both',
-                  }}
-                  className="group relative bg-white rounded-3xl overflow-hidden border border-neutral-200/60 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col cursor-pointer animate-in fade-in-50 slide-in-from-bottom-3 duration-400"
+                  className="group relative bg-white rounded-3xl overflow-hidden border border-neutral-200/60 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col cursor-pointer animate-in fade-in duration-300"
                 >
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-100">
                     <img
@@ -864,7 +891,7 @@ export default function CategoryProductListPage() {
         )}
       </div>
 
-      {/* 5. QUICK VIEW POP MODEL (CORRECTED FOR JEWELLERY & FASHIONS) */}
+      {/* 5. QUICK VIEW POP MODEL (FULLY DYNAMIC BASED ON PRODUCT ATTRIBUTES) */}
       {activeProduct && (
         <div
           onClick={() => setActiveProduct(null)}
@@ -884,7 +911,7 @@ export default function CategoryProductListPage() {
             </button>
 
             <div className="overflow-y-auto p-4 sm:p-8 grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-              {/* Left Column: Image Stack */}
+              {/* Image Stack */}
               <div className="md:col-span-6 flex flex-col-reverse sm:flex-row gap-3 items-start">
                 {modalImages.length > 1 && (
                   <div className="flex sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto no-scrollbar max-h-[440px]">
@@ -923,7 +950,7 @@ export default function CategoryProductListPage() {
                 </div>
               </div>
 
-              {/* Right Column: Customization Details */}
+              {/* Customization Details */}
               <div className="md:col-span-6 flex flex-col justify-between space-y-4">
                 <div className="space-y-4">
                   <div>
@@ -964,8 +991,8 @@ export default function CategoryProductListPage() {
 
                   <hr className="border-neutral-100" />
 
-                  {/* 1. Color Shade Selection (FASHIONS ONLY) */}
-                  {!isJewellery && modalColorOptions.length > 0 && (
+                  {/* 1. Color Shade Selection (డేటాబేస్‌లో ఉంటే మాత్రమే వస్తుంది) */}
+                  {modalColorOptions.length > 0 && (
                     <div className="space-y-2">
                       <span className="text-xs font-semibold text-neutral-800 block">
                         Color Shade: <b className="capitalize text-neutral-950">{selectedColor || modalColorOptions[0]}</b>
@@ -985,7 +1012,9 @@ export default function CategoryProductListPage() {
                               title={cName}
                               className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-2xs ${
                                 isSelected
-                                  ? 'ring-2 ring-offset-2 ring-neutral-900 scale-110'
+                                  ? isJewellery
+                                    ? 'ring-2 ring-offset-2 ring-[#0b3b2c] scale-110'
+                                    : 'ring-2 ring-offset-2 ring-[#ff4d6d] scale-110'
                                   : 'hover:scale-105 border border-neutral-300'
                               }`}
                               style={{ backgroundColor: hex }}
@@ -993,9 +1022,7 @@ export default function CategoryProductListPage() {
                               {isSelected && (
                                 <Check
                                   className={`w-3.5 h-3.5 ${
-                                    ['white', 'beige', 'yellow', 'skin'].includes(lower)
-                                      ? 'text-neutral-900'
-                                      : 'text-white'
+                                    isLightColor(lower) ? 'text-neutral-900' : 'text-white'
                                   }`}
                                 />
                               )}
@@ -1006,7 +1033,7 @@ export default function CategoryProductListPage() {
                     </div>
                   )}
 
-                  {/* 2. Size Selection (కచ్చితంగా సైజులు ఉంటేనే కనిపిస్తుంది) */}
+                  {/* 2. Size Selection (డేటాబేస్‌లో ఉన్న సైజులు మాత్రమే వస్తాయి) */}
                   {modalSizeOptions.length > 0 && (
                     <div className="space-y-2 pt-1">
                       <span className="text-xs font-semibold text-neutral-800 block">
@@ -1037,50 +1064,54 @@ export default function CategoryProductListPage() {
                     </div>
                   )}
 
-                  {/* 3. Quantity Counter (జ్యువెలరీ లేదా సింగిల్ ఐటమ్ కోసం) */}
-                  {isJewellery && (
-                    <div className="space-y-1.5 pt-1">
-                      <span className="text-xs font-semibold text-neutral-800 block">
-                        Quantity:
+                  {/* 3. Quantity Counter (సింగిల్ ఐటమ్ కొనుగోలుకు) */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-xs font-semibold text-neutral-800 block">
+                      Quantity:
+                    </span>
+                    <div className="inline-flex items-center border border-neutral-200 rounded-xl p-1 bg-white">
+                      <button
+                        type="button"
+                        onClick={() => setSingleQty((prev) => Math.max(1, prev - 1))}
+                        className="w-7 h-7 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors cursor-pointer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-8 text-center text-xs font-bold text-neutral-900">
+                        {singleQty}
                       </span>
-                      <div className="inline-flex items-center border border-neutral-200 rounded-xl p-1 bg-white">
-                        <button
-                          type="button"
-                          onClick={() => setSingleQty((prev) => Math.max(1, prev - 1))}
-                          className="w-7 h-7 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors cursor-pointer"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="w-8 text-center text-xs font-bold text-neutral-900">
-                          {singleQty}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setSingleQty((prev) => prev + 1)}
-                          className="w-7 h-7 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSingleQty((prev) => prev + 1)}
+                        className="w-7 h-7 rounded-lg hover:bg-neutral-100 flex items-center justify-center text-neutral-600 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
                     </div>
-                  )}
+                  </div>
 
-                  {/* 4. "Add Variant" Button (కేవలం కలర్స్ లేదా సైజులు ఉన్న ఫ్యాషన్ ఉత్పత్తులకే) */}
-                  {!isJewellery && modalColorOptions.length > 0 && (
+                  {/* 4. Add Variant Button (కలర్ లేదా సైజులలో వేర్వేరు కాంబినేషన్లు ఎంచుకోవడానికి) */}
+                  {hasVariants && (
                     <div className="pt-1">
                       <button
                         type="button"
                         onClick={handleAddVariant}
-                        className="w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 border-[#ff4d6d] text-[#ff4d6d] hover:bg-[#ff4d6d] hover:text-white"
+                        className={`w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 ${
+                          isJewellery
+                            ? 'border-[#0b3b2c] text-[#0b3b2c] hover:bg-[#0b3b2c] hover:text-[#e5c07b]'
+                            : 'border-[#ff4d6d] text-[#ff4d6d] hover:bg-[#ff4d6d] hover:text-white'
+                        }`}
                       >
                         <Plus className="w-4 h-4" />
-                        <span>Add Variant ({selectedSize || 'Std'} • {selectedColor || 'Original'})</span>
+                        <span>
+                          Add Variant ({selectedSize || 'Standard'}{selectedColor ? ` • ${selectedColor}` : ''})
+                        </span>
                       </button>
                     </div>
                   )}
 
-                  {/* 5. Variants Grid */}
-                  {!isJewellery && comboList.length > 0 && (
+                  {/* 5. Multi-Variants Combo List */}
+                  {comboList.length > 0 && (
                     <div className="space-y-2 pt-1">
                       <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block">
                         Selected Variants ({comboList.length})
@@ -1088,27 +1119,26 @@ export default function CategoryProductListPage() {
 
                       <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 no-scrollbar">
                         {comboList.map((item) => {
-                          const hexBg = COLOR_HEX_MAP[item.color.toLowerCase()] || item.color.toLowerCase();
-                          const light = isLightColor(item.color);
+                          const hexBg = COLOR_HEX_MAP[item.color.toLowerCase()] || item.color.toLowerCase() || '#f5f5f5';
+                          const light = item.color ? isLightColor(item.color) : true;
 
                           return (
                             <div
                               key={item.id}
-                              style={{ backgroundColor: hexBg }}
+                              style={{ backgroundColor: item.color ? hexBg : '#f9fafb' }}
                               className={`flex items-center justify-between pl-2 pr-1 py-1 rounded-full shadow-xs transition-all duration-200 border border-black/10 text-[11px] ${
-                                light ? 'text-neutral-900' : 'text-white'
+                                item.color
+                                  ? light ? 'text-neutral-900' : 'text-white'
+                                  : 'text-neutral-900'
                               }`}
                             >
                               <div className="flex items-center gap-1.5 min-w-0 pr-1 leading-none">
-                                <span
-                                  className={`w-2 h-2 rounded-full ${
-                                    light ? 'bg-neutral-900/60' : 'bg-white/80'
-                                  }`}
-                                />
-                                <span className="font-black text-xs shrink-0">{item.size}</span>
-                                <span className="font-semibold opacity-90 truncate capitalize text-[10px]">
-                                  {item.color}
-                                </span>
+                                {item.size && <span className="font-black text-xs shrink-0">{item.size}</span>}
+                                {item.color && (
+                                  <span className="font-semibold opacity-90 truncate capitalize text-[10px]">
+                                    {item.color}
+                                  </span>
+                                )}
                               </div>
 
                               <div className="flex items-center gap-1 shrink-0">
@@ -1154,8 +1184,8 @@ export default function CategoryProductListPage() {
                     </div>
                   )}
 
-                  {/* 6. Total Bar for Combos */}
-                  {!isJewellery && totalComboItems > 0 && (
+                  {/* 6. Total Bar */}
+                  {totalComboItems > 0 && (
                     <div className="p-3 rounded-xl bg-neutral-900 text-white flex items-center justify-between animate-in fade-in duration-200">
                       <div>
                         <span className="text-[9px] uppercase tracking-wider text-neutral-400 block font-bold">
