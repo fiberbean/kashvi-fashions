@@ -14,6 +14,9 @@ import {
 import { supabase } from '../../lib/supabase';
 import HeaderBagButton from '../../components/common/HeaderBagButton';
 import HeaderUserButton from '../../components/common/HeaderUserButton';
+import HeaderHeartButton from '../../components/common/HeaderHeartButton';
+import { useCart } from '../../context/CartContext';
+import { useWishlist } from '../../context/WishlistContext';
 
 interface Product {
   id: string;
@@ -37,6 +40,9 @@ interface Product {
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+
+  const { addToCart, openCart } = useCart();
+  const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [imageList, setImageList] = useState<string[]>([]);
@@ -64,7 +70,6 @@ export default function ProductDetailPage() {
         if (data) {
           setProduct(data);
 
-          // Parse images jsonb
           let imgs: string[] = [];
           if (Array.isArray(data.images)) {
             imgs = data.images.map((img: any) => (typeof img === 'string' ? img : img?.url || ''));
@@ -125,10 +130,50 @@ export default function ProductDetailPage() {
     );
   }
 
+  const pid = String(product.id);
+  const isFav = isInWishlist(pid);
   const sellingPrice = product.selling_price || 0;
   const mrp = product.mrp || 0;
   const discountPercent = mrp > sellingPrice ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0;
   const availableSizes = product.size ? product.size.split(',').map((s) => s.trim()) : [];
+
+  const handleWishlistToggle = () => {
+    if (isFav) {
+      removeFromWishlist(pid);
+    } else {
+      addToWishlist({
+        id: pid,
+        name: product.name,
+        price: sellingPrice,
+        originalPrice: mrp || undefined,
+        image: selectedImage || imageList[0],
+        color: product.colour?.split(',')[0]?.trim() || undefined,
+        size: selectedSize || undefined,
+        fabric: product.fabric || undefined,
+        department: isJewellery ? 'jewellery' : 'fashions',
+      });
+    }
+  };
+
+  const handleAddToCart = (instantCheckout: boolean = false) => {
+    addToCart({
+      id: `${product.id}-${selectedSize || 'default'}-${product.colour || 'default'}`,
+      productId: product.id,
+      name: product.name,
+      price: sellingPrice,
+      mrp: mrp || undefined,
+      image: selectedImage || imageList[0],
+      color: product.colour?.split(',')[0]?.trim() || undefined,
+      size: selectedSize || undefined,
+      fabric: product.fabric || undefined,
+      qty: quantity,
+      department: isJewellery ? 'jewellery' : 'fashions',
+    });
+
+    if (instantCheckout) {
+      openCart();
+    }
+  };
 
   return (
     <div className={`min-h-screen ${isJewellery ? 'bg-[#fcfdfd]' : 'bg-[#fffafb]'}`}>
@@ -169,15 +214,7 @@ export default function ProductDetailPage() {
 
           <div className="flex items-center gap-3">
             <HeaderUserButton isJewellery={isJewellery} />
-            <button
-              type="button"
-              aria-label="Wishlist"
-              className={`p-2 rounded-full transition-colors text-neutral-700 ${
-                isJewellery ? 'hover:text-[#0b3b2c] hover:bg-[#f4f7f5]' : 'hover:text-[#ff4d6d] hover:bg-[#fff0f3]'
-              }`}
-            >
-              <Heart className="w-5 h-5" />
-            </button>
+            <HeaderHeartButton isJewellery={isJewellery} />
             <HeaderBagButton isJewellery={isJewellery} />
           </div>
         </div>
@@ -229,7 +266,7 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Main Featured Image */}
+            {/* Main Featured Image with Functional Wishlist Toggle */}
             <div className="flex-1 relative aspect-3/4 rounded-2xl overflow-hidden bg-neutral-100 border border-neutral-100 shadow-sm group">
               <img
                 src={selectedImage}
@@ -238,10 +275,15 @@ export default function ProductDetailPage() {
               />
               <button
                 type="button"
-                className="absolute top-4 right-4 p-2.5 rounded-full bg-white/80 hover:bg-white text-neutral-700 hover:text-rose-500 shadow-md backdrop-blur-xs transition-colors cursor-pointer"
-                aria-label="Add to wishlist"
+                onClick={handleWishlistToggle}
+                className="absolute top-4 right-4 p-2.5 rounded-full bg-white/90 hover:bg-white text-neutral-700 shadow-md backdrop-blur-xs transition-transform active:scale-90 cursor-pointer z-10"
+                aria-label={isFav ? 'Remove from wishlist' : 'Add to wishlist'}
               >
-                <Heart className="w-5 h-5" />
+                <Heart
+                  className={`w-5 h-5 transition-colors ${
+                    isFav ? 'fill-[#ff4d6d] text-[#ff4d6d]' : 'text-neutral-600 hover:text-rose-500'
+                  }`}
+                />
               </button>
             </div>
           </div>
@@ -344,6 +386,7 @@ export default function ProductDetailPage() {
               <div className="flex items-center gap-3 pt-4">
                 <button
                   type="button"
+                  onClick={() => handleAddToCart(false)}
                   className={`flex-1 py-3.5 px-6 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-all active:scale-98 cursor-pointer ${
                     isJewellery
                       ? 'bg-[#0b3b2c] text-[#e5c07b] hover:bg-[#07291f]'
@@ -356,6 +399,7 @@ export default function ProductDetailPage() {
 
                 <button
                   type="button"
+                  onClick={() => handleAddToCart(true)}
                   className="flex-1 py-3.5 px-6 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 bg-neutral-900 text-white hover:bg-neutral-800 shadow-md transition-all active:scale-98 cursor-pointer"
                 >
                   <Zap className="w-4 h-4" />

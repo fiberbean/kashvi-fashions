@@ -21,7 +21,9 @@ import {
 import { supabase } from '../../lib/supabase';
 import HeaderBagButton from '../../components/common/HeaderBagButton';
 import HeaderUserButton from '../../components/common/HeaderUserButton';
+import HeaderHeartButton from '../../components/common/HeaderHeartButton';
 import { useCart } from '../../context/CartContext';
+import { useWishlist } from '../../context/WishlistContext';
 
 interface Product {
   id: string;
@@ -89,14 +91,15 @@ export default function CategoryProductListPage() {
   const navigate = useNavigate();
   const selectedSub = searchParams.get('sub');
 
-  const { addToCart } = useCart();
+  const { addToCart, openCart } = useCart();
+  const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [categoryName, setCategoryName] = useState<string>('');
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
-  
-  // వేర్వేరు లోడింగ్ స్టేట్స్ (ఒకదానిపై ఒకటి ఆగకుండా ఉండటానికి)
+
+  // వేర్వేరు లోడింగ్ స్టేట్స్
   const [headerLoading, setHeaderLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'featured' | 'price-asc' | 'price-desc'>('featured');
@@ -171,7 +174,7 @@ export default function CategoryProductListPage() {
           .from('sub_categories')
           .select('id, name, category_id, category_name')
           .eq('active', true);
-        
+
         const filtered = (data || []).filter((sub) => {
           const mId = activeCatId && String(sub.category_id).trim() === String(activeCatId).trim();
           const mName =
@@ -193,7 +196,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 2. ప్రొడక్ట్స్‌ను లోడ్ చేయడం (షెడ్యూల్డ్ యానిమేషన్ కోసం)
+  // 2. ప్రొడక్ట్స్‌ను లోడ్ చేయడం
   useEffect(() => {
     let isCurrent = true;
 
@@ -295,6 +298,31 @@ export default function CategoryProductListPage() {
     return ['32B', '34B', '36B', '38B'];
   };
 
+  // Wishlist Toggle Handler
+  const handleWishlistToggle = (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    const pid = String(product.id);
+    if (isInWishlist(pid)) {
+      removeFromWishlist(pid);
+    } else {
+      const pImage = getProductImage(product.images);
+      const colors = getProductColors(product);
+      const sizes = getProductSizes(product);
+
+      addToWishlist({
+        id: pid,
+        name: product.name,
+        price: product.selling_price || 0,
+        originalPrice: product.mrp || undefined,
+        image: pImage,
+        color: colors[0],
+        size: sizes[0],
+        fabric: product.fabric || undefined,
+        department,
+      });
+    }
+  };
+
   const handleOpenPopModel = (product: Product) => {
     setActiveProduct(product);
     setComboList([]);
@@ -392,7 +420,7 @@ export default function CategoryProductListPage() {
     setComboList((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const handleFinalCheckoutAction = () => {
+  const handleFinalCheckoutAction = (shouldOpenCart: boolean = false) => {
     if (!activeProduct) return;
 
     if (comboList.length > 0) {
@@ -427,6 +455,9 @@ export default function CategoryProductListPage() {
     }
 
     setActiveProduct(null);
+    if (shouldOpenCart) {
+      openCart();
+    }
   };
 
   useEffect(() => {
@@ -502,15 +533,7 @@ export default function CategoryProductListPage() {
 
           <div className="flex items-center gap-3">
             <HeaderUserButton isJewellery={isJewellery} />
-            <button
-              type="button"
-              aria-label="Wishlist"
-              className={`p-2 rounded-full transition-colors text-neutral-700 ${
-                isJewellery ? 'hover:text-[#0b3b2c] hover:bg-[#f4f7f5]' : 'hover:text-[#ff4d6d] hover:bg-[#fff0f3]'
-              }`}
-            >
-              <Heart className="w-5 h-5" />
-            </button>
+            <HeaderHeartButton isJewellery={isJewellery} />
             <HeaderBagButton isJewellery={isJewellery} />
           </div>
         </div>
@@ -575,7 +598,7 @@ export default function CategoryProductListPage() {
             </span>
           </div>
 
-          {/* Sub-category Filter Pills (Relaxing Placeholder Shimmer) */}
+          {/* Sub-category Filter Pills */}
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-2 min-h-[38px]">
             {headerLoading && subCategories.length === 0 ? (
               <>
@@ -634,10 +657,9 @@ export default function CategoryProductListPage() {
         </div>
       </div>
 
-      {/* 4. Products Grid with 1-by-1 Staggered Animation & Shimmer */}
+      {/* 4. Products Grid */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         {productsLoading ? (
-          /* Shimmer Placeholders (కస్టమర్‌కు లోడింగ్ టైమ్ అనిపించకుండా ప్రీమియంగా కనిపించే కార్డ్స్) */
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">
             {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
               <div
@@ -666,14 +688,13 @@ export default function CategoryProductListPage() {
             </Link>
           </div>
         ) : (
-          /* ఒక్కొక్క ప్రొడక్ట్ కార్డ్ వరుసగా తేలుతూ వచ్చే 1-by-1 Staggered Entrance Animation */
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 sm:gap-6">
             {sortedProducts.map((product, index) => {
               const currentPrice = product.selling_price || 0;
               const originalPrice = product.mrp && product.mrp > currentPrice ? product.mrp : null;
               const imageUrl = getProductImage(product.images);
+              const isFav = isInWishlist(String(product.id));
 
-              // ప్రతి కార్డ్‌కు 50ms ఆలస్యంతో ఒక్కొక్కటిగా లోడ్ అయ్యే యానిమేషన్ స్టైల్
               const staggerDelay = `${Math.min(index * 60, 600)}ms`;
 
               return (
@@ -693,14 +714,19 @@ export default function CategoryProductListPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       loading="lazy"
                     />
+
+                    {/* Active Wishlist Toggle Button */}
                     <button
                       type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                      }}
-                      className="absolute top-2.5 right-2.5 p-2 rounded-full bg-white/80 hover:bg-white text-neutral-600 hover:text-rose-500 transition-colors shadow-2xs backdrop-blur-xs cursor-pointer z-10"
+                      aria-label={isFav ? 'Remove from Wishlist' : 'Add to Wishlist'}
+                      onClick={(e) => handleWishlistToggle(e, product)}
+                      className="absolute top-2.5 right-2.5 p-2 rounded-full bg-white/90 hover:bg-white text-neutral-600 transition-all shadow-2xs backdrop-blur-xs cursor-pointer z-10 active:scale-90"
                     >
-                      <Heart className="w-4 h-4" />
+                      <Heart
+                        className={`w-4 h-4 transition-colors ${
+                          isFav ? 'fill-[#ff4d6d] text-[#ff4d6d]' : 'text-neutral-500 hover:text-neutral-900'
+                        }`}
+                      />
                     </button>
 
                     {originalPrice && (
@@ -774,7 +800,7 @@ export default function CategoryProductListPage() {
             </button>
 
             <div className="overflow-y-auto p-4 sm:p-8 grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-              {/* Left Column: Fixed Aspect Ratio Image with Thumbnails */}
+              {/* Left Column */}
               <div className="md:col-span-6 flex flex-col-reverse sm:flex-row gap-3 items-start">
                 {modalImages.length > 1 && (
                   <div className="flex sm:flex-col gap-2 overflow-x-auto sm:overflow-y-auto no-scrollbar max-h-[440px]">
@@ -814,7 +840,7 @@ export default function CategoryProductListPage() {
                 </div>
               </div>
 
-              {/* Right Column: Information & Selection Flow */}
+              {/* Right Column */}
               <div className="md:col-span-6 flex flex-col justify-between space-y-4">
                 <div className="space-y-4">
                   <div>
@@ -940,7 +966,7 @@ export default function CategoryProductListPage() {
                     </button>
                   </div>
 
-                  {/* 4. Side-by-Side Compact Mini Capsules Grid */}
+                  {/* 4. Variants Grid */}
                   {comboList.length > 0 && (
                     <div className="space-y-2 pt-1">
                       <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider block">
@@ -964,7 +990,7 @@ export default function CategoryProductListPage() {
                                 <span
                                   className={`w-2 h-2 rounded-full ${
                                     light ? 'bg-neutral-900/60' : 'bg-white/80'
-                                  } shrink-0`}
+                                  }`}
                                 />
                                 <span className="font-black text-xs shrink-0">{item.size}</span>
                                 <span className="font-semibold opacity-90 truncate capitalize text-[10px]">
@@ -1040,7 +1066,7 @@ export default function CategoryProductListPage() {
                   <div className="flex items-center gap-3 pt-2">
                     <button
                       type="button"
-                      onClick={handleFinalCheckoutAction}
+                      onClick={() => handleFinalCheckoutAction(false)}
                       className={`flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer ${
                         isJewellery
                           ? 'border-[#0b3b2c] text-[#0b3b2c] hover:bg-[#0b3b2c]/10'
@@ -1053,23 +1079,13 @@ export default function CategoryProductListPage() {
 
                     <button
                       type="button"
-                      onClick={handleFinalCheckoutAction}
+                      onClick={() => handleFinalCheckoutAction(true)}
                       className={`relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden group ${
                         isJewellery
                           ? 'bg-gradient-to-r from-[#0b3b2c] via-[#14532d] to-[#0b3b2c] shadow-[#0b3b2c]/40 hover:shadow-emerald-500/50 ring-2 ring-[#e5c07b]/60'
                           : 'bg-gradient-to-r from-[#ff4d6d] via-[#e63956] to-[#ff2a55] shadow-[#ff4d6d]/40 hover:shadow-rose-500/60 ring-2 ring-rose-300/60'
                       }`}
                     >
-                      <span
-                        className={`absolute inset-0 rounded-2xl animate-pulse opacity-75 blur-xs ${
-                          isJewellery
-                            ? 'bg-gradient-to-r from-[#e5c07b]/20 to-emerald-400/30'
-                            : 'bg-gradient-to-r from-white/20 to-rose-300/30'
-                        }`}
-                      />
-
-                      <span className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/35 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
-
                       <Zap className="w-4 h-4 fill-current animate-bounce relative z-10 shrink-0" />
                       <span className="relative z-10 tracking-widest font-black drop-shadow-xs">
                         Instant Checkout
