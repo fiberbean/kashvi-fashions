@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Plus,
@@ -17,16 +18,15 @@ import {
   Briefcase,
   Bookmark,
   Loader2,
-  Sparkles,
   PackageCheck,
   XCircle,
   Clock3,
   RotateCcw,
-  ExternalLink,
   MessageCircle,
 } from 'lucide-react';
 import { load } from '@cashfreepayments/cashfree-js';
 import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 
 interface Address {
@@ -101,6 +101,8 @@ export default function CartDrawer() {
     totalDue,
   } = useCart();
 
+  const { user, customer } = useAuth();
+
   const [activeStep, setActiveStep] = useState<'cart' | 'address' | 'order_result'>('cart');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [activeGatewayName, setActiveGatewayName] = useState<string>('Cashfree Payments');
@@ -119,10 +121,11 @@ export default function CartDrawer() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [isAddressModalOpen, setIsAddressModalOpen] = useState<boolean>(false);
 
+  // Form Data with User Auto-Fill
   const [formData, setFormData] = useState({
-    name: '',
-    whatsapp_number: '',
-    email: '',
+    name: customer?.name || user?.user_metadata?.name || '',
+    whatsapp_number: customer?.mobile || user?.user_metadata?.whatsapp_number || '',
+    email: customer?.email || user?.email || '',
     door_no: '',
     building_name: '',
     street: '',
@@ -165,6 +168,7 @@ export default function CartDrawer() {
     }
   }, [isCartOpen]);
 
+  // Sync Default Address
   useEffect(() => {
     if (savedAddresses.length > 0) {
       const targetId = selectedAddressId || savedAddresses[0].id;
@@ -178,6 +182,7 @@ export default function CartDrawer() {
     }
   }, [savedAddresses, selectedAddressId, isCartOpen]);
 
+  // Scroll Lock & Escape Key Handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -188,8 +193,14 @@ export default function CartDrawer() {
         }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    if (isCartOpen) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isCartOpen, isAddressModalOpen]);
 
   const handleCloseDrawer = () => {
@@ -206,15 +217,12 @@ export default function CartDrawer() {
     if (cleanPin.length !== 6) return 0;
 
     setPincodeLoading(true);
-
     try {
-      const { data: pinData, error: pinError } = await supabase
+      const { data: pinData } = await supabase
         .from('pincodes')
         .select('pincode, city, state, zone_type, delivery_available')
         .eq('pincode', cleanPin)
         .maybeSingle();
-
-      if (pinError) console.error('Error fetching pincode:', pinError);
 
       const isAvailable = pinData ? pinData.delivery_available !== false : true;
       const detectedZone =
@@ -245,12 +253,12 @@ export default function CartDrawer() {
       }
 
       let rateCard: any = null;
-      const { data: cards, error: rateError } = await supabase
+      const { data: cards } = await supabase
         .from('delivery_rate_cards')
         .select('*')
         .limit(5);
 
-      if (!rateError && cards && cards.length > 0) {
+      if (cards && cards.length > 0) {
         rateCard = cards.find((c: any) => c.active === true || c.active === 'true') || cards[0];
       }
 
@@ -321,9 +329,9 @@ export default function CartDrawer() {
 
   const handleOpenAddAddressModal = () => {
     setFormData({
-      name: '',
-      whatsapp_number: '',
-      email: '',
+      name: customer?.name || user?.user_metadata?.name || '',
+      whatsapp_number: customer?.mobile || user?.user_metadata?.whatsapp_number || '',
+      email: customer?.email || user?.email || '',
       door_no: '',
       building_name: '',
       street: '',
@@ -352,7 +360,7 @@ export default function CartDrawer() {
     }
 
     if (pincodeStatus && pincodeStatus.deliveryAvailable === false) {
-      alert('Sorry, delivery is not available for this pincode. Please check.');
+      alert('Sorry, delivery is not available for this pincode.');
       return;
     }
 
@@ -372,8 +380,13 @@ export default function CartDrawer() {
     setIsAddressModalOpen(false);
   };
 
-  // Payment Result Handlers
-  const handlePaymentSuccess = async (orderId: string, address: Address, amount: number, gwName: string, itemsSnapshot: any[]) => {
+  const handlePaymentSuccess = async (
+    orderId: string,
+    address: Address,
+    amount: number,
+    gwName: string,
+    itemsSnapshot: any[]
+  ) => {
     const fullAddress = `${address.door_no}, ${
       address.building_name ? address.building_name + ', ' : ''
     }${address.street}, ${address.area}, ${address.city}, ${address.state} - ${address.pincode}`;
@@ -401,11 +414,20 @@ export default function CartDrawer() {
     setActiveStep('order_result');
   };
 
-  const handlePaymentFailure = async (orderId: string, errorMsg: string, statusType: 'failed' | 'user_dropped' | 'pending' = 'failed') => {
+  const handlePaymentFailure = async (
+    orderId: string,
+    errorMsg: string,
+    statusType: 'failed' | 'user_dropped' | 'pending' = 'failed'
+  ) => {
     await supabase
       .from('orders')
       .update({
-        payment_status: statusType === 'user_dropped' ? 'cancelled_by_user' : statusType === 'pending' ? 'payment_pending' : 'payment_failed',
+        payment_status:
+          statusType === 'user_dropped'
+            ? 'cancelled_by_user'
+            : statusType === 'pending'
+            ? 'payment_pending'
+            : 'payment_failed',
         order_status: statusType === 'pending' ? 'payment_pending' : 'cancelled',
         history: [
           {
@@ -427,10 +449,10 @@ export default function CartDrawer() {
           : 'Payment Failed',
       message:
         statusType === 'user_dropped'
-          ? 'You cancelled the transaction before completion. No money was deducted.'
+          ? 'You closed or aborted the payment window. No money was deducted.'
           : statusType === 'pending'
-          ? 'We are waiting for confirmation from your bank/UPI app. If debited, your order will confirm automatically.'
-          : errorMsg || 'Your transaction could not be processed by the bank. Please try again.',
+          ? 'Waiting for bank/UPI confirmation. If money was debited, your order will confirm automatically.'
+          : errorMsg || 'Transaction declined by your bank or payment gateway. Please try again.',
       orderId,
     });
 
@@ -457,7 +479,9 @@ export default function CartDrawer() {
         currentAddress.state
       } - ${currentAddress.pincode}`;
       const resolvedEmail =
-        currentAddress.email?.trim() || `${currentAddress.whatsapp_number}@kashvifashions.local`;
+        currentAddress.email?.trim() ||
+        user?.email?.trim() ||
+        `${currentAddress.whatsapp_number}@kashvifashions.local`;
 
       // Call Edge Function
       const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
@@ -483,7 +507,7 @@ export default function CartDrawer() {
       const activeGateway = sessionData.gateway;
       const usedGatewayName = sessionData.gatewayName || 'Cashfree Payments';
 
-      // Insert Initial Order in DB
+      // Insert order in DB
       const orderPayload = {
         id: orderId,
         customer_id: currentAddress.whatsapp_number,
@@ -527,7 +551,7 @@ export default function CartDrawer() {
 
       await supabase.from('orders').insert([orderPayload]);
 
-      // Cashfree Checkout
+      // Cashfree Checkout Flow
       if (activeGateway === 'cashfree') {
         const cashfreeMode = sessionData.environment === 'production' ? 'production' : 'sandbox';
         const cashfree = await load({ mode: cashfreeMode });
@@ -538,10 +562,13 @@ export default function CartDrawer() {
             redirectTarget: '_modal',
           })
           .then(async (result: any) => {
-            // Cashfree Return Lifecycle Handling
             if (result.error) {
               const errMsg = result.error.message || 'Transaction failed or aborted';
-              if (errMsg.toLowerCase().includes('user dropped') || errMsg.toLowerCase().includes('cancelled') || errMsg.toLowerCase().includes('closed')) {
+              if (
+                errMsg.toLowerCase().includes('user dropped') ||
+                errMsg.toLowerCase().includes('cancelled') ||
+                errMsg.toLowerCase().includes('closed')
+              ) {
                 await handlePaymentFailure(orderId, errMsg, 'user_dropped');
               } else {
                 await handlePaymentFailure(orderId, errMsg, 'failed');
@@ -564,53 +591,30 @@ export default function CartDrawer() {
                   })
                   .eq('id', orderId);
 
-                await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName, cartSnapshot);
+                await handlePaymentSuccess(
+                  orderId,
+                  currentAddress,
+                  totalDue,
+                  usedGatewayName,
+                  cartSnapshot
+                );
               } else if (paymentStatus === 'PENDING') {
                 await handlePaymentFailure(orderId, 'Payment is processing at bank', 'pending');
               } else {
-                await handlePaymentFailure(orderId, `Payment failed with status: ${paymentStatus}`, 'failed');
+                await handlePaymentFailure(
+                  orderId,
+                  `Payment failed with status: ${paymentStatus}`,
+                  'failed'
+                );
               }
             } else {
-              // Dismissed without payment details
-              await handlePaymentFailure(orderId, 'Payment window closed without completion', 'user_dropped');
+              await handlePaymentFailure(
+                orderId,
+                'Payment window closed without completion',
+                'user_dropped'
+              );
             }
           });
-      } else if (activeGateway === 'razorpay') {
-        const options = {
-          key: sessionData.keyId,
-          amount: Math.round(totalDue * 100),
-          currency: 'INR',
-          name: 'Kashvi Fashions',
-          description: `Order #${orderId}`,
-          order_id: sessionData.razorpayOrderId,
-          handler: async (response: any) => {
-            await supabase
-              .from('orders')
-              .update({
-                payment_status: 'paid',
-                order_status: 'confirmed',
-                payment_reference: response.razorpay_payment_id,
-                payment_time: new Date().toISOString(),
-                payment_verified: true,
-              })
-              .eq('id', orderId);
-
-            await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName, cartSnapshot);
-          },
-          modal: {
-            ondismiss: async () => {
-              await handlePaymentFailure(orderId, 'Payment popup closed by customer', 'user_dropped');
-            },
-          },
-          prefill: {
-            name: currentAddress.name,
-            contact: currentAddress.whatsapp_number,
-            email: resolvedEmail,
-          },
-          theme: { color: '#0b3b2c' },
-        };
-        const rzp = new (window as any).Razorpay(options);
-        rzp.open();
       } else {
         alert(`${usedGatewayName} is active but checkout handling is in progress.`);
       }
@@ -634,12 +638,11 @@ export default function CartDrawer() {
 
   if (!isCartOpen) return null;
 
-  return (
+  const drawerContent = (
     <div
       onClick={handleCloseDrawer}
-      className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-end bg-black/65 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
     >
-      {/* Slide-over Luxury Drawer Sheet */}
       <div
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-300 border-l border-neutral-100"
@@ -696,7 +699,6 @@ export default function CartDrawer() {
           {/* STEP 1: PAYMENT RESULT (SUCCESS / FAILED / USER DROPPED / PENDING) */}
           {activeStep === 'order_result' && paymentResult && (
             <div className="space-y-5 animate-in zoom-in-95 duration-200">
-              {/* Status Header Banner */}
               <div
                 className={`rounded-3xl p-6 text-center border relative overflow-hidden ${
                   paymentResult.type === 'success'
@@ -769,7 +771,6 @@ export default function CartDrawer() {
               {/* SUCCESS STATE: ORDER DETAILS & PRODUCT ITEMS BREAKDOWN */}
               {paymentResult.type === 'success' && confirmedOrder && (
                 <div className="space-y-4">
-                  {/* Products Snapshot Card */}
                   <div className="border border-neutral-200 rounded-3xl p-4 bg-neutral-50/50 space-y-3">
                     <div className="flex items-center justify-between border-b border-neutral-200/80 pb-2">
                       <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
@@ -824,7 +825,6 @@ export default function CartDrawer() {
                       })}
                     </div>
 
-                    {/* Price Breakdown */}
                     <div className="pt-2 border-t border-neutral-200/80 space-y-1 text-xs text-neutral-600">
                       <div className="flex justify-between">
                         <span>Items Subtotal</span>
@@ -836,18 +836,20 @@ export default function CartDrawer() {
                       </div>
                       <div className="flex justify-between font-bold text-neutral-900 text-sm pt-1 border-t border-neutral-200">
                         <span>Total Paid</span>
-                        <span className="font-serif">₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}</span>
+                        <span className="font-serif">
+                          ₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}
+                        </span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Delivery Address Card */}
                   <div className="border border-neutral-200 rounded-2xl p-3.5 bg-white text-xs space-y-1">
                     <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
                       Delivery Destination
                     </span>
                     <p className="font-bold text-neutral-900 text-sm">
-                      {confirmedOrder.customerName} • <span className="font-mono text-xs">{confirmedOrder.customerPhone}</span>
+                      {confirmedOrder.customerName} •{' '}
+                      <span className="font-mono text-xs">{confirmedOrder.customerPhone}</span>
                     </p>
                     <p className="text-neutral-600 leading-relaxed pt-0.5">
                       {confirmedOrder.deliveryAddress}
@@ -856,7 +858,7 @@ export default function CartDrawer() {
                 </div>
               )}
 
-              {/* Action Buttons for Result States */}
+              {/* Action Buttons */}
               <div className="space-y-2 pt-2">
                 {paymentResult.type === 'success' ? (
                   <>
@@ -910,7 +912,9 @@ export default function CartDrawer() {
                     <ShoppingBag className="w-9 h-9 stroke-1" />
                   </div>
                   <div>
-                    <h3 className="font-serif font-bold text-neutral-800 text-lg">Your Bag is Empty</h3>
+                    <h3 className="font-serif font-bold text-neutral-800 text-lg">
+                      Your Bag is Empty
+                    </h3>
                     <p className="text-xs text-neutral-400 mt-1 max-w-xs">
                       Explore our handwoven sarees, designer bridal sets and temple jewellery.
                     </p>
@@ -1089,7 +1093,7 @@ export default function CartDrawer() {
                               </span>
                             </div>
 
-                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">
                               WA: {addr.whatsapp_number}
                             </span>
                           </div>
@@ -1101,7 +1105,8 @@ export default function CartDrawer() {
 
                           <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
                             <p className="font-semibold text-neutral-900">
-                              {addr.city}, {addr.state} — <span className="font-bold">{addr.pincode}</span>
+                              {addr.city}, {addr.state} —{' '}
+                              <span className="font-bold">{addr.pincode}</span>
                             </p>
                             {isSelected && pincodeStatus?.zoneType && (
                               <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-md">
@@ -1119,13 +1124,15 @@ export default function CartDrawer() {
           )}
         </div>
 
-        {/* Drawer Sticky Checkout Bottom Bar */}
+        {/* Checkout Bottom Bar */}
         {cart.length > 0 && activeStep !== 'order_result' && (
           <div className="p-5 border-t border-neutral-100 bg-white/95 backdrop-blur-md space-y-3.5 shadow-lg">
             <div className="space-y-1.5 text-xs text-neutral-600">
               <div className="flex justify-between">
                 <span>Items Subtotal</span>
-                <span className="font-bold text-neutral-900">₹{subtotal.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-neutral-900">
+                  ₹{subtotal.toLocaleString('en-IN')}
+                </span>
               </div>
 
               <div className="flex justify-between items-center">
@@ -1183,11 +1190,11 @@ export default function CartDrawer() {
         )}
       </div>
 
-      {/* Add Address Modal */}
+      {/* Add Address Form Modal */}
       {isAddressModalOpen && (
         <div
           onClick={() => setIsAddressModalOpen(false)}
-          className="fixed inset-0 z-60 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+          className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -1447,4 +1454,6 @@ export default function CartDrawer() {
       )}
     </div>
   );
+
+  return createPortal(drawerContent, document.body);
 }
