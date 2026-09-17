@@ -10,6 +10,8 @@ import HeaderUserButton from './components/common/HeaderUserButton';
 import CategoryProductListPage from './modules/products/CategoryProductListPage';
 import ProductDetailPage from './modules/products/ProductDetailPage';
 import { CartProvider } from './context/CartContext';
+import { AuthProvider } from './context/AuthContext';
+import AuthModal from './components/auth/AuthModal';
 import CartDrawer from './components/common/CartDrawer';
 
 function HomePageContent() {
@@ -186,17 +188,18 @@ function HomePageContent() {
 
 export default function App() {
   return (
-    <CartProvider>
-      <Router>
-        <Routes>
-          {/* Storefront Customer Routes */}
-          <Route path="/" element={<HomePageContent />} />
-          <Route path="/category/:slug" element={<CategoryProductListPage />} />
-          <Route path="/product/:id" element={<ProductDetailPage />} />
-        </Routes>
-        {/* Global Slide-Over Cart Drawer */}
-        <CartDrawer />
-      </Router>
-    </CartProvider>
+    <AuthProvider>
+      <CartProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<HomePageContent />} />
+            <Route path="/category/:slug" element={<CategoryProductListPage />} />
+            <Route path="/product/:id" element={<ProductDetailPage />} />
+          </Routes>
+          <CartDrawer />
+          <AuthModal />
+        </Router>
+      </CartProvider>
+    </AuthProvider>
   );
 }

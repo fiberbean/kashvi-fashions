@@ -19,6 +19,11 @@ import {
   Loader2,
   Sparkles,
   PackageCheck,
+  XCircle,
+  Clock3,
+  RotateCcw,
+  ExternalLink,
+  MessageCircle,
 } from 'lucide-react';
 import { load } from '@cashfreepayments/cashfree-js';
 import { useCart } from '../../context/CartContext';
@@ -45,11 +50,20 @@ interface Address {
 interface ConfirmedOrderInfo {
   orderId: string;
   totalAmount: number;
+  subtotal: number;
+  shippingCharge: number;
   customerName: string;
   customerPhone: string;
   deliveryAddress: string;
   gateway: string;
-  itemsCount: number;
+  items: any[];
+}
+
+interface PaymentStatusState {
+  type: 'success' | 'failed' | 'user_dropped' | 'pending';
+  title: string;
+  message: string;
+  orderId?: string;
 }
 
 const COLOR_HEX_MAP: Record<string, string> = {
@@ -87,10 +101,11 @@ export default function CartDrawer() {
     totalDue,
   } = useCart();
 
-  const [activeStep, setActiveStep] = useState<'cart' | 'address' | 'success'>('cart');
+  const [activeStep, setActiveStep] = useState<'cart' | 'address' | 'order_result'>('cart');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [activeGatewayName, setActiveGatewayName] = useState<string>('Online Payment');
+  const [activeGatewayName, setActiveGatewayName] = useState<string>('Cashfree Payments');
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderInfo | null>(null);
+  const [paymentResult, setPaymentResult] = useState<PaymentStatusState | null>(null);
 
   const [savedAddresses, setSavedAddresses] = useState<Address[]>(() => {
     try {
@@ -127,7 +142,7 @@ export default function CartDrawer() {
     message?: string;
   } | null>(null);
 
-  // Read active gateway from DB
+  // Active Gateway fetch
   useEffect(() => {
     const fetchActiveGateway = async () => {
       try {
@@ -178,9 +193,10 @@ export default function CartDrawer() {
   }, [isCartOpen, isAddressModalOpen]);
 
   const handleCloseDrawer = () => {
-    if (activeStep === 'success') {
+    if (activeStep === 'order_result') {
       setActiveStep('cart');
       setConfirmedOrder(null);
+      setPaymentResult(null);
     }
     closeCart();
   };
@@ -356,7 +372,8 @@ export default function CartDrawer() {
     setIsAddressModalOpen(false);
   };
 
-  const handlePaymentSuccess = async (orderId: string, address: Address, amount: number, gwName: string) => {
+  // Payment Result Handlers
+  const handlePaymentSuccess = async (orderId: string, address: Address, amount: number, gwName: string, itemsSnapshot: any[]) => {
     const fullAddress = `${address.door_no}, ${
       address.building_name ? address.building_name + ', ' : ''
     }${address.street}, ${address.area}, ${address.city}, ${address.state} - ${address.pincode}`;
@@ -364,15 +381,60 @@ export default function CartDrawer() {
     setConfirmedOrder({
       orderId,
       totalAmount: amount,
+      subtotal,
+      shippingCharge,
       customerName: address.name,
       customerPhone: address.whatsapp_number,
       deliveryAddress: fullAddress,
       gateway: gwName,
-      itemsCount: totalItems,
+      items: [...itemsSnapshot],
+    });
+
+    setPaymentResult({
+      type: 'success',
+      title: 'Thank You for Shopping!',
+      message: 'Your payment was successful and your heirloom order is confirmed.',
+      orderId,
     });
 
     clearCart();
-    setActiveStep('success');
+    setActiveStep('order_result');
+  };
+
+  const handlePaymentFailure = async (orderId: string, errorMsg: string, statusType: 'failed' | 'user_dropped' | 'pending' = 'failed') => {
+    await supabase
+      .from('orders')
+      .update({
+        payment_status: statusType === 'user_dropped' ? 'cancelled_by_user' : statusType === 'pending' ? 'payment_pending' : 'payment_failed',
+        order_status: statusType === 'pending' ? 'payment_pending' : 'cancelled',
+        history: [
+          {
+            status: statusType,
+            time: new Date().toISOString(),
+            note: errorMsg,
+          },
+        ],
+      })
+      .eq('id', orderId);
+
+    setPaymentResult({
+      type: statusType,
+      title:
+        statusType === 'user_dropped'
+          ? 'Payment Cancelled'
+          : statusType === 'pending'
+          ? 'Payment Verification Pending'
+          : 'Payment Failed',
+      message:
+        statusType === 'user_dropped'
+          ? 'You cancelled the transaction before completion. No money was deducted.'
+          : statusType === 'pending'
+          ? 'We are waiting for confirmation from your bank/UPI app. If debited, your order will confirm automatically.'
+          : errorMsg || 'Your transaction could not be processed by the bank. Please try again.',
+      orderId,
+    });
+
+    setActiveStep('order_result');
   };
 
   const handleInstantCheckout = async () => {
@@ -385,6 +447,8 @@ export default function CartDrawer() {
     if (!currentAddress) return;
 
     setIsCheckingOut(true);
+    const cartSnapshot = [...cart];
+
     try {
       const orderId = `KF_${Date.now()}`;
       const fullAddressText = `${currentAddress.door_no}, ${
@@ -395,7 +459,7 @@ export default function CartDrawer() {
       const resolvedEmail =
         currentAddress.email?.trim() || `${currentAddress.whatsapp_number}@kashvifashions.local`;
 
-      // Edge Function Call
+      // Call Edge Function
       const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
         'create-payment-order',
         {
@@ -411,7 +475,7 @@ export default function CartDrawer() {
 
       if (sessionError || !sessionData) {
         console.error('Payment initialization error:', sessionError || sessionData);
-        alert(sessionData?.error || 'Could not connect to the active Payment Gateway.');
+        alert(sessionData?.error || 'Could not connect to the Payment Gateway.');
         setIsCheckingOut(false);
         return;
       }
@@ -419,7 +483,7 @@ export default function CartDrawer() {
       const activeGateway = sessionData.gateway;
       const usedGatewayName = sessionData.gatewayName || 'Cashfree Payments';
 
-      // Insert order into DB
+      // Insert Initial Order in DB
       const orderPayload = {
         id: orderId,
         customer_id: currentAddress.whatsapp_number,
@@ -436,7 +500,7 @@ export default function CartDrawer() {
         delivery_fee: shippingCharge,
         total_amount: totalDue,
         total: totalDue,
-        items: cart,
+        items: cartSnapshot,
         shipping: {
           address: fullAddressText,
           pincode: currentAddress.pincode,
@@ -456,14 +520,14 @@ export default function CartDrawer() {
           {
             status: 'order_initiated',
             time: new Date().toISOString(),
-            note: `Order initiated using active gateway: ${usedGatewayName}`,
+            note: `Order initiated using gateway: ${usedGatewayName}`,
           },
         ],
       };
 
       await supabase.from('orders').insert([orderPayload]);
 
-      // Cashfree Checkout Flow
+      // Cashfree Checkout
       if (activeGateway === 'cashfree') {
         const cashfreeMode = sessionData.environment === 'production' ? 'production' : 'sandbox';
         const cashfree = await load({ mode: cashfreeMode });
@@ -474,22 +538,41 @@ export default function CartDrawer() {
             redirectTarget: '_modal',
           })
           .then(async (result: any) => {
+            // Cashfree Return Lifecycle Handling
             if (result.error) {
-              alert(`Payment Failed or Cancelled: ${result.error.message}`);
+              const errMsg = result.error.message || 'Transaction failed or aborted';
+              if (errMsg.toLowerCase().includes('user dropped') || errMsg.toLowerCase().includes('cancelled') || errMsg.toLowerCase().includes('closed')) {
+                await handlePaymentFailure(orderId, errMsg, 'user_dropped');
+              } else {
+                await handlePaymentFailure(orderId, errMsg, 'failed');
+              }
+              return;
             }
-            if (result.paymentDetails) {
-              await supabase
-                .from('orders')
-                .update({
-                  payment_status: 'paid',
-                  order_status: 'confirmed',
-                  payment_reference: sessionData.orderId,
-                  payment_time: new Date().toISOString(),
-                  payment_verified: true,
-                })
-                .eq('id', orderId);
 
-              await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName);
+            if (result.paymentDetails) {
+              const paymentStatus = (result.paymentDetails.payment_status || 'SUCCESS').toUpperCase();
+
+              if (paymentStatus === 'SUCCESS') {
+                await supabase
+                  .from('orders')
+                  .update({
+                    payment_status: 'paid',
+                    order_status: 'confirmed',
+                    payment_reference: sessionData.orderId,
+                    payment_time: new Date().toISOString(),
+                    payment_verified: true,
+                  })
+                  .eq('id', orderId);
+
+                await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName, cartSnapshot);
+              } else if (paymentStatus === 'PENDING') {
+                await handlePaymentFailure(orderId, 'Payment is processing at bank', 'pending');
+              } else {
+                await handlePaymentFailure(orderId, `Payment failed with status: ${paymentStatus}`, 'failed');
+              }
+            } else {
+              // Dismissed without payment details
+              await handlePaymentFailure(orderId, 'Payment window closed without completion', 'user_dropped');
             }
           });
       } else if (activeGateway === 'razorpay') {
@@ -512,7 +595,12 @@ export default function CartDrawer() {
               })
               .eq('id', orderId);
 
-            await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName);
+            await handlePaymentSuccess(orderId, currentAddress, totalDue, usedGatewayName, cartSnapshot);
+          },
+          modal: {
+            ondismiss: async () => {
+              await handlePaymentFailure(orderId, 'Payment popup closed by customer', 'user_dropped');
+            },
           },
           prefill: {
             name: currentAddress.name,
@@ -536,7 +624,6 @@ export default function CartDrawer() {
 
   const handleNavigateToOrders = () => {
     handleCloseDrawer();
-    // యూజర్ ఐకాన్ క్లిక్ చేసినప్పుడు ట్రిగ్గర్ అయ్యే ఈవెంట్ లేదా మోడల్
     const userBtn = document.querySelector('[aria-label="User Account"]') as HTMLButtonElement | null;
     if (userBtn) {
       userBtn.click();
@@ -550,160 +637,294 @@ export default function CartDrawer() {
   return (
     <div
       onClick={handleCloseDrawer}
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/65 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-end bg-black/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in"
     >
+      {/* Slide-over Luxury Drawer Sheet */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col"
+        className="relative w-full max-w-lg h-full bg-white shadow-2xl flex flex-col justify-between overflow-hidden animate-in slide-in-from-right duration-300 border-l border-neutral-100"
       >
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-white sticky top-0 z-20">
-          <div className="flex items-center gap-2">
+        {/* Drawer Header */}
+        <div className="px-5 py-4 border-b border-neutral-100 flex items-center justify-between bg-white/95 backdrop-blur-md sticky top-0 z-20">
+          <div className="flex items-center gap-2.5">
             {activeStep === 'address' && (
               <button
                 type="button"
                 onClick={() => setActiveStep('cart')}
-                className="p-1 -ml-1 rounded-full hover:bg-neutral-100 text-neutral-600 transition-colors cursor-pointer"
+                className="p-1.5 -ml-1.5 rounded-full hover:bg-neutral-100 text-neutral-600 transition-colors cursor-pointer"
                 aria-label="Back to Cart"
               >
                 <ChevronLeft className="w-5 h-5" />
               </button>
             )}
-            <div className="flex items-center gap-2">
-              {activeStep === 'success' ? (
-                <PackageCheck className="w-5 h-5 text-emerald-600" />
-              ) : (
-                <ShoppingBag className="w-5 h-5 text-neutral-900" />
-              )}
-              <h2 className="text-base sm:text-lg font-serif font-bold text-neutral-900">
+
+            <div>
+              <h2 className="text-base sm:text-lg font-serif font-bold text-neutral-900 leading-tight">
                 {activeStep === 'cart'
                   ? 'Your Shopping Bag'
                   : activeStep === 'address'
-                  ? 'Select Delivery Address'
-                  : 'Order Confirmation'}
+                  ? 'Delivery Address'
+                  : paymentResult?.type === 'success'
+                  ? 'Order Confirmed'
+                  : 'Transaction Status'}
               </h2>
+              <p className="text-[10px] uppercase tracking-widest text-neutral-400 font-semibold">
+                Kashvi Couture • Kakinada
+              </p>
             </div>
-            {activeStep === 'cart' && totalItems > 0 && (
-              <span className="text-xs bg-neutral-100 text-neutral-700 px-2.5 py-0.5 rounded-full font-bold">
-                {totalItems} items
-              </span>
-            )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleCloseDrawer}
-            className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-600 hover:text-white transition-all cursor-pointer"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {activeStep === 'cart' && totalItems > 0 && (
+              <span className="text-[11px] bg-neutral-900 text-white font-bold px-2.5 py-0.5 rounded-full">
+                {totalItems} {totalItems === 1 ? 'Item' : 'Items'}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleCloseDrawer}
+              className="p-2 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-600 hover:text-white transition-all cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Body Content */}
-        <div className="overflow-y-auto p-5 sm:p-6 space-y-5 flex-1">
-          {activeStep === 'success' && confirmedOrder ? (
-            <div className="py-4 flex flex-col items-center text-center space-y-5 animate-in zoom-in-95 duration-300">
-              {/* Success Badge */}
-              <div className="relative">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white shadow-xl shadow-emerald-500/30">
-                  <CheckCircle2 className="w-11 h-11 stroke-[2.2]" />
+        {/* Drawer Body Scroll Area */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {/* STEP 1: PAYMENT RESULT (SUCCESS / FAILED / USER DROPPED / PENDING) */}
+          {activeStep === 'order_result' && paymentResult && (
+            <div className="space-y-5 animate-in zoom-in-95 duration-200">
+              {/* Status Header Banner */}
+              <div
+                className={`rounded-3xl p-6 text-center border relative overflow-hidden ${
+                  paymentResult.type === 'success'
+                    ? 'bg-gradient-to-b from-emerald-50/70 via-white to-emerald-50/30 border-emerald-200'
+                    : paymentResult.type === 'pending'
+                    ? 'bg-gradient-to-b from-amber-50/70 via-white to-amber-50/30 border-amber-200'
+                    : 'bg-gradient-to-b from-rose-50/70 via-white to-rose-50/30 border-rose-200'
+                }`}
+              >
+                <div className="flex justify-center mb-3">
+                  {paymentResult.type === 'success' && (
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                      <CheckCircle2 className="w-9 h-9 stroke-[2.2]" />
+                    </div>
+                  )}
+                  {paymentResult.type === 'failed' && (
+                    <div className="w-16 h-16 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-500/30">
+                      <XCircle className="w-9 h-9 stroke-[2.2]" />
+                    </div>
+                  )}
+                  {paymentResult.type === 'user_dropped' && (
+                    <div className="w-16 h-16 rounded-2xl bg-neutral-800 text-white flex items-center justify-center shadow-lg shadow-neutral-700/30">
+                      <RotateCcw className="w-9 h-9 stroke-[2]" />
+                    </div>
+                  )}
+                  {paymentResult.type === 'pending' && (
+                    <div className="w-16 h-16 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/30">
+                      <Clock3 className="w-9 h-9 stroke-[2.2]" />
+                    </div>
+                  )}
                 </div>
-                <div className="absolute -top-1 -right-1 bg-amber-400 text-neutral-950 p-1 rounded-full shadow-md">
-                  <Sparkles className="w-4 h-4 fill-amber-300" />
-                </div>
-              </div>
 
-              {/* Title & Thank You */}
-              <div className="space-y-1 max-w-md">
-                <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
-                  Payment Verified & Confirmed
+                <span
+                  className={`text-[10px] font-extrabold uppercase tracking-[0.2em] px-3 py-1 rounded-full border ${
+                    paymentResult.type === 'success'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : paymentResult.type === 'pending'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-rose-100 text-rose-800 border-rose-300'
+                  }`}
+                >
+                  {paymentResult.type === 'success'
+                    ? 'Payment Verified & Confirmed'
+                    : paymentResult.type === 'pending'
+                    ? 'Payment Under Review'
+                    : paymentResult.type === 'user_dropped'
+                    ? 'Checkout Interrupted'
+                    : 'Transaction Declined'}
                 </span>
-                <h3 className="text-xl sm:text-2xl font-serif font-bold text-neutral-950 pt-2">
-                  Thank You for Shopping!
+
+                <h3 className="text-xl font-serif font-bold text-neutral-950 mt-3">
+                  {paymentResult.title}
                 </h3>
-                <p className="text-xs text-neutral-500">
-                  Your order has been placed with <span className="font-semibold text-neutral-800">Kashvi Fashions</span>. An SMS / WhatsApp confirmation will be sent shortly.
+                <p className="text-xs text-neutral-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                  {paymentResult.message}
                 </p>
-              </div>
 
-              {/* Order Details Card */}
-              <div className="w-full bg-neutral-50/80 border border-neutral-200/80 rounded-2xl p-4 text-left space-y-3">
-                <div className="flex items-center justify-between border-b border-neutral-200 pb-2.5">
-                  <div>
-                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Order ID</span>
-                    <span className="text-xs sm:text-sm font-mono font-bold text-neutral-900">{confirmedOrder.orderId}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Amount Paid</span>
-                    <span className="text-sm sm:text-base font-serif font-black text-neutral-950">₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Payment Mode</span>
-                    <span className="font-semibold text-neutral-800">{confirmedOrder.gateway}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">Order Status</span>
-                    <span className="inline-flex items-center gap-1 font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md text-[11px]">
-                      <CheckCircle2 className="w-3 h-3" /> Confirmed
+                {paymentResult.orderId && (
+                  <div className="mt-3.5 inline-block bg-white/80 border border-neutral-200 px-3 py-1.5 rounded-xl">
+                    <span className="text-[10px] text-neutral-400 uppercase tracking-widest block">
+                      Order Reference
+                    </span>
+                    <span className="text-xs font-mono font-bold text-neutral-800">
+                      {paymentResult.orderId}
                     </span>
                   </div>
-                </div>
-
-                <div className="pt-2 border-t border-neutral-200/80">
-                  <span className="text-[10px] text-neutral-400 uppercase tracking-wider block mb-0.5">Shipping To</span>
-                  <p className="text-xs text-neutral-700 font-medium leading-relaxed">
-                    <span className="font-bold text-neutral-900">{confirmedOrder.customerName}</span> ({confirmedOrder.customerPhone})
-                    <br />
-                    {confirmedOrder.deliveryAddress}
-                  </p>
-                </div>
+                )}
               </div>
 
-              {/* Action Buttons */}
-              <div className="w-full space-y-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={handleNavigateToOrders}
-                  className="w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#0b3b2c] via-[#14532d] to-[#0b3b2c] shadow-lg shadow-[#0b3b2c]/30 hover:shadow-emerald-900/40 active:scale-98 transition-all cursor-pointer"
-                >
-                  <PackageCheck className="w-4 h-4" />
-                  <span>My Orders</span>
-                </button>
+              {/* SUCCESS STATE: ORDER DETAILS & PRODUCT ITEMS BREAKDOWN */}
+              {paymentResult.type === 'success' && confirmedOrder && (
+                <div className="space-y-4">
+                  {/* Products Snapshot Card */}
+                  <div className="border border-neutral-200 rounded-3xl p-4 bg-neutral-50/50 space-y-3">
+                    <div className="flex items-center justify-between border-b border-neutral-200/80 pb-2">
+                      <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShoppingBag className="w-3.5 h-3.5 text-neutral-600" />
+                        Ordered Items ({confirmedOrder.items.length})
+                      </span>
+                      <span className="text-xs font-serif font-bold text-neutral-950">
+                        ₹{confirmedOrder.totalAmount.toLocaleString('en-IN')} Paid
+                      </span>
+                    </div>
 
-                <button
-                  type="button"
-                  onClick={handleCloseDrawer}
-                  className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-neutral-300 text-neutral-800 hover:bg-neutral-100 transition-all cursor-pointer"
-                >
-                  Continue Shopping
-                </button>
+                    <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                      {confirmedOrder.items.map((item: any, idx: number) => {
+                        const itemColor = (item?.color || '').toLowerCase();
+                        const hex = COLOR_HEX_MAP[itemColor] || itemColor || '#e83e8c';
+
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-3 bg-white p-2.5 rounded-2xl border border-neutral-100 shadow-2xs"
+                          >
+                            <img
+                              src={item.image}
+                              alt={item.name}
+                              className="w-12 h-14 object-cover object-top rounded-xl border border-neutral-100 shrink-0"
+                            />
+                            <div className="flex-1 min-w-0 text-xs">
+                              <h5 className="font-bold text-neutral-900 truncate leading-tight">
+                                {item.name}
+                              </h5>
+                              <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-500">
+                                {item.color && (
+                                  <span className="flex items-center gap-1">
+                                    <span
+                                      className="w-2 h-2 rounded-full border border-black/10"
+                                      style={{ backgroundColor: hex }}
+                                    />
+                                    <span className="capitalize">{item.color}</span>
+                                  </span>
+                                )}
+                                {item.size && <span>• Size: {item.size}</span>}
+                                <span>• Qty: {item.qty}</span>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-xs font-bold text-neutral-900">
+                                ₹{(item.price * item.qty).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Price Breakdown */}
+                    <div className="pt-2 border-t border-neutral-200/80 space-y-1 text-xs text-neutral-600">
+                      <div className="flex justify-between">
+                        <span>Items Subtotal</span>
+                        <span>₹{confirmedOrder.subtotal.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Delivery Fee</span>
+                        <span>₹{confirmedOrder.shippingCharge}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-neutral-900 text-sm pt-1 border-t border-neutral-200">
+                        <span>Total Paid</span>
+                        <span className="font-serif">₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Delivery Address Card */}
+                  <div className="border border-neutral-200 rounded-2xl p-3.5 bg-white text-xs space-y-1">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                      Delivery Destination
+                    </span>
+                    <p className="font-bold text-neutral-900 text-sm">
+                      {confirmedOrder.customerName} • <span className="font-mono text-xs">{confirmedOrder.customerPhone}</span>
+                    </p>
+                    <p className="text-neutral-600 leading-relaxed pt-0.5">
+                      {confirmedOrder.deliveryAddress}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons for Result States */}
+              <div className="space-y-2 pt-2">
+                {paymentResult.type === 'success' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleNavigateToOrders}
+                      className="w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#0b3b2c] via-[#14532d] to-[#0b3b2c] shadow-lg shadow-[#0b3b2c]/30 hover:opacity-95 active:scale-98 transition-all cursor-pointer"
+                    >
+                      <PackageCheck className="w-4 h-4" />
+                      <span>View in My Orders</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCloseDrawer}
+                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-neutral-200 text-neutral-800 hover:bg-neutral-50 transition-all cursor-pointer"
+                    >
+                      Continue Shopping
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setActiveStep('address')}
+                      className="w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-neutral-900 hover:bg-neutral-800 active:scale-98 transition-all cursor-pointer shadow-md"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Retry Payment</span>
+                    </button>
+                    <a
+                      href="https://wa.me/918686353574?text=Hi%20Kashvi%20Fashions,%20I%20have%20an%20issue%20with%20my%20order"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <span>Support on WhatsApp</span>
+                    </a>
+                  </>
+                )}
               </div>
             </div>
-          ) : activeStep === 'cart' ? (
+          )}
+
+          {/* STEP 2: CART ITEMS OVERVIEW */}
+          {activeStep === 'cart' && (
             <>
               {cart.length === 0 ? (
-                <div className="py-16 flex flex-col items-center justify-center text-center space-y-3">
-                  <div className="w-16 h-16 rounded-full bg-neutral-50 flex items-center justify-center text-neutral-300">
-                    <ShoppingBag className="w-8 h-8" />
+                <div className="py-24 flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-20 h-20 rounded-3xl bg-neutral-50 border border-neutral-100 flex items-center justify-center text-neutral-300">
+                    <ShoppingBag className="w-9 h-9 stroke-1" />
                   </div>
-                  <p className="text-neutral-700 font-serif font-medium text-base">Your bag is empty</p>
-                  <p className="text-xs text-neutral-400 max-w-xs">
-                    Explore our luxury couture and heirloom collections to add your favorites.
-                  </p>
+                  <div>
+                    <h3 className="font-serif font-bold text-neutral-800 text-lg">Your Bag is Empty</h3>
+                    <p className="text-xs text-neutral-400 mt-1 max-w-xs">
+                      Explore our handwoven sarees, designer bridal sets and temple jewellery.
+                    </p>
+                  </div>
                   <button
                     type="button"
                     onClick={closeCart}
-                    className="mt-2 px-6 py-2.5 rounded-full bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all cursor-pointer"
+                    className="px-6 py-2.5 rounded-full bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all cursor-pointer shadow-md"
                   >
-                    Start Shopping
+                    Start Exploring
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-80 overflow-y-auto pr-1 no-scrollbar">
+                <div className="space-y-3">
                   {cart.map((item) => {
                     const itemColor = (item?.color || '').toLowerCase();
                     const hex = COLOR_HEX_MAP[itemColor] || itemColor || '#e83e8c';
@@ -712,17 +933,17 @@ export default function CartDrawer() {
                     return (
                       <div
                         key={item.id}
-                        className="flex gap-3 p-3 rounded-2xl border border-neutral-100 bg-neutral-50/60 shadow-2xs items-center"
+                        className="flex gap-3.5 p-3.5 rounded-3xl border border-neutral-200/80 bg-neutral-50/40 hover:border-neutral-300 transition-all shadow-2xs items-center group"
                       >
-                        <div className="w-16 h-20 rounded-xl overflow-hidden bg-white shrink-0 border border-neutral-100">
+                        <div className="w-18 h-22 rounded-2xl overflow-hidden bg-white shrink-0 border border-neutral-200/60 relative">
                           <img
                             src={item.image}
                             alt={item.name}
-                            className="w-full h-full object-cover object-top"
+                            className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-300"
                           />
                         </div>
 
-                        <div className="flex-1 flex flex-col justify-between min-w-0">
+                        <div className="flex-1 flex flex-col justify-between min-w-0 py-0.5">
                           <div>
                             <div className="flex items-start justify-between gap-2">
                               <h4 className="text-xs font-bold text-neutral-900 truncate leading-snug">
@@ -731,46 +952,44 @@ export default function CartDrawer() {
                               <button
                                 type="button"
                                 onClick={() => removeFromCart(item.id)}
-                                className="text-neutral-400 hover:text-red-600 transition-colors p-0.5 cursor-pointer"
+                                className="text-neutral-400 hover:text-red-600 transition-colors p-1 cursor-pointer"
                                 title="Remove"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
 
-                            <div className="flex items-center gap-1.5 mt-1">
+                            <div className="flex items-center flex-wrap gap-1.5 mt-1.5">
                               {item.color && (
-                                <>
+                                <span className="inline-flex items-center gap-1 bg-white border border-neutral-200 px-2 py-0.5 rounded-md text-[10px] text-neutral-600">
                                   <span
-                                    className="w-2.5 h-2.5 rounded-full border border-black/10 shrink-0"
+                                    className="w-2 h-2 rounded-full border border-black/10 shrink-0"
                                     style={{ backgroundColor: hex }}
                                   />
-                                  <span className="text-[10px] text-neutral-500 capitalize">
-                                    ({item.color})
-                                  </span>
-                                </>
+                                  <span className="capitalize">{item.color}</span>
+                                </span>
                               )}
                               {item.size && (
-                                <span className="text-[11px] font-bold text-neutral-800">
+                                <span className="bg-white border border-neutral-200 px-2 py-0.5 rounded-md text-[10px] font-bold text-neutral-700">
                                   {item.size}
                                 </span>
                               )}
                               {item.fabric && (
-                                <span className="text-[9px] uppercase px-1.5 py-0.2 rounded-full bg-neutral-200 text-neutral-700 font-semibold">
+                                <span className="text-[9px] uppercase px-2 py-0.5 rounded-md bg-neutral-200/80 text-neutral-700 font-semibold">
                                   {item.fabric}
                                 </span>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between pt-2">
-                            <div className="inline-flex items-center gap-1 bg-white border border-neutral-200 rounded-full px-2 py-0.5 shadow-2xs">
+                          <div className="flex items-center justify-between pt-3">
+                            <div className="inline-flex items-center gap-2 bg-white border border-neutral-200 rounded-full px-2.5 py-1 shadow-2xs">
                               <button
                                 type="button"
                                 onClick={() => updateQty(item.id, -1)}
-                                className="text-neutral-500 hover:text-neutral-900 transition-colors p-0.5 cursor-pointer"
+                                className="text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
                               >
-                                <Minus className="w-2.5 h-2.5" />
+                                <Minus className="w-3 h-3" />
                               </button>
                               <span className="text-xs font-bold text-neutral-900 w-4 text-center">
                                 {item.qty}
@@ -778,14 +997,14 @@ export default function CartDrawer() {
                               <button
                                 type="button"
                                 onClick={() => updateQty(item.id, 1)}
-                                className="text-neutral-500 hover:text-neutral-900 transition-colors p-0.5 cursor-pointer"
+                                className="text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
                               >
-                                <Plus className="w-2.5 h-2.5" />
+                                <Plus className="w-3 h-3" />
                               </button>
                             </div>
 
                             <span
-                              className={`text-sm font-bold ${
+                              className={`text-sm font-bold font-serif ${
                                 isJewelleryItem ? 'text-[#0b3b2c]' : 'text-neutral-950'
                               }`}
                             >
@@ -799,11 +1018,14 @@ export default function CartDrawer() {
                 </div>
               )}
             </>
-          ) : (
-            <div className="space-y-4">
+          )}
+
+          {/* STEP 3: ADDRESS SELECTION */}
+          {activeStep === 'address' && (
+            <div className="space-y-4 animate-in fade-in duration-200">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-neutral-800 uppercase tracking-wider">
-                  Deliver To Saved Address
+                  Deliver To Address
                 </span>
                 <button
                   type="button"
@@ -815,19 +1037,19 @@ export default function CartDrawer() {
               </div>
 
               {savedAddresses.length === 0 ? (
-                <div className="py-10 text-center border-2 border-dashed border-neutral-200 rounded-2xl p-6 space-y-3">
+                <div className="py-12 text-center border-2 border-dashed border-neutral-200 rounded-3xl p-6 space-y-3">
                   <MapPin className="w-8 h-8 text-neutral-300 mx-auto" />
                   <p className="text-xs text-neutral-500">No delivery address saved yet.</p>
                   <button
                     type="button"
                     onClick={handleOpenAddAddressModal}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 text-white text-xs font-bold cursor-pointer"
+                    className="px-5 py-2.5 rounded-2xl bg-neutral-900 text-white text-xs font-bold cursor-pointer shadow-md"
                   >
                     + Add New Delivery Address
                   </button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 max-h-80 overflow-y-auto pr-1 no-scrollbar">
+                <div className="space-y-3">
                   {savedAddresses.map((addr) => {
                     const isSelected = selectedAddressId === addr.id;
                     const displayLabel =
@@ -839,9 +1061,9 @@ export default function CartDrawer() {
                       <div
                         key={addr.id}
                         onClick={() => handleSelectExistingAddress(addr)}
-                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                        className={`p-4 rounded-3xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
                           isSelected
-                            ? 'border-[#ff4d6d] bg-rose-50/30 shadow-xs'
+                            ? 'border-[#ff4d6d] bg-rose-50/20 shadow-xs'
                             : 'border-neutral-200 bg-white hover:border-neutral-300'
                         }`}
                       >
@@ -853,7 +1075,7 @@ export default function CartDrawer() {
                           className="mt-1 accent-[#ff4d6d] cursor-pointer"
                         />
 
-                        <div className="flex-1 text-xs space-y-1">
+                        <div className="flex-1 text-xs space-y-1.5">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-neutral-900 text-sm">{addr.name}</span>
@@ -867,17 +1089,17 @@ export default function CartDrawer() {
                               </span>
                             </div>
 
-                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md">
+                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
                               WA: {addr.whatsapp_number}
                             </span>
                           </div>
 
-                          <p className="text-neutral-600 leading-relaxed pt-0.5">
+                          <p className="text-neutral-600 leading-relaxed">
                             {addr.door_no}, {addr.building_name ? `${addr.building_name}, ` : ''}
                             {addr.street}, {addr.area}
                           </p>
 
-                          <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center justify-between pt-1 border-t border-neutral-100">
                             <p className="font-semibold text-neutral-900">
                               {addr.city}, {addr.state} — <span className="font-bold">{addr.pincode}</span>
                             </p>
@@ -897,25 +1119,25 @@ export default function CartDrawer() {
           )}
         </div>
 
-        {/* Footer (Only for Cart and Address Steps) */}
-        {cart.length > 0 && activeStep !== 'success' && (
-          <div className="p-5 sm:p-6 border-t border-neutral-100 bg-white space-y-3.5">
+        {/* Drawer Sticky Checkout Bottom Bar */}
+        {cart.length > 0 && activeStep !== 'order_result' && (
+          <div className="p-5 border-t border-neutral-100 bg-white/95 backdrop-blur-md space-y-3.5 shadow-lg">
             <div className="space-y-1.5 text-xs text-neutral-600">
               <div className="flex justify-between">
-                <span>Subtotal</span>
+                <span>Items Subtotal</span>
                 <span className="font-bold text-neutral-900">₹{subtotal.toLocaleString('en-IN')}</span>
               </div>
 
               <div className="flex justify-between items-center">
                 <span className="flex items-center gap-1">
                   <Truck className="w-3.5 h-3.5 text-neutral-500" />
-                  Shipping Charges {pincodeStatus?.zoneType ? `(${pincodeStatus.zoneType})` : ''}
+                  Delivery Charge {pincodeStatus?.zoneType ? `(${pincodeStatus.zoneType})` : ''}
                 </span>
                 <span className="font-bold text-neutral-900">₹{shippingCharge}</span>
               </div>
 
               <div className="flex justify-between text-sm font-bold text-neutral-900 pt-2 border-t border-neutral-100">
-                <span>Total Due</span>
+                <span>Grand Total</span>
                 <span className="text-base font-serif font-black text-neutral-950">
                   ₹{totalDue.toLocaleString('en-IN')}
                 </span>
@@ -926,47 +1148,42 @@ export default function CartDrawer() {
               <button
                 type="button"
                 onClick={() => setActiveStep('address')}
-                className="relative w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#ff4d6d] via-[#e63956] to-[#ff2a55] shadow-xl shadow-[#ff4d6d]/40 hover:shadow-rose-500/60 ring-2 ring-rose-300/60 transition-all duration-300 active:scale-98 cursor-pointer overflow-hidden group"
+                className="relative w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#ff4d6d] via-[#e63956] to-[#ff2a55] shadow-xl shadow-[#ff4d6d]/35 hover:shadow-rose-500/50 transition-all active:scale-98 cursor-pointer"
               >
-                <span className="absolute inset-0 rounded-2xl animate-pulse opacity-75 blur-xs bg-gradient-to-r from-white/20 to-rose-300/30" />
-                <span className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/35 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
-                <Zap className="w-4 h-4 fill-current animate-bounce relative z-10" />
-                <span className="relative z-10 tracking-widest font-black drop-shadow-xs flex items-center gap-1.5">
-                  Proceed to Delivery Address <ArrowRight className="w-4 h-4" />
-                </span>
+                <Zap className="w-4 h-4 fill-current animate-bounce" />
+                <span>Select Delivery Address</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button
                 type="button"
                 disabled={!selectedAddressId || isCheckingOut}
                 onClick={handleInstantCheckout}
-                className="relative w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#0b3b2c] via-[#14532d] to-[#0b3b2c] shadow-xl shadow-[#0b3b2c]/40 hover:shadow-emerald-500/60 ring-2 ring-[#e5c07b]/60 transition-all duration-300 active:scale-98 cursor-pointer overflow-hidden group disabled:opacity-50"
+                className="relative w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-gradient-to-r from-[#0b3b2c] via-[#14532d] to-[#0b3b2c] shadow-xl shadow-[#0b3b2c]/35 hover:shadow-emerald-900/50 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
               >
-                <span className="absolute inset-0 rounded-2xl animate-pulse opacity-75 blur-xs bg-gradient-to-r from-[#e5c07b]/20 to-emerald-400/30" />
-                <span className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-white/35 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
                 {isCheckingOut ? (
-                  <Loader2 className="w-4 h-4 animate-spin relative z-10" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Zap className="w-4 h-4 fill-current animate-bounce relative z-10" />
+                  <Zap className="w-4 h-4 fill-current animate-bounce" />
                 )}
-                <span className="relative z-10 tracking-widest font-black drop-shadow-xs flex items-center gap-1.5">
+                <span>
                   {isCheckingOut
                     ? 'Connecting Gateway...'
                     : `Pay via ${activeGatewayName} • ₹${totalDue.toLocaleString('en-IN')}`}
-                  {!isCheckingOut && <ArrowRight className="w-4 h-4" />}
                 </span>
+                {!isCheckingOut && <ArrowRight className="w-4 h-4" />}
               </button>
             )}
 
-            <div className="flex items-center justify-center gap-2 text-[10px] text-neutral-400 pt-0.5">
+            <div className="flex items-center justify-center gap-2 text-[10px] text-neutral-400">
               <ShieldCheck className="w-3.5 h-3.5 text-neutral-600" />
-              <span>100% Secure Encrypted Checkout with {activeGatewayName}</span>
+              <span>100% RBI & Bank Certified 256-Bit SSL Checkout</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* Address Form Modal */}
+      {/* Add Address Modal */}
       {isAddressModalOpen && (
         <div
           onClick={() => setIsAddressModalOpen(false)}
@@ -980,15 +1197,15 @@ export default function CartDrawer() {
               <div className="flex items-center gap-2">
                 <MapPin className="w-5 h-5 text-[#ff4d6d]" />
                 <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
-                  Add New Delivery Address
+                  Add Delivery Address
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAddressModalOpen(false)}
-                className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1026,12 +1243,12 @@ export default function CartDrawer() {
               {formData.address_type === 'Others' && (
                 <div className="animate-in fade-in duration-200">
                   <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
-                    Address Label Name * (e.g. Mom's House, Boutique)
+                    Address Label Name * (e.g. Boutique, Mom's House)
                   </label>
                   <input
                     type="text"
                     required
-                    placeholder="Enter Custom Address Name"
+                    placeholder="Enter Custom Address Label"
                     value={formData.custom_label}
                     onChange={(e) => setFormData({ ...formData, custom_label: e.target.value })}
                     className="w-full bg-white border border-[#ff4d6d]/50 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-[#ff4d6d] font-medium"
@@ -1081,7 +1298,7 @@ export default function CartDrawer() {
                 </label>
                 <input
                   type="email"
-                  placeholder="e.g. yourname@gmail.com"
+                  placeholder="e.g. contact@kashvifashions.in"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
@@ -1105,7 +1322,7 @@ export default function CartDrawer() {
 
                 <div>
                   <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
-                    Building Name / House Name
+                    Building / Apartment Name
                   </label>
                   <input
                     type="text"
