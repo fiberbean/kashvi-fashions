@@ -65,7 +65,6 @@ export default function AdminDashboard({
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selectedNewStatus, setSelectedNewStatus] = useState<string>('');
 
-  // Velocity / Top Items Filter State
   const [itemTimeFilter, setItemTimeFilter] = useState<TimeRangeFilter>('today');
   const [audioReady, setAudioReady] = useState<boolean>(false);
 
@@ -73,7 +72,6 @@ export default function AdminDashboard({
   const canEdit = role === 'admin' || role === 'manager';
   const canDelete = role === 'admin';
 
-  // --- LOUD DUAL-TONE ALERT SOUND ---
   const playAlertSound = () => {
     try {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
@@ -84,7 +82,6 @@ export default function AdminDashboard({
         ctx.resume();
       }
 
-      // First Tone
       const osc1 = ctx.createOscillator();
       const gain1 = ctx.createGain();
       osc1.type = 'triangle';
@@ -97,7 +94,6 @@ export default function AdminDashboard({
       osc1.start();
       osc1.stop(ctx.currentTime + 0.4);
 
-      // Louder Second Bell Tone
       setTimeout(() => {
         try {
           const osc2 = ctx.createOscillator();
@@ -119,7 +115,6 @@ export default function AdminDashboard({
     }
   };
 
-  // --- BROWSER DESKTOP PUSH NOTIFICATION (PRODUCT SPECIFIC) ---
   const triggerBrowserNotification = (ord: OrderRecord) => {
     if ('Notification' in window && Notification.permission === 'granted') {
       try {
@@ -140,7 +135,6 @@ export default function AdminDashboard({
     }
   };
 
-  // Test sound and request notification permission
   const handleEnableAlerts = () => {
     if ('Notification' in window && Notification.permission !== 'granted') {
       Notification.requestPermission();
@@ -176,27 +170,23 @@ export default function AdminDashboard({
           (o) => o.order_status === 'new' || o.order_status === 'pending' || !o.order_status
         ).length;
         setNewOrdersCount(freshOrders);
-      }
 
-      const { data: cartsData } = await supabase
-        .from('cart_sessions')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(10);
-
-      if (cartsData && cartsData.length > 0) {
-        const mapped = cartsData.map((c: any) => ({
-          id: c.id,
-          customer_name: c.customer_name || 'Anonymous Shopper',
-          customer_phone: c.phone || 'N/A',
-          items_count: Array.isArray(c.items) ? c.items.length : 1,
-          cart_value: Number(c.total_amount) || 2850,
-          last_active: c.updated_at || new Date().toISOString(),
-          items_preview: Array.isArray(c.items)
-            ? c.items.map((i: any) => i.name).slice(0, 2).join(', ')
-            : 'Saree / Jewellery Items'
-        }));
-        setAbandonedCarts(mapped);
+        // Pending/Initiated orders as leads (404 cart_sessions table avoidance)
+        const pendingLeads = orders
+          .filter((o) => o.payment_status === 'payment_pending' || o.order_status === 'payment_pending')
+          .slice(0, 10)
+          .map((o) => ({
+            id: o.id,
+            customer_name: o.customer_name || 'Customer',
+            customer_phone: o.customer_phone || 'N/A',
+            items_count: Array.isArray(o.items) ? o.items.length : 1,
+            cart_value: Number(o.total_amount) || 0,
+            last_active: o.created_at || new Date().toISOString(),
+            items_preview: Array.isArray(o.items)
+              ? o.items.map((i: any) => i.name).slice(0, 2).join(', ')
+              : 'Saree / Jewellery Item'
+          }));
+        setAbandonedCarts(pendingLeads);
       }
     } catch (err) {
       console.error('Dashboard load error:', err);
@@ -209,7 +199,6 @@ export default function AdminDashboard({
     fetchDashboardData(true);
   }, [syncTrigger]);
 
-  // Realtime WebSocket Subscription with Immediate Alert Dispatch
   useEffect(() => {
     fetchDashboardData();
 
@@ -224,26 +213,16 @@ export default function AdminDashboard({
         { event: 'INSERT', schema: 'public', table: 'orders' },
         (payload) => {
           const newOrder = payload.new as OrderRecord;
-
-          // 1. Play Loud Bell
           playAlertSound();
-
-          // 2. Trigger Product Specific Desktop Notification
           triggerBrowserNotification(newOrder);
-
-          // 3. Update Dashboard Stats
           setRecentOrders((prev) => [newOrder, ...prev]);
           setNewOrdersCount((c) => c + 1);
           setTotalOrdersToday((c) => c + 1);
           setTodaySales((s) => s + (Number(newOrder.total_amount) || 0));
-
-          // 4. Send to Sticky Alert Bar
           onNewOrderNotice(newOrder);
         }
       )
-      .subscribe((status) => {
-        console.log('Realtime orders stream node status:', status);
-      });
+      .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -288,7 +267,6 @@ export default function AdminDashboard({
     }
   };
 
-  // --- TOP SELLING ITEMS COMPUTATION ---
   const topSellingItems = useMemo(() => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -387,7 +365,6 @@ export default function AdminDashboard({
     return Array.from(itemMap.values()).sort((a, b) => b.unitsSold - a.unitsSold);
   }, [recentOrders, itemTimeFilter]);
 
-  // --- PDF REPORT EXPORT ---
   const handleDownloadPDF = () => {
     const filterLabels: Record<TimeRangeFilter, string> = {
       today: 'Today',
@@ -517,8 +494,6 @@ export default function AdminDashboard({
 
   return (
     <div className="space-y-4.5 animate-in fade-in duration-200 select-none font-sans">
-      
-      {/* Sound & Push Notification Unlock Header if not initialized */}
       {!audioReady && (
         <div
           onClick={handleEnableAlerts}
@@ -534,7 +509,6 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* 1. Metric Bento Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="bg-white rounded-xl p-3.5 border border-[#ffccd5] shadow-xs">
           <div className="flex items-center justify-between">
@@ -613,10 +587,7 @@ export default function AdminDashboard({
         </div>
       </div>
 
-      {/* 2. MAIN WORKSPACE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        
-        {/* LEFT: LIVE ORDERS STREAM */}
         <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
           <div className="px-4 py-2.5 border-b border-[#edf2ef] flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 p-0.5 bg-[#f0f4f2] rounded-full">
@@ -652,7 +623,6 @@ export default function AdminDashboard({
             </div>
           </div>
 
-          {/* Table 1: Live Orders */}
           {tableTab === 'orders' && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-sans">
@@ -763,7 +733,6 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* Table 2: Abandoned Carts */}
           {tableTab === 'abandoned' && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-sans">
@@ -809,7 +778,6 @@ export default function AdminDashboard({
           )}
         </div>
 
-        {/* RIGHT: TOP SELLING ITEMS DEMAND LEADERBOARD */}
         <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden flex flex-col">
           <div className="px-3.5 py-2.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
             <div className="flex items-center gap-1.5">
@@ -926,10 +894,8 @@ export default function AdminDashboard({
             </span>
           </div>
         </div>
-
       </div>
 
-      {/* Edit Status Modal */}
       {editingOrderId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
           <div className="bg-white rounded-2xl p-5 max-w-xs w-full shadow-2xl border border-[#dce6e1] space-y-3">
@@ -977,7 +943,6 @@ export default function AdminDashboard({
         </div>
       )}
 
-      {/* Slide-in Order Details Drawer */}
       {selectedOrder && (
         <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
           <div

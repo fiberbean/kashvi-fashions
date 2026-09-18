@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Package,
   Plus,
@@ -113,14 +113,12 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Products
       const { data: prodData } = await supabase
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
       if (prodData) setProducts(prodData);
 
-      // 2. Fetch Masters
       const [catsRes, subCatsRes, colsRes, sizesRes, fabsRes, unitsRes] = await Promise.all([
         supabase.from('categories').select('*').eq('active', true).order('name'),
         supabase.from('sub_categories').select('*').eq('active', true).order('name'),
@@ -147,7 +145,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     loadAllData();
   }, []);
 
-  // Filtered sub-categories based on selected parent category
   const availableSubCategories = useMemo(() => {
     if (!category) return [];
     const parentCat = categories.find((c) => c.name === category);
@@ -155,21 +152,18 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     return subCategories.filter((s) => s.category_id === parentCat.id || s.category_name === category);
   }, [category, categories, subCategories]);
 
-  // Handle Multi-Color Toggle
   const toggleColor = (colName: string) => {
     setSelectedColors((prev) =>
       prev.includes(colName) ? prev.filter((c) => c !== colName) : [...prev, colName]
     );
   };
 
-  // Handle Multi-Size Toggle
   const toggleSize = (szName: string) => {
     setSelectedSizes((prev) =>
       prev.includes(szName) ? prev.filter((s) => s !== szName) : [...prev, szName]
     );
   };
 
-  // Handle Image Add
   const handleAddImage = () => {
     if (!imageInput.trim()) return;
     setImagesList((prev) => [...prev, imageInput.trim()]);
@@ -180,7 +174,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     setImagesList((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Reset Form
   const resetForm = () => {
     setName('');
     setCategory('');
@@ -203,7 +196,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     setImageInput('');
   };
 
-  // Save Product to Database
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !category || sellingPrice === '') {
@@ -265,7 +257,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     }
   };
 
-  // Toggle Active/Inactive Status
   const handleToggleActive = async (productId: string, currentActive: boolean) => {
     if (!canEdit) return;
     try {
@@ -284,7 +275,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     }
   };
 
-  // Delete Product
   const handleDeleteProduct = async (productId: string) => {
     if (!canDelete) {
       alert('Only Admin can delete products.');
@@ -302,7 +292,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     }
   };
 
-  // Filtered Products for Listing
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -540,14 +529,11 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
         </div>
       </div>
 
-      {/* ========================================================================= */}
       {/* 4. MODAL: DYNAMIC PRODUCT CREATOR */}
-      {/* ========================================================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs overflow-y-auto animate-in fade-in duration-200">
           <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#dce6e1] my-8 overflow-hidden flex flex-col font-sans">
             
-            {/* Modal Header */}
             <div className="px-6 py-4 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-bold text-xs">
@@ -566,10 +552,8 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
               </button>
             </div>
 
-            {/* Modal Scrollable Form */}
             <form onSubmit={handleCreateProduct} className="p-6 space-y-4 text-xs overflow-y-auto max-h-[80vh]">
               
-              {/* Product Basic Info */}
               <div className="space-y-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
                   1. Basic Information
@@ -627,13 +611,11 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              {/* Dynamic Variants Matrix */}
               <div className="space-y-3 pt-2 border-t border-[#edf2ef]">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
                   2. Dynamic Variants (From Masters)
                 </span>
 
-                {/* Colours multi-select */}
                 <div>
                   <label className="font-bold text-neutral-700 block mb-1.5 flex items-center gap-1.5">
                     <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
@@ -661,7 +643,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                   </div>
                 </div>
 
-                {/* Sizes multi-select */}
                 <div>
                   <label className="font-bold text-neutral-700 block mb-1.5 flex items-center gap-1.5">
                     <Ruler className="w-3.5 h-3.5 text-blue-500" />
@@ -689,7 +670,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                   </div>
                 </div>
 
-                {/* Fabric & Unit dropdowns */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-bold text-neutral-700 block mb-1 flex items-center gap-1">
@@ -730,7 +710,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              {/* Pricing, Weight & Stock */}
               <div className="space-y-3 pt-2 border-t border-[#edf2ef]">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
                   3. Pricing & Stock Inventory
@@ -821,7 +800,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              {/* Product Images Array */}
               <div className="space-y-2 pt-2 border-t border-[#edf2ef]">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
                   4. Product Images
@@ -862,7 +840,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 )}
               </div>
 
-              {/* Description */}
               <div className="pt-2 border-t border-[#edf2ef]">
                 <label className="font-bold text-neutral-700 block mb-1">Product Description / Highlights</label>
                 <textarea
@@ -874,7 +851,6 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 />
               </div>
 
-              {/* Modal Actions */}
               <div className="flex justify-end gap-2.5 pt-3 border-t border-[#edf2ef]">
                 <button
                   type="button"
