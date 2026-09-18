@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useSearchParams } from 'react-router-dom';
 import {
   Sparkles,
@@ -16,6 +16,7 @@ import JewelleryUnevenBanners from './modules/home/JewelleryUnevenBanners';
 import HeaderBagButton from './components/common/HeaderBagButton';
 import HeaderUserButton from './components/common/HeaderUserButton';
 import HeaderHeartButton from './components/common/HeaderHeartButton';
+import MobileBottomBar from './components/common/MobileBottomBar';
 import CategoryProductListPage from './modules/products/CategoryProductListPage';
 import ProductDetailPage from './modules/products/ProductDetailPage';
 import { CartProvider } from './context/CartContext';
@@ -89,57 +90,97 @@ function HeroBannerSlider({
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // 5 సెకన్లకు ఒకసారి ఆటోమేటిక్ స్క్రోల్ (Auto-play)
-  useEffect(() => {
-    const timer = setInterval(() => {
+  // Touch Swipe Handlers for Mobile App
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const minSwipeDistance = 45;
+
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % slides.length);
     }, 5000);
-    return () => clearInterval(timer);
-  }, [slides.length]);
+  };
+
+  useEffect(() => {
+    resetTimer();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [slides.length, currentIndex]);
 
   const prevSlide = () => {
     setCurrentIndex((prev) => (prev === 0 ? slides.length - 1 : prev - 1));
+    resetTimer();
   };
 
   const nextSlide = () => {
     setCurrentIndex((prev) => (prev + 1) % slides.length);
+    resetTimer();
+  };
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    if (isLeftSwipe) {
+      nextSlide();
+    } else if (isRightSwipe) {
+      prevSlide();
+    }
   };
 
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-4">
+    <section className="w-full max-w-7xl mx-auto px-3 sm:px-6 pt-2 sm:pt-4 select-none">
       <div
-        className={`relative w-full overflow-hidden rounded-2xl md:rounded-3xl shadow-sm border bg-neutral-950 group ${
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        className={`relative w-full aspect-[4/5] xs:aspect-[1/1] sm:aspect-[21/9] md:aspect-[2.4/1] rounded-3xl sm:rounded-[2rem] overflow-hidden shadow-lg border bg-neutral-950 group ${
           isJewellery ? 'border-[#0b3b2c]/20' : 'border-[#ff4d6d]/20'
         }`}
       >
         {/* Slides Track */}
         <div
-          className="flex transition-transform duration-700 ease-out w-full"
+          className="flex transition-transform duration-700 ease-out w-full h-full"
           style={{ transform: `translateX(-${currentIndex * 100}%)` }}
         >
           {slides.map((slide, idx) => (
             <div
               key={idx}
-              className="min-w-full relative aspect-21/9 md:aspect-3/1 select-none"
+              className="min-w-full h-full relative select-none"
             >
               <img
                 src={slide.image}
                 alt={slide.title}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-center"
                 loading={idx === 0 ? 'eager' : 'lazy'}
               />
 
-              {/* Luxury Gradient Overlay */}
+              {/* Luxury Mobile-Optimized Gradient Protection */}
               <div
-                className={`absolute inset-0 flex items-center px-6 md:px-14 ${
+                className={`absolute inset-0 flex flex-col justify-end p-5 sm:p-10 md:p-14 ${
                   isJewellery
-                    ? 'bg-gradient-to-r from-[#0b3b2c]/95 via-[#0b3b2c]/50 to-transparent'
-                    : 'bg-gradient-to-r from-black/85 via-black/40 to-transparent'
+                    ? 'bg-gradient-to-t from-[#0b3b2c]/95 via-[#0b3b2c]/40 to-black/15 sm:bg-gradient-to-r sm:from-[#0b3b2c]/95 sm:via-[#0b3b2c]/50 sm:to-transparent'
+                    : 'bg-gradient-to-t from-black/90 via-black/40 to-black/10 sm:bg-gradient-to-r sm:from-black/85 sm:via-black/40 sm:to-transparent'
                 }`}
               >
-                <div className="max-w-lg text-white">
+                <div className="max-w-lg text-white space-y-1.5 sm:space-y-3">
                   <span
-                    className={`inline-flex items-center gap-1 text-[10px] md:text-xs font-bold uppercase tracking-[0.25em] px-3 py-1 rounded-full shadow-xs mb-2 ${
+                    className={`inline-flex items-center gap-1 text-[10px] sm:text-xs font-bold uppercase tracking-[0.25em] px-3 py-1 rounded-full shadow-xs ${
                       isJewellery
                         ? 'bg-[#0b3b2c] border border-[#e5c07b]/50 text-[#e5c07b]'
                         : 'bg-[#ff4d6d] text-white'
@@ -149,18 +190,18 @@ function HeroBannerSlider({
                     {slide.tag}
                   </span>
 
-                  <h2 className="text-xl sm:text-3xl md:text-4xl lg:text-5xl font-serif font-bold mt-1 leading-tight text-white drop-shadow-sm">
+                  <h2 className="text-2xl xs:text-3xl sm:text-4xl md:text-5xl font-serif font-bold leading-tight text-white drop-shadow-md">
                     {slide.title}
                   </h2>
 
-                  <p className="text-xs sm:text-sm text-neutral-200 mt-2 line-clamp-2 max-w-md font-normal leading-relaxed drop-shadow-xs">
+                  <p className="text-xs sm:text-sm text-neutral-200 line-clamp-2 max-w-md font-normal leading-relaxed drop-shadow-xs">
                     {slide.desc}
                   </p>
 
-                  <div className="mt-4 sm:mt-6 flex items-center gap-4">
+                  <div className="pt-2 sm:pt-4 flex items-center gap-3 sm:gap-4">
                     <Link
                       to={slide.link}
-                      className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 shadow-md active:scale-95 ${
+                      className={`inline-flex items-center gap-2 px-5 py-2.5 sm:px-6 sm:py-3 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 shadow-md active:scale-95 ${
                         isJewellery
                           ? 'bg-[#e5c07b] text-[#0b3b2c] hover:bg-white hover:text-[#0b3b2c]'
                           : 'bg-white text-neutral-950 hover:bg-[#ff4d6d] hover:text-white'
@@ -182,43 +223,43 @@ function HeroBannerSlider({
           ))}
         </div>
 
-        {/* Previous Button */}
+        {/* Previous Button (Desktop) */}
         <button
           type="button"
           aria-label="Previous Slide"
           onClick={prevSlide}
-          className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-xs text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-md"
+          className="hidden sm:flex absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-xs text-white items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-md"
         >
           <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
         </button>
 
-        {/* Next Button */}
+        {/* Next Button (Desktop) */}
         <button
           type="button"
           aria-label="Next Slide"
           onClick={nextSlide}
-          className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-xs text-white flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-md"
+          className="hidden sm:flex absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/40 hover:bg-black/70 backdrop-blur-xs text-white items-center justify-center transition-all opacity-0 group-hover:opacity-100 cursor-pointer shadow-md"
         >
           <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
         </button>
 
-        {/* Dots Indicators */}
-        <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
-          {slides.map((_, dotIdx) => (
-            <button
-              key={dotIdx}
-              type="button"
-              aria-label={`Go to slide ${dotIdx + 1}`}
-              onClick={() => setCurrentIndex(dotIdx)}
-              className={`h-1.5 sm:h-2 rounded-full transition-all duration-300 cursor-pointer ${
-                currentIndex === dotIdx
-                  ? isJewellery
-                    ? 'w-6 sm:w-8 bg-[#e5c07b]'
-                    : 'w-6 sm:w-8 bg-[#ff4d6d]'
-                  : 'w-1.5 sm:w-2 bg-white/50 hover:bg-white/80'
-              }`}
-            />
-          ))}
+        {/* Story-Style Progress Bars */}
+        <div className="absolute top-3.5 inset-x-5 sm:inset-x-auto sm:left-auto sm:right-6 sm:bottom-6 sm:top-auto flex items-center justify-center gap-1.5 z-30 pointer-events-none">
+          {slides.map((_, dotIdx) => {
+            const isCurrent = currentIndex === dotIdx;
+            return (
+              <div
+                key={dotIdx}
+                className={`h-1 sm:h-1.5 rounded-full transition-all duration-500 overflow-hidden ${
+                  isCurrent
+                    ? isJewellery
+                      ? 'w-7 sm:w-8 bg-[#e5c07b] shadow-sm'
+                      : 'w-7 sm:w-8 bg-[#ff4d6d] shadow-sm'
+                    : 'w-2 sm:w-2.5 bg-white/40'
+                }`}
+              />
+            );
+          })}
         </div>
       </div>
     </section>
@@ -233,18 +274,18 @@ function HomePageContent() {
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
   return (
-    <main className="min-h-screen bg-white text-neutral-900 pb-20 w-full overflow-x-hidden">
+    <main className="min-h-screen bg-white text-neutral-900 pb-24 md:pb-20 w-full overflow-x-hidden">
       <header
         className={`w-full sticky top-0 z-40 backdrop-blur-md transition-all duration-300 border-b bg-white/95 ${
           isJewellery ? 'border-[#0b3b2c]/15 shadow-xs' : 'border-[#ff4d6d]/20 shadow-xs'
         }`}
       >
         <div className="w-full max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex flex-col md:flex-row md:items-center md:justify-between gap-2.5">
-          {/* Brand Identity - Logo with Matching Background Color */}
+          {/* Brand Identity */}
           <div className="flex items-center justify-between w-full md:w-auto md:flex-1">
-            <Link to="/" className="inline-flex items-center group py-0.5">
+            <Link to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`} className="inline-flex items-center group py-0.5">
               <div
-                className={`relative h-14 w-14 sm:h-16 sm:w-16 md:h-18 md:w-18 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-sm border flex items-center justify-center shrink-0 ${
+                className={`relative h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-sm border flex items-center justify-center shrink-0 ${
                   isJewellery
                     ? 'bg-[#1c3830] border-[#e5c07b]/40 shadow-[#1c3830]/20'
                     : 'bg-white border-neutral-200 group-hover:border-neutral-400'
@@ -258,7 +299,7 @@ function HomePageContent() {
               </div>
             </Link>
 
-            {/* Mobile Action Buttons */}
+            {/* Mobile Top Actions */}
             <div className="flex items-center gap-1 sm:gap-2 md:hidden">
               <HeaderUserButton isJewellery={isJewellery} />
               <HeaderHeartButton isJewellery={isJewellery} />
@@ -339,15 +380,22 @@ export default function App() {
       <WishlistProvider>
         <CartProvider>
           <Router>
-            <Routes>
-              <Route path="/" element={<HomePageContent />} />
-              <Route path="/category/:slug" element={<CategoryProductListPage />} />
-              <Route path="/product/:id" element={<ProductDetailPage />} />
-            </Routes>
-            <CartDrawer />
-            <WishlistModal />
-            <AuthModal />
-            <CompleteProfileModal />
+            <div className="relative min-h-screen">
+              <Routes>
+                <Route path="/" element={<HomePageContent />} />
+                <Route path="/category/:slug" element={<CategoryProductListPage />} />
+                <Route path="/product/:id" element={<ProductDetailPage />} />
+              </Routes>
+
+              {/* Native App-Style Bottom Navigation Bar */}
+              <MobileBottomBar />
+
+              {/* Modals & Drawers */}
+              <CartDrawer />
+              <WishlistModal />
+              <AuthModal />
+              <CompleteProfileModal />
+            </div>
           </Router>
         </CartProvider>
       </WishlistProvider>
