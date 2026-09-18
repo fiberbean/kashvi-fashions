@@ -14,7 +14,8 @@ import {
   Upload,
   Check,
   Save,
-  Loader2
+  Loader2,
+  Scale
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -46,7 +47,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
   const [colours, setColours] = useState<ColourRecord[]>([]);
-  const [sizes, setSizes] = useState<SizeRecord[]>([]);
+  const [sizes, setSizes] = useState<any[]>([]);
   const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
 
@@ -81,6 +82,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
   const [subCatParentId, setSubCatParentId] = useState('');
 
   const [variantNameInput, setVariantNameInput] = useState('');
+  const [sizeCategoryId, setSizeCategoryId] = useState('');
 
   // -------------------------------------------------------------
   // Product Master Modal Form States
@@ -124,7 +126,9 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
       if (fabRes.data) setFabrics(fabRes.data);
       if (unitRes.data) {
         setUnits(unitRes.data);
-        if (unitRes.data.length > 0 && !selectedUnit) setSelectedUnit(unitRes.data[0].id);
+        if (unitRes.data.length > 0 && !selectedUnit) {
+          setSelectedUnit(unitRes.data[0].id);
+        }
       }
     } catch (err) {
       console.error('Failed to fetch masters state:', err);
@@ -230,7 +234,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     }
   };
 
-  // Save Variant
+  // Save Variant (Colours, Sizes, Fabrics)
   const handleSaveVariant = async (table: 'colours' | 'sizes' | 'fabrics') => {
     if (!variantNameInput.trim()) return;
     const nameVal = variantNameInput.trim();
@@ -240,12 +244,20 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     const payload: any = { id, name: nameVal };
     if (table !== 'fabrics') payload.active = true;
 
+    // Attach Category if Size Master
+    if (table === 'sizes' && sizeCategoryId) {
+      payload.category_id = sizeCategoryId;
+      const catObj = categories.find((c) => String(c.id) === String(sizeCategoryId));
+      if (catObj) payload.category_name = catObj.name;
+    }
+
     const { data, error } = await supabase.from(table).insert([payload]).select().single();
     if (!error && data) {
       if (table === 'colours') setColours((prev) => [...prev, data]);
       if (table === 'sizes') setSizes((prev) => [...prev, data]);
       if (table === 'fabrics') setFabrics((prev) => [...prev, data]);
       setVariantNameInput('');
+      setSizeCategoryId('');
       handleCloseModal();
     }
   };
@@ -386,13 +398,24 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     }
   };
 
-  // Robust Sub-Category Filter (Matches by ID or by Category Name)
+  // Sub-Category Filter
   const selectedCatObject = categories.find((c) => String(c.id) === String(selectedCategory));
   const filteredSubCategories = subCategories.filter((sub) => {
     if (!selectedCategory) return false;
     const matchById = String(sub.category_id).trim() === String(selectedCategory).trim();
     const matchByName = selectedCatObject && sub.category_name
       ? sub.category_name.trim().toLowerCase() === selectedCatObject.name.trim().toLowerCase()
+      : false;
+    return matchById || matchByName;
+  });
+
+  // Size Filter by Selected Category
+  const filteredSizes = sizes.filter((sz) => {
+    if (!selectedCategory) return true; // If no category selected, show all sizes
+    if (!sz.category_id && !sz.category_name) return true; // Show universal sizes if any
+    const matchById = String(sz.category_id).trim() === String(selectedCategory).trim();
+    const matchByName = selectedCatObject && sz.category_name
+      ? sz.category_name.trim().toLowerCase() === selectedCatObject.name.trim().toLowerCase()
       : false;
     return matchById || matchByName;
   });
@@ -550,7 +573,8 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
               <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
                 {sizes.map((s) => (
                   <span key={s.id} className="px-2 py-0.5 rounded-md bg-white border border-[#dce6e1] text-[10.5px] font-semibold flex items-center gap-1">
-                    {s.name}
+                    <span>{s.name}</span>
+                    {s.category_name && <span className="text-[9px] text-[#4d6960] font-normal">({s.category_name})</span>}
                     {canDelete && <X onClick={() => handleDeleteItem('sizes', s.id)} className="w-2.5 h-2.5 text-rose-500 cursor-pointer" />}
                   </span>
                 ))}
@@ -674,8 +698,8 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 </div>
               </div>
 
-              {/* Categories, Sub-Categories & Opening Stock */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Categories, Sub-Categories, Units & Opening Stock (4-Column Layout) */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category *</label>
                   <select
@@ -684,6 +708,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     onChange={(e) => {
                       setSelectedCategory(e.target.value);
                       setSelectedSubCategory('');
+                      setSelectedSizes([]); // Reset sizes when category changes
                     }}
                     className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
                   >
@@ -709,8 +734,26 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                   </select>
                 </div>
 
+                {/* Base Unit Dropdown (from units master) */}
                 <div>
-                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Opening Stock Quantity</label>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Unit *</label>
+                  <select
+                    required
+                    value={selectedUnit}
+                    onChange={(e) => setSelectedUnit(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
+                  >
+                    <option value="">Select Unit</option>
+                    {units.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name} {u.short_name ? `(${u.short_name})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Opening Stock</label>
                   <input
                     type="number"
                     min="0"
@@ -750,26 +793,39 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                   </div>
                 </div>
 
-                {/* Sizes */}
+                {/* Sizes Filtered by Selected Category */}
                 <div>
-                  <span className="text-[10px] font-bold text-neutral-600 block mb-1">Sizes:</span>
-                  <div className="flex flex-wrap gap-1">
-                    {sizes.map((s) => {
-                      const active = selectedSizes.includes(s.name);
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
-                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
-                            active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
-                          }`}
-                        >
-                          {active && <Check className="w-2.5 h-2.5 text-[#e5c07b]" />}
-                          <span>{s.name}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] font-bold text-neutral-600 block">
+                      Sizes {selectedCategory && selectedCatObject ? `(Filtered for ${selectedCatObject.name})` : ''}:
+                    </span>
+                    {!selectedCategory && (
+                      <span className="text-[9.5px] text-amber-700 italic">
+                        Tip: Select a Category above to filter relevant sizes
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                    {filteredSizes.length > 0 ? (
+                      filteredSizes.map((s) => {
+                        const active = selectedSizes.includes(s.name);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                              active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
+                            }`}
+                          >
+                            {active && <Check className="w-2.5 h-2.5 text-[#e5c07b]" />}
+                            <span>{s.name}</span>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <span className="text-[10px] text-neutral-400 italic">No sizes mapped to this category yet.</span>
+                    )}
                   </div>
                 </div>
 
@@ -985,6 +1041,23 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
               <button onClick={handleCloseModal}><X className="w-4 h-4 text-neutral-400" /></button>
             </div>
             <div className="space-y-3">
+              {/* Category Dropdown specifically when adding Size */}
+              {activeModal === 'sizes' && (
+                <div>
+                  <label className="font-bold text-neutral-600 block mb-1">Map To Category</label>
+                  <select
+                    value={sizeCategoryId}
+                    onChange={(e) => setSizeCategoryId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-semibold"
+                  >
+                    <option value="">-- Universal (All Categories) --</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="font-bold text-neutral-600 block mb-1 uppercase">{activeModal.slice(0, -1)} Name *</label>
                 <input
@@ -994,7 +1067,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     activeModal === 'colours'
                       ? 'e.g. Rani Pink'
                       : activeModal === 'sizes'
-                      ? 'e.g. Free Size / XL'
+                      ? 'e.g. 30B, 2.4, XL'
                       : 'e.g. Pure Georgette'
                   }
                   value={variantNameInput}
