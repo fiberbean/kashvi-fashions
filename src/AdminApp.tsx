@@ -4,27 +4,29 @@ import AdminNavbar from './admin/components/AdminNavbar';
 import AdminLoginScreen from './admin/components/AdminLoginScreen';
 import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
 import AdminDashboard from './admin/pages/AdminDashboard';
-import { OrderRecord } from './admin/types';
+import AdminStaff from './admin/pages/AdminStaff';
+import { OrderRecord, AdminStaffUser } from './admin/types';
 
 export default function AdminApp() {
   const location = useLocation();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<AdminStaffUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
   const [activeAlerts, setActiveAlerts] = useState<OrderRecord[]>([]);
 
-  // 10 నిమిషాల ఇన్‌యాక్టివిటీ టైమర్
+  // 10 minutes inactivity timeout
   const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const logoutSession = () => {
     sessionStorage.removeItem('kfmama_auth_session');
+    sessionStorage.removeItem('kfmama_auth_user');
     sessionStorage.removeItem('kfmama_auth_timestamp');
-    setIsAuthenticated(false);
+    setCurrentUser(null);
     if (timerRef.current) clearTimeout(timerRef.current);
   };
 
   const resetInactivityTimer = () => {
-    if (!isAuthenticated) return;
+    if (!currentUser) return;
     if (timerRef.current) clearTimeout(timerRef.current);
 
     timerRef.current = setTimeout(() => {
@@ -34,14 +36,20 @@ export default function AdminApp() {
 
   useEffect(() => {
     const hasSession = sessionStorage.getItem('kfmama_auth_session');
-    if (hasSession === 'true') {
-      setIsAuthenticated(true);
+    const storedUser = sessionStorage.getItem('kfmama_auth_user');
+
+    if (hasSession === 'true' && storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (e) {
+        logoutSession();
+      }
     }
     setCheckingAuth(false);
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!currentUser) return;
 
     resetInactivityTimer();
 
@@ -62,17 +70,17 @@ export default function AdminApp() {
       activityEvents.forEach((ev) => window.removeEventListener(ev, handleActivity));
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isAuthenticated]);
+  }, [currentUser]);
 
   if (!location.pathname.startsWith('/kfmama')) {
     return <Navigate to="/" replace />;
   }
 
   useEffect(() => {
-    document.title = isAuthenticated
-      ? 'Kashvi Live Command Deck'
-      : 'Kashvi Studio OS — Secure Gateway';
-  }, [isAuthenticated]);
+    document.title = currentUser
+      ? `Kashvi Command Deck — ${currentUser.role.toUpperCase()}`
+      : 'Kashvi Studio OS — Secure Staff Gateway';
+  }, [currentUser]);
 
   const handleNewOrderAlert = (ord: OrderRecord) => {
     setActiveAlerts((prev) => [ord, ...prev]);
@@ -90,13 +98,17 @@ export default function AdminApp() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <AdminLoginScreen onLoginSuccess={() => setIsAuthenticated(true)} />;
+  if (!currentUser) {
+    return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
   return (
     <div className="min-h-screen bg-[#f0f4f2] text-[#0c2b22] flex flex-col selection:bg-[#0b3b2c] selection:text-white">
-      <AdminNavbar unreadCount={activeAlerts.length} onLogout={logoutSession} />
+      <AdminNavbar
+        unreadCount={activeAlerts.length}
+        currentUser={currentUser}
+        onLogout={logoutSession}
+      />
 
       <StickyOrderAlerts
         notifications={activeAlerts}
@@ -107,7 +119,17 @@ export default function AdminApp() {
         <Routes>
           <Route
             path="/"
-            element={<AdminDashboard onNewOrderNotice={handleNewOrderAlert} />}
+            element={
+              <AdminDashboard
+                currentUser={currentUser}
+                onNewOrderNotice={handleNewOrderAlert}
+              />
+            }
+          />
+          {/* Custom Staff Creation & Duty PINs Route */}
+          <Route
+            path="/staff"
+            element={<AdminStaff currentUser={currentUser} />}
           />
           <Route path="*" element={<Navigate to="/kfmama" replace />} />
         </Routes>

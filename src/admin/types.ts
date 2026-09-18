@@ -1,3 +1,17 @@
+export type AdminRole = 'admin' | 'manager' | 'operations';
+
+export interface AdminStaffUser {
+  id: string;
+  employee_id: string;
+  full_name: string;
+  phone?: string;
+  role: AdminRole;
+  pin: string;
+  is_active: boolean;
+  last_login?: string;
+  created_at: string;
+}
+
 export interface OrderItem {
   name: string;
   price: number;

@@ -10,16 +10,22 @@ import {
   BellRing,
   ShoppingCart,
   MessageCircle,
-  RefreshCw
+  RefreshCw,
+  Edit2,
+  Trash2,
+  ShieldAlert,
+  CheckCircle,
+  Clock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { OrderRecord, AbandonedCartUser } from '../types';
+import { OrderRecord, AbandonedCartUser, AdminStaffUser } from '../types';
 
 interface AdminDashboardProps {
+  currentUser: AdminStaffUser | null;
   onNewOrderNotice: (ord: OrderRecord) => void;
 }
 
-export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps) {
+export default function AdminDashboard({ currentUser, onNewOrderNotice }: AdminDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -32,6 +38,15 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
   const [recentOrders, setRecentOrders] = useState<OrderRecord[]>([]);
   const [abandonedCarts, setAbandonedCarts] = useState<AbandonedCartUser[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
+
+  // Status edit modal for Manager/Admin
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
+  const [selectedNewStatus, setSelectedNewStatus] = useState<string>('');
+
+  // Role Permissions Logic
+  const role = currentUser?.role || 'operations';
+  const canEdit = role === 'admin' || role === 'manager';
+  const canDelete = role === 'admin';
 
   const playChime = () => {
     try {
@@ -120,15 +135,6 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
             cart_value: 3200,
             last_active: '1 hr ago',
             items_preview: 'Handcrafted Heritage Lehenga Set'
-          },
-          {
-            id: 'CART_9820',
-            customer_name: 'Kavitha Rao',
-            customer_phone: '8919203341',
-            items_count: 3,
-            cart_value: 12450,
-            last_active: '2 hrs ago',
-            items_preview: '22K Antique Bangles, Pure Silk Kurti Set'
           }
         ]);
       }
@@ -137,6 +143,55 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
     } finally {
       setLoading(false);
       setTimeout(() => setIsSyncing(false), 500);
+    }
+  };
+
+  // Status update by Manager or Admin
+  const handleUpdateOrderStatus = async (orderId: string) => {
+    if (!canEdit) {
+      alert('Access Denied: Operation role cannot modify orders.');
+      return;
+    }
+
+    try {
+      await supabase
+        .from('orders')
+        .update({ order_status: selectedNewStatus })
+        .eq('id', orderId);
+
+      setRecentOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, order_status: selectedNewStatus } : o))
+      );
+
+      if (selectedOrder && selectedOrder.id === orderId) {
+        setSelectedOrder({ ...selectedOrder, order_status: selectedNewStatus });
+      }
+
+      setEditingOrderId(null);
+    } catch (e) {
+      console.error('Update status failed:', e);
+    }
+  };
+
+  // Delete Order (Strictly Admin only)
+  const handleDeleteOrder = async (orderId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+
+    if (!canDelete) {
+      alert('Access Denied: Only Admin role can delete orders.');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to permanently delete order ${orderId}?`)) {
+      return;
+    }
+
+    try {
+      await supabase.from('orders').delete().eq('id', orderId);
+      setRecentOrders((prev) => prev.filter((o) => o.id !== orderId));
+      if (selectedOrder?.id === orderId) setSelectedOrder(null);
+    } catch (err) {
+      console.error('Delete failed:', err);
     }
   };
 
@@ -182,7 +237,7 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
             Orders, Sales & Recovery Command
           </h1>
           <p className="text-[11px] text-[#4d6960] mt-1">
-            Instant online order detections with live sound, recovery streams and transaction flow.
+            Logged in as: <span className="font-bold text-[#0b3b2c]">{currentUser?.full_name}</span> ({currentUser?.role?.toUpperCase()})
           </p>
         </div>
 
@@ -198,7 +253,7 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
         </div>
       </div>
 
-      {/* Compact Bento Cards */}
+      {/* Bento Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-2xl p-4.5 border border-[#ffccd5] shadow-xs hover:shadow-md transition-all">
           <div className="flex items-center justify-between">
@@ -277,7 +332,7 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
         </div>
       </div>
 
-      {/* Main Data Tabs */}
+      {/* Main Stream Section */}
       <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
         <div className="p-3 sm:p-4 border-b border-[#edf2ef] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 p-1 bg-[#f0f4f2] rounded-full self-start">
@@ -308,9 +363,15 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
             </button>
           </div>
 
-          <span className="text-[10px] text-[#809c93] font-mono">
-            {tableTab === 'orders' ? '⚡ Instant Realtime WebSocket Sync' : '💬 1-Click WhatsApp Recovery Direct'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold text-[#809c93]">
+              Role: <strong className="uppercase text-[#0b3b2c]">{role}</strong>
+            </span>
+            <span className="text-[10px] text-neutral-300">|</span>
+            <span className="text-[10px] text-neutral-500 font-mono">
+              {canDelete ? 'Full Control' : canEdit ? 'Edit Only (No Delete)' : 'View Only (Restricted)'}
+            </span>
+          </div>
         </div>
 
         {tableTab === 'orders' && (
@@ -323,7 +384,7 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
                   <th className="py-3 px-5">Total Amount</th>
                   <th className="py-3 px-5">Payment</th>
                   <th className="py-3 px-5">Status</th>
-                  <th className="py-3 px-5 text-right">Quick Action</th>
+                  <th className="py-3 px-5 text-right">Access Controls</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#edf2ef]">
@@ -336,7 +397,7 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
                 ) : recentOrders.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-neutral-400 font-medium">
-                      No orders placed yet. Online checkouts will pop up here live!
+                      No orders found in database.
                     </td>
                   </tr>
                 ) : (
@@ -382,10 +443,40 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
                           </span>
                         </td>
                         <td className="py-3.5 px-5 text-right">
-                          <span className="inline-flex items-center gap-1 text-[#0b3b2c] group-hover:text-[#ff4d6d] font-bold text-xs">
-                            <span>Open Details</span>
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                          </span>
+                          <div className="inline-flex items-center gap-2">
+                            {/* View Action (Available for all roles) */}
+                            <span className="text-[11px] font-bold text-[#0b3b2c] group-hover:text-[#ff4d6d] mr-1">
+                              View
+                            </span>
+
+                            {/* Edit Action (Admin & Manager only) */}
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingOrderId(ord.id);
+                                  setSelectedNewStatus(ord.order_status || 'new');
+                                }}
+                                className="p-1 rounded-lg hover:bg-neutral-200 text-neutral-600 transition-colors"
+                                title="Edit Status"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Delete Action (Strictly Admin only) */}
+                            {canDelete && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteOrder(ord.id, e)}
+                                className="p-1 rounded-lg hover:bg-rose-100 text-rose-600 transition-colors"
+                                title="Delete Order (Admin Only)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -459,6 +550,61 @@ export default function AdminDashboard({ onNewOrderNotice }: AdminDashboardProps
           </div>
         )}
       </div>
+
+      {/* Edit Status Modal (Manager / Admin only) */}
+      {editingOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif font-bold text-sm text-[#0b3b2c]">
+                Update Order Status
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingOrderId(null)}
+                className="p-1 rounded-md text-neutral-400 hover:text-neutral-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-bold text-neutral-500 block">
+                Select Dispatch State
+              </label>
+              <select
+                value={selectedNewStatus}
+                onChange={(e) => setSelectedNewStatus(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] text-xs font-semibold text-[#0c2b22] bg-[#f8faf9] outline-none"
+              >
+                <option value="new">New (Awaiting Action)</option>
+                <option value="confirmed">Confirmed / Paid</option>
+                <option value="processing">Processing & Packing</option>
+                <option value="shipped">Shipped to Courier</option>
+                <option value="delivered">Delivered Successfully</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setEditingOrderId(null)}
+                className="px-3.5 py-1.5 rounded-full text-xs font-bold text-neutral-600 hover:bg-neutral-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdateOrderStatus(editingOrderId)}
+                className="px-4 py-1.5 rounded-full text-xs font-bold bg-[#0b3b2c] text-white shadow-xs"
+              >
+                Save Status
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Slide-in Order Details Drawer */}
       {selectedOrder && (
