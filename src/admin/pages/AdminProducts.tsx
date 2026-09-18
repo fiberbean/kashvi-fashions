@@ -21,7 +21,8 @@ import {
   Check,
   Zap,
   Boxes,
-  Eye
+  Barcode,
+  Info
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -34,34 +35,37 @@ import {
   AdminStaffUser
 } from '../types';
 
-interface ProductRecord {
+export interface ProductTableRecord {
   id: string;
   name: string;
-  category: string;
-  sub_category?: string;
-  colour?: string;
-  size?: string;
-  fabric?: string;
-  unit?: string;
-  brand?: string;
-  model_no?: string;
-  barcode?: string;
-  selling_price: number;
-  cost_price?: number;
-  mrp?: number;
-  gst?: number;
-  weight?: number;
-  weight_unit?: string;
-  stock_quantity: number;
-  low_stock_threshold?: number;
+  category: string | null;
+  sub_category: string | null;
+  colour: string | null;
+  size: string | null;
+  unit: string | null;
+  brand: string | null;
+  sub_brand: string | null;
+  model_no: string | null;
+  barcode: string | null;
+  selling_price: number | null;
+  cost_price: number | null;
+  gst: number | null;
+  weight: number | null;
+  weight_unit: string | null;
   images: any;
-  variants?: any;
-  description?: string;
-  active: boolean;
-  created_at?: string;
+  active: boolean | null;
+  created_at: string | null;
+  variants: any;
+  description: string | null;
+  features: string | null;
+  notes: string | null;
+  mrp: number | null;
+  stock_quantity: number | null;
+  low_stock_threshold: number | null;
+  fabric: string | null;
 }
 
-interface VariantRowItem {
+interface VariantBreakdownItem {
   id: string;
   colour: string;
   size: string;
@@ -75,10 +79,10 @@ interface AdminProductsProps {
 }
 
 export default function AdminProducts({ currentUser }: AdminProductsProps) {
-  const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<ProductRecord[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [products, setProducts] = useState<ProductTableRecord[]>([]);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
   // Masters
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
@@ -88,48 +92,60 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
   const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // Modal Mode & Visibility
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
 
-  // Form Fields
-  const [productCode, setProductCode] = useState('');
-  const [productName, setProductName] = useState('');
-  const [category, setCategory] = useState('');
-  const [subCategory, setSubCategory] = useState('');
-  const [brand, setBrand] = useState('Kashvi Fashions');
+  // Form Fields strictly corresponding to public.products table
+  const [id, setId] = useState<string>('');
+  const [name, setName] = useState<string>('');
+  const [category, setCategory] = useState<string>('');
+  const [subCategory, setSubCategory] = useState<string>('');
+  const [brand, setBrand] = useState<string>('Kashvi Fashions');
+  const [subBrand, setSubBrand] = useState<string>('');
+  const [modelNo, setModelNo] = useState<string>('');
+  const [barcode, setBarcode] = useState<string>('');
   const [sellingPrice, setSellingPrice] = useState<number | ''>('');
   const [mrp, setMrp] = useState<number | ''>('');
-  const [unit, setUnit] = useState('Piece');
-  const [fabric, setFabric] = useState('');
+  const [costPrice, setCostPrice] = useState<number | ''>('');
+  const [gst, setGst] = useState<number | ''>(0);
+  const [unit, setUnit] = useState<string>('Piece');
   const [stockQuantity, setStockQuantity] = useState<number | ''>(10);
-  const [description, setDescription] = useState('');
+  const [lowStockThreshold, setLowStockThreshold] = useState<number | ''>(3);
+  const [weight, setWeight] = useState<number | ''>(500);
+  const [weightUnit, setWeightUnit] = useState<string>('grams');
+  const [description, setDescription] = useState<string>('');
+  const [features, setFeatures] = useState<string>('');
+  const [notes, setNotes] = useState<string>('');
 
-  // Multi-Select Selections
+  // Multi-Select Attribute Lists
   const [selectedColours, setSelectedColours] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
   const [selectedFabrics, setSelectedFabrics] = useState<string[]>([]);
 
-  // Generated Variant Matrix Rows
-  const [variantRows, setVariantRows] = useState<VariantRowItem[]>([]);
+  // Variant Matrix Rows
+  const [variantRows, setVariantRows] = useState<VariantBreakdownItem[]>([]);
 
-  // Image Upload/URL States
-  const [imageUrlInput, setImageUrlInput] = useState('');
+  // Images state
+  const [imageUrlInput, setImageUrlInput] = useState<string>('');
   const [imagesList, setImagesList] = useState<string[]>([]);
 
   const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const canDelete = currentUser?.role === 'admin';
 
-  const loadData = async () => {
+  // Load Products & Masters from Database
+  const loadCatalogData = async () => {
     setLoading(true);
     try {
-      const { data: prodData } = await supabase
+      const { data: prodData, error } = await supabase
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (prodData) setProducts(prodData);
+      if (!error && prodData) {
+        setProducts(prodData);
+      }
 
       const [catsRes, subCatsRes, colsRes, sizesRes, fabsRes, unitsRes] = await Promise.all([
         supabase.from('categories').select('*').order('name'),
@@ -147,32 +163,33 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       if (fabsRes.data) setFabrics(fabsRes.data);
       if (unitsRes.data) setUnits(unitsRes.data);
     } catch (err) {
-      console.error('Error loading products master:', err);
+      console.error('Error loading product master data:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadCatalogData();
   }, []);
 
   const availableSubCategories = useMemo(() => {
     if (!category) return subCategories;
     const parent = categories.find((c) => c.name === category);
     if (!parent) return subCategories;
-    return subCategories.filter((s) => s.category_id === parent.id || s.category_name === category);
+    return subCategories.filter(
+      (s) => s.category_id === parent.id || s.category_name === category
+    );
   }, [category, categories, subCategories]);
 
-  // Multi-select toggles
   const toggleSelection = (item: string, list: string[], setList: (v: string[]) => void) => {
     setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
   };
 
-  // Generate Variants Function (Reference Screenshot Logic)
+  // Generate Variants Breakdown
   const handleGenerateVariants = () => {
     if (selectedColours.length === 0 && selectedSizes.length === 0) {
-      alert('Select at least one Colour or Size above to generate variant rows.');
+      alert('Colour leda Size lo minimum okkatinaina select cheyandi.');
       return;
     }
 
@@ -183,12 +200,12 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     const cols = selectedColours.length > 0 ? selectedColours : ['Standard'];
     const szs = selectedSizes.length > 0 ? selectedSizes : ['Free Size'];
 
-    const newRows: VariantRowItem[] = [];
+    const newRows: VariantBreakdownItem[] = [];
 
     cols.forEach((c) => {
       szs.forEach((s) => {
         newRows.push({
-          id: `${c}_${s}`,
+          id: `${c} / ${s}`,
           colour: c,
           size: s,
           selling_price: defaultSP,
@@ -201,25 +218,39 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     setVariantRows(newRows);
   };
 
-  const handleUpdateVariantRow = (id: string, field: keyof VariantRowItem, val: any) => {
+  const handleUpdateVariantRow = (
+    rowId: string,
+    field: keyof VariantBreakdownItem,
+    value: any
+  ) => {
     setVariantRows((prev) =>
-      prev.map((row) => (row.id === id ? { ...row, [field]: val } : row))
+      prev.map((r) => (r.id === rowId ? { ...r, [field]: value } : r))
     );
   };
 
+  // Reset Modal Form
   const resetForm = () => {
     setIsEditMode(false);
-    setProductCode(`KF${Math.floor(1000 + Math.random() * 9000)}`);
-    setProductName('');
+    setId(`KF${Math.floor(1000 + Math.random() * 9000)}`);
+    setName('');
     setCategory('');
     setSubCategory('');
     setBrand('Kashvi Fashions');
+    setSubBrand('');
+    setModelNo('');
+    setBarcode('');
     setSellingPrice('');
     setMrp('');
+    setCostPrice('');
+    setGst(0);
     setUnit('Piece');
-    setFabric('');
     setStockQuantity(10);
+    setLowStockThreshold(3);
+    setWeight(500);
+    setWeightUnit('grams');
     setDescription('');
+    setFeatures('');
+    setNotes('');
     setSelectedColours([]);
     setSelectedSizes([]);
     setSelectedFabrics([]);
@@ -228,31 +259,42 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     setImageUrlInput('');
   };
 
-  // Open Edit Product Modal with Pre-filled Data
-  const handleOpenEditProduct = (prod: ProductRecord) => {
+  // Open Edit Mode with Pre-populated Product Data
+  const handleOpenEdit = (prod: ProductTableRecord) => {
     setIsEditMode(true);
-    setProductCode(prod.id);
-    setProductName(prod.name || '');
+    setId(prod.id);
+    setName(prod.name || '');
     setCategory(prod.category || '');
     setSubCategory(prod.sub_category || '');
     setBrand(prod.brand || 'Kashvi Fashions');
-    setSellingPrice(prod.selling_price || '');
-    setMrp(prod.mrp || '');
+    setSubBrand(prod.sub_brand || '');
+    setModelNo(prod.model_no || '');
+    setBarcode(prod.barcode || '');
+    setSellingPrice(prod.selling_price ?? '');
+    setMrp(prod.mrp ?? '');
+    setCostPrice(prod.cost_price ?? '');
+    setGst(prod.gst ?? 0);
     setUnit(prod.unit || 'Piece');
-    setFabric(prod.fabric || '');
     setStockQuantity(prod.stock_quantity ?? 10);
+    setLowStockThreshold(prod.low_stock_threshold ?? 3);
+    setWeight(prod.weight ?? 500);
+    setWeightUnit(prod.weight_unit || 'grams');
     setDescription(prod.description || '');
+    setFeatures(prod.features || '');
+    setNotes(prod.notes || '');
 
-    // Parse colours & sizes
-    const colArr = prod.colour ? prod.colour.split(',').map((c) => c.trim()) : [];
-    const szArr = prod.size ? prod.size.split(',').map((s) => s.trim()) : [];
-    const fabArr = prod.fabric ? prod.fabric.split(',').map((f) => f.trim()) : [];
+    // Parse attributes
+    setSelectedColours(
+      prod.colour ? prod.colour.split(',').map((c) => c.trim()).filter(Boolean) : []
+    );
+    setSelectedSizes(
+      prod.size ? prod.size.split(',').map((s) => s.trim()).filter(Boolean) : []
+    );
+    setSelectedFabrics(
+      prod.fabric ? prod.fabric.split(',').map((f) => f.trim()).filter(Boolean) : []
+    );
 
-    setSelectedColours(colArr);
-    setSelectedSizes(szArr);
-    setSelectedFabrics(fabArr);
-
-    // Parse images
+    // Parse images array
     if (Array.isArray(prod.images)) {
       setImagesList(prod.images);
     } else if (typeof prod.images === 'string') {
@@ -266,8 +308,8 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       setImagesList([]);
     }
 
-    // Parse saved variants matrix breakdown
-    if (prod.variants && Array.isArray(prod.variants.matrix)) {
+    // Parse variants JSON
+    if (prod.variants && typeof prod.variants === 'object' && Array.isArray(prod.variants.matrix)) {
       setVariantRows(prod.variants.matrix);
     } else {
       setVariantRows([]);
@@ -276,31 +318,41 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     setIsModalOpen(true);
   };
 
-  // Save or Update Product
+  // Save / Update Product
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!productName.trim() || !category || sellingPrice === '') {
+    if (!name.trim() || !category || sellingPrice === '') {
       alert('Product Name, Category mariyu Selling Price compulsory ga fill cheyandi.');
       return;
     }
 
     setSaving(true);
     try {
-      const payload = {
-        id: productCode.trim(),
-        name: productName.trim(),
-        category,
-        sub_category: subCategory || null,
+      const payload: Partial<ProductTableRecord> = {
+        id: id.trim(),
+        name: name.trim(),
+        category: category.trim(),
+        sub_category: subCategory.trim() || null,
         colour: selectedColours.join(', ') || null,
         size: selectedSizes.join(', ') || null,
-        fabric: selectedFabrics.join(', ') || fabric || null,
+        fabric: selectedFabrics.join(', ') || null,
         unit: unit || 'Piece',
-        brand: brand || 'Kashvi Fashions',
+        brand: brand.trim() || 'Kashvi Fashions',
+        sub_brand: subBrand.trim() || null,
+        model_no: modelNo.trim() || null,
+        barcode: barcode.trim() || null,
         selling_price: Number(sellingPrice),
         mrp: Number(mrp) || Number(sellingPrice),
+        cost_price: Number(costPrice) || 0,
+        gst: Number(gst) || 0,
+        weight: Number(weight) || 0,
+        weight_unit: weightUnit || 'grams',
         stock_quantity: Number(stockQuantity) || 0,
+        low_stock_threshold: Number(lowStockThreshold) || 3,
         images: imagesList,
         description: description.trim(),
+        features: features.trim(),
+        notes: notes.trim(),
         variants: {
           colours: selectedColours,
           sizes: selectedSizes,
@@ -311,9 +363,11 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       };
 
       if (isEditMode) {
-        const { error } = await supabase.from('products').update(payload).eq('id', productCode);
+        const { error } = await supabase.from('products').update(payload).eq('id', id);
         if (error) throw error;
-        setProducts((prev) => prev.map((p) => (p.id === productCode ? { ...p, ...payload } : p)));
+        setProducts((prev) =>
+          prev.map((p) => (p.id === id ? ({ ...p, ...payload } as ProductTableRecord) : p))
+        );
       } else {
         const { data, error } = await supabase.from('products').insert([payload]).select().single();
         if (error) throw error;
@@ -323,57 +377,78 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       setIsModalOpen(false);
       resetForm();
     } catch (err: any) {
-      console.error('Save failed:', err);
-      alert('Product save cheyatamlo error: ' + err.message);
+      console.error('Failed to save product:', err);
+      alert('Product save cheyatamlo samasya: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeleteProduct = async (id: string, e: React.MouseEvent) => {
+  const handleToggleActive = async (prodId: string, currentActive: boolean | null) => {
+    if (!canEdit) return;
+    try {
+      const nextActive = !currentActive;
+      const { error } = await supabase.from('products').update({ active: nextActive }).eq('id', prodId);
+      if (!error) {
+        setProducts((prev) =>
+          prev.map((p) => (p.id === prodId ? { ...p, active: nextActive } : p))
+        );
+      }
+    } catch (e) {
+      console.error('Active toggle error:', e);
+    }
+  };
+
+  const handleDeleteProduct = async (prodId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canDelete) return;
-    if (!confirm(`Permanently delete ${id}?`)) return;
+    if (!confirm(`Permanently delete ${prodId} from products table?`)) return;
 
     try {
-      const { error } = await supabase.from('products').delete().eq('id', id);
-      if (!error) setProducts((prev) => prev.filter((p) => p.id !== id));
-    } catch (err) {
-      console.error('Delete error:', err);
+      const { error } = await supabase.from('products').delete().eq('id', prodId);
+      if (!error) {
+        setProducts((prev) => prev.filter((p) => p.id !== prodId));
+      }
+    } catch (e) {
+      console.error('Delete error:', e);
     }
   };
 
   const filteredProducts = products.filter((p) => {
+    const term = searchQuery.toLowerCase();
     const matchesSearch =
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase()));
+      p.name.toLowerCase().includes(term) ||
+      p.id.toLowerCase().includes(term) ||
+      (p.category && p.category.toLowerCase().includes(term)) ||
+      (p.brand && p.brand.toLowerCase().includes(term));
 
-    const matchesCat = selectedCategoryFilter === 'all' || p.category === selectedCategoryFilter;
-    return matchesSearch && matchesCat;
+    const matchesCategory =
+      selectedCategoryFilter === 'all' || p.category === selectedCategoryFilter;
+
+    return matchesSearch && matchesCategory;
   });
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
       
-      {/* 1. Header Bar: Replaced Title with "Product Master" */}
+      {/* 1. Header with Title "Product Master" */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4.5 rounded-2xl border border-[#e2eae6] shadow-xs">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#e4efe9] text-[#0b3b2c] text-[9.5px] font-bold uppercase tracking-wider mb-1 border border-[#dce6e1]">
-            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Master Catalog
+            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Master Vault
           </div>
           <h1 className="text-xl font-serif font-bold text-[#0b3b2c] leading-none">
             Product Master
           </h1>
           <p className="text-[11px] text-[#4d6960] mt-1 font-medium">
-            Manage product descriptions, variants, pricing and real-time inventory matrix.
+            Manage complete product catalog, dynamic variants breakdown, pricing & live stock inventory.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={loadData}
+            onClick={loadCatalogData}
             className="p-2 rounded-xl border border-[#dce6e1] text-[#0b3b2c] hover:bg-[#f0f4f2] transition-colors cursor-pointer"
             title="Reload Data"
           >
@@ -396,13 +471,13 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
         </div>
       </div>
 
-      {/* 2. Filter & Search Bar */}
+      {/* 2. Filters & Search Bar */}
       <div className="bg-white p-3.5 rounded-2xl border border-[#e2eae6] shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-96">
           <Search className="w-4 h-4 text-[#809c93] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by Product Name, Code (e.g. KF0004)..."
+            placeholder="Search by Product Name, Code (e.g. KF0004) or Brand..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-3.5 py-2 rounded-xl border border-[#dce6e1] text-xs font-medium text-[#0c2b22] bg-[#f8faf9] outline-none focus:border-[#0b3b2c] focus:bg-white transition-all"
@@ -451,19 +526,19 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
               ) : filteredProducts.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-neutral-400 font-medium">
-                    No products found.
+                    No products found matching criteria.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((p) => {
-                  const firstImg = Array.isArray(p.images) ? p.images[0] : null;
+                  const firstImg = Array.isArray(p.images) && p.images[0] ? p.images[0] : null;
 
                   return (
                     <tr
                       key={p.id}
-                      onClick={() => handleOpenEditProduct(p)}
+                      onClick={() => handleOpenEdit(p)}
                       className="hover:bg-[#f4f7f5] transition-colors cursor-pointer group"
-                      title="Click to Edit Product"
+                      title="Click row to edit product details"
                     >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
@@ -493,7 +568,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className="font-bold text-[#0b3b2c] text-xs block">{p.category}</span>
+                        <span className="font-bold text-[#0b3b2c] text-xs block">{p.category || 'General'}</span>
                         <span className="text-[10px] text-neutral-500">{p.sub_category || 'General'}</span>
                       </td>
 
@@ -509,7 +584,12 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                               {p.size}
                             </span>
                           )}
-                          {!p.colour && !p.size && (
+                          {p.fabric && (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-200">
+                              {p.fabric}
+                            </span>
+                          )}
+                          {!p.colour && !p.size && !p.fabric && (
                             <span className="text-neutral-400 italic text-[10px]">Standard Single SKU</span>
                           )}
                         </div>
@@ -517,9 +597,9 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
 
                       <td className="py-3 px-4">
                         <div className="font-bold text-xs text-[#0b3b2c]">
-                          ₹{Number(p.selling_price).toLocaleString('en-IN')}
+                          ₹{Number(p.selling_price || 0).toLocaleString('en-IN')}
                         </div>
-                        {p.mrp && Number(p.mrp) > Number(p.selling_price) && (
+                        {p.mrp && Number(p.mrp) > Number(p.selling_price || 0) && (
                           <div className="text-[10px] text-neutral-400 line-through">
                             ₹{Number(p.mrp).toLocaleString('en-IN')}
                           </div>
@@ -528,21 +608,26 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
 
                       <td className="py-3 px-4">
                         <span className="font-bold text-xs text-[#0b3b2c]">
-                          {p.stock_quantity} {p.unit || 'Piece'}
+                          {p.stock_quantity ?? 0} {p.unit || 'Piece'}
                         </span>
                       </td>
 
                       <td className="py-3 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleActive(p.id, p.active);
+                          }}
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${
                             p.active
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-neutral-100 text-neutral-500'
                           }`}
                         >
-                          <CheckCircle2 className="w-3 h-3" />
+                          {p.active ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
                           <span>{p.active ? 'Active' : 'Hidden'}</span>
-                        </span>
+                        </button>
                       </td>
 
                       <td className="py-3 px-4 text-right">
@@ -551,7 +636,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenEditProduct(p);
+                              handleOpenEdit(p);
                             }}
                             className="p-1.5 rounded-md hover:bg-neutral-200 text-neutral-500 hover:text-[#0b3b2c]"
                             title="Edit Product"
@@ -580,7 +665,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. MODAL: PRODUCT MASTER REFERENCE STYLE FORM */}
+      {/* 4. MODAL: REFERENCE-STYLED PRODUCT CREATION & VARIANT BREAKDOWN */}
       {/* ========================================================================= */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
@@ -597,7 +682,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     {isEditMode ? 'Edit Product Master' : 'Add New Product'}
                   </h3>
                   <span className="text-[10px] text-neutral-400 block -mt-0.5">
-                    Internal Store OS • Dynamic Variants & Inventory Configuration
+                    Kashvi OS • Direct sync to public.products table
                   </span>
                 </div>
               </div>
@@ -614,15 +699,15 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
             {/* Scrollable Form Body */}
             <form onSubmit={handleSaveProduct} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
               
-              {/* Row 1: Product Code & Product Name */}
+              {/* Row 1: PRODUCT CODE & PRODUCT NAME */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                 <div className="md:col-span-4">
                   <label className="font-bold text-neutral-700 block mb-1">PRODUCT CODE</label>
                   <input
                     type="text"
                     required
-                    value={productCode}
-                    onChange={(e) => setProductCode(e.target.value)}
+                    value={id}
+                    onChange={(e) => setId(e.target.value)}
                     disabled={isEditMode}
                     className="w-full px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-mono font-bold text-[#0b3b2c] outline-none disabled:opacity-60"
                   />
@@ -634,14 +719,14 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     type="text"
                     required
                     placeholder="e.g. Pure Banarasi Kanjeevaram Saree / Temple Bangles"
-                    value={productName}
-                    onChange={(e) => setProductName(e.target.value)}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none focus:border-[#0b3b2c] focus:bg-white"
                   />
                 </div>
               </div>
 
-              {/* Row 2: Category, Sub-Category, Brand */}
+              {/* Row 2: CATEGORY, SUB-CATEGORY, BRAND */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="font-bold text-neutral-700 block mb-1">CATEGORY *</label>
@@ -686,7 +771,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              {/* Row 3: Selling Price, MRP, Unit */}
+              {/* Row 3: SELLING PRICE, MRP, UNIT */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="font-bold text-neutral-700 block mb-1">SELLING PRICE (₹) *</label>
@@ -727,12 +812,8 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              {/* Row 4: Multi-Select Masters: Colours, Sizes, Fabrics */}
+              {/* Row 4: MULTI-SELECT MASTERS (COLOUR, SIZE, FABRIC) */}
               <div className="space-y-3 pt-2 border-t border-[#edf2ef]">
-                <span className="text-[10.5px] font-bold uppercase tracking-wider text-[#0b3b2c] block">
-                  Select Attributes For Variant Generation
-                </span>
-
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   
                   {/* COLOUR (MULTI-SELECT) */}
@@ -820,7 +901,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              {/* Row 5: Variant Matrix Breakdown (Price & Stock per Variant) */}
+              {/* Row 5: VARIANT MATRIX BREAKDOWN */}
               <div className="p-4 bg-white rounded-2xl border border-[#dce6e1] shadow-2xs space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-[#0b3b2c]">
@@ -834,7 +915,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#ff4d6d] to-[#e03a5a] text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
                   >
                     <Zap className="w-3.5 h-3.5 fill-current" />
-                    <span>Generate Variants</span>
+                    <span>⚡ Generate Variants</span>
                   </button>
                 </div>
 
@@ -899,7 +980,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 )}
               </div>
 
-              {/* Row 6: Product Images (Upload & Assign) */}
+              {/* Row 6: PRODUCT DRESS IMAGES */}
               <div className="space-y-2 pt-2 border-t border-[#edf2ef]">
                 <span className="font-bold text-neutral-700 block text-[11px] uppercase">
                   Product Dress Images (Upload & Assign)
@@ -944,11 +1025,108 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 )}
               </div>
 
-              {/* Row 7: Description */}
+              {/* Row 7: INVENTORY, COST, WEIGHT & TAX COLUMNS */}
+              <div className="space-y-2 pt-2 border-t border-[#edf2ef]">
+                <span className="font-bold text-neutral-700 block text-[11px] uppercase">
+                  Cost, Inventory & Specifications
+                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">Stock Quantity</label>
+                    <input
+                      type="number"
+                      value={stockQuantity}
+                      onChange={(e) => setStockQuantity(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-bold"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">Low Stock Alert</label>
+                    <input
+                      type="number"
+                      value={lowStockThreshold}
+                      onChange={(e) => setLowStockThreshold(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">Cost Price (₹)</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={costPrice}
+                      onChange={(e) => setCostPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">GST (%)</label>
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={gst}
+                      onChange={(e) => setGst(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">Weight</label>
+                    <input
+                      type="number"
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">Weight Unit</label>
+                    <select
+                      value={weightUnit}
+                      onChange={(e) => setWeightUnit(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                    >
+                      <option value="grams">grams</option>
+                      <option value="kg">kg</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">Barcode</label>
+                    <input
+                      type="text"
+                      placeholder="Barcode value"
+                      value={barcode}
+                      onChange={(e) => setBarcode(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="font-bold text-neutral-700 block mb-1">Model No</label>
+                    <input
+                      type="text"
+                      placeholder="Model/Design code"
+                      value={modelNo}
+                      onChange={(e) => setModelNo(e.target.value)}
+                      className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 8: DESCRIPTION & PRODUCT DETAILS */}
               <div className="pt-2 border-t border-[#edf2ef]">
                 <label className="font-bold text-neutral-700 block mb-1">DESCRIPTION & PRODUCT DETAILS</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Fabric care, weave type, wash instructions..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
