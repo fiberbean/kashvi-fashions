@@ -12,6 +12,8 @@ export default function AdminApp() {
   const [currentUser, setCurrentUser] = useState<AdminStaffUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
   const [activeAlerts, setActiveAlerts] = useState<OrderRecord[]>([]);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncTrigger, setSyncTrigger] = useState<number>(0);
 
   // 10 minutes inactivity timeout
   const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
@@ -34,6 +36,15 @@ export default function AdminApp() {
     }, INACTIVITY_TIMEOUT_MS);
   };
 
+  // Manual Sync trigger from Navbar button
+  const handleManualSync = () => {
+    setIsSyncing(true);
+    setSyncTrigger((prev) => prev + 1);
+    setTimeout(() => {
+      setIsSyncing(false);
+    }, 600);
+  };
+
   useEffect(() => {
     const hasSession = sessionStorage.getItem('kfmama_auth_session');
     const storedUser = sessionStorage.getItem('kfmama_auth_user');
@@ -46,6 +57,15 @@ export default function AdminApp() {
       }
     }
     setCheckingAuth(false);
+  }, []);
+
+  // Polling every 15s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      handleManualSync();
+    }, 15000);
+
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -103,10 +123,12 @@ export default function AdminApp() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f0f4f2] text-[#0c2b22] flex flex-col selection:bg-[#0b3b2c] selection:text-white">
+    <div className="min-h-screen bg-[#f0f4f2] text-[#0c2b22] flex flex-col selection:bg-[#0b3b2c] selection:text-white font-sans">
       <AdminNavbar
         unreadCount={activeAlerts.length}
         currentUser={currentUser}
+        isSyncing={isSyncing}
+        onManualSync={handleManualSync}
         onLogout={logoutSession}
       />
 
@@ -115,7 +137,7 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
-      <main className="flex-1 w-full max-w-[1540px] mx-auto p-4 sm:p-6">
+      <main className="flex-1 w-full max-w-[1540px] mx-auto p-3 sm:p-5">
         <Routes>
           <Route
             path="/"
@@ -123,10 +145,10 @@ export default function AdminApp() {
               <AdminDashboard
                 currentUser={currentUser}
                 onNewOrderNotice={handleNewOrderAlert}
+                syncTrigger={syncTrigger}
               />
             }
           />
-          {/* Custom Staff Creation & Duty PINs Route */}
           <Route
             path="/staff"
             element={<AdminStaff currentUser={currentUser} />}
