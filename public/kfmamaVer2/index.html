@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kashvi Fashions — Admin</title>
+  
+  <!-- CSS Module Imports -->
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/modules/layout.css">
+  <link rel="stylesheet" href="css/modules/kpi-cards.css">
+  <link rel="stylesheet" href="css/modules/dashboard-tables.css">
+  <link rel="stylesheet" href="css/modules/products.css">
+  <link rel="stylesheet" href="css/modules/categories.css">
+  <link rel="stylesheet" href="css/modules/orders.css">
+  <link rel="stylesheet" href="css/modules/cms.css">
+  <link rel="stylesheet" href="css/modules/settings.css">
+  <link rel="stylesheet" href="css/modules/delivery-rates.css">
+  
+  <style>
+    /* Notification Dropdown Styles */
+    .notif-bell-wrap {
+      position: relative;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: #f0f7f4;
+      border: 1px solid #dbeae3;
+      transition: all 0.2s;
+    }
+    .notif-bell-wrap:hover {
+      background: #e2f2eb;
+    }
+    .notif-count-badge {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      background: #e11d48;
+      color: #fff;
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 10px;
+      border: 2px solid #fff;
+      display: none;
+    }
+    .notif-dropdown {
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 340px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+      border: 1px solid #e1eee8;
+      display: none;
+      flex-direction: column;
+      z-index: 1000;
+      overflow: hidden;
+      animation: fadeIn 0.15s ease-in-out;
+    }
+    .notif-dropdown.active {
+      display: flex;
+    }
+    .notif-header {
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #edf2f0;
+      background: #fafcfb;
+    }
+    .notif-header h4 {
+      margin: 0;
+      font-size: 0.85rem;
+      font-weight: 800;
+      color: var(--brand-emerald-dark);
+    }
+    .notif-clear-btn {
+      background: none;
+      border: none;
+      color: #799287;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .notif-clear-btn:hover {
+      color: var(--brand-pink);
+    }
+    .notif-list {
+      max-height: 360px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .notif-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f2f6f4;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      transition: background 0.2s;
+    }
+    .notif-item.unread {
+      background: #f7fbf9;
+    }
+    .notif-item:hover {
+      background: #f1f7f4;
+    }
+    .notif-item-icon {
+      font-size: 1.1rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .notif-item-content {
+      flex: 1;
+    }
+    .notif-item-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #172822;
+      margin-bottom: 2px;
+    }
+    .notif-item-msg {
+      font-size: 0.72rem;
+      color: #5c7369;
+      line-height: 1.3;
+    }
+    .notif-item-time {
+      font-size: 0.62rem;
+      color: #9ab0a6;
+      margin-top: 4px;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="admin-wrapper">
+    <!-- Structured Frosted Sidebar -->
+    <aside class="admin-sidebar">
+      <div class="sidebar-brand">
+        <img src="assets/logo.png" alt="Logo" class="brand-logo-img" onerror="this.src='https://placehold.co/100x100/00564b/ffffff?text=KF'">
+        <div class="brand-text-wrap">
+          <span class="brand-text-title">KASHVI</span>
+          <span class="brand-text-sub">FASHIONS</span>
+        </div>
+      </div>
+
+      <div class="sidebar-content">
+        <div class="sidebar-group-title">WORKSPACE NAVIGATION</div>
+        <ul class="sidebar-nav">
+          <li class="nav-item active" data-tab="tab-dashboard">
+            <a href="#">
+              <div class="nav-item-left"><span>📊</span><span>Dashboard</span></div>
+            </a>
+          </li>
+          <li class="nav-item" data-tab="tab-products">
+            <a href="#">
+              <div class="nav-item-left"><span>👗</span><span>Inventory</span></div>
+            </a>
+          </li>
+          <li class="nav-item" data-tab="tab-categories">
+            <a href="#">
+              <div class="nav-item-left"><span>🏷️</span><span>Masters</span></div>
+            </a>
+          </li>
+          <li class="nav-item" data-tab="tab-orders">
+            <a href="#">
+              <div class="nav-item-left"><span>📦</span><span>Orders Pipeline</span></div>
+              <span class="sidebar-count-badge" id="sidebar-order-badge">0</span>
+            </a>
+          </li>
+          <li class="nav-item" data-tab="tab-cms">
+            <a href="#">
+              <div class="nav-item-left"><span>🖼️</span><span>Banner Studio</span></div>
+            </a>
+          </li>
+          <li class="nav-item" data-tab="tab-pincodes">
+            <a href="#">
+              <div class="nav-item-left"><span>📍</span><span>Pincode DB</span></div>
+              <span class="sidebar-count-badge" id="sidebar-pincode-count" style="background: rgba(0, 86, 75, 0.6); color: #fff;">1889</span>
+            </a>
+          </li>
+        </ul>
+
+        <div class="sidebar-group-title" style="margin-top: 10px;">SYSTEM SETTINGS</div>
+        <div class="sidebar-accordion-wrap">
+          <div class="sidebar-nav">
+            <div class="nav-item">
+              <button type="button" class="sidebar-accordion-trigger" id="btn-settings-accordion">
+                <div class="nav-item-left"><span>⚙️</span><span>Settings</span></div>
+                <span id="accordion-arrow">▾</span>
+              </button>
+            </div>
+          </div>
+          <div class="sidebar-accordion-menu" id="settings-submenu">
+            <div class="sub-nav-item" data-tab="tab-settings">
+              <a href="#">🏢 Store Info</a>
+            </div>
+            <div class="sub-nav-item" data-tab="tab-delivery-rates">
+              <a href="#">🚚 Delivery Rates</a>
+            </div>
+            <div class="sub-nav-item" data-tab="tab-payment-gateways">
+              <a href="#">💳 Payment Gateways</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="super-admin-card">
+          <div class="super-admin-avatar" id="avatar-initial">A</div>
+          <div class="super-admin-info">
+            <span class="super-admin-name" id="display-admin-name">Abhilash</span>
+            <span class="super-admin-role">Super Admin</span>
+          </div>
+        </div>
+        <button type="button" class="btn-sidebar-logout" id="btn-sidebar-logout">
+          <span>🔒</span> Lock & Logout
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Panel -->
+    <div class="admin-main">
+      <header class="admin-header">
+        <div class="header-search">
+          <input type="text" placeholder="Search orders, products, SKUs...">
+        </div>
+        
+        <div class="header-right-actions" style="display:flex; align-items:center; gap:16px;">
+          
+          <!-- Live Notification Hub Bell -->
+          <div style="position: relative;">
+            <div class="notif-bell-wrap" id="btn-notif-bell" title="Notifications">
+              <span>🔔</span>
+              <span class="notif-count-badge" id="notif-badge">0</span>
+            </div>
+
+            <!-- Dropdown Menu -->
+            <div class="notif-dropdown" id="notif-dropdown-menu">
+              <div class="notif-header">
+                <h4>System Alerts</h4>
+                <button type="button" class="notif-clear-btn" id="btn-mark-all-read">Mark all as read</button>
+              </div>
+              <div class="notif-list" id="notif-items-container">
+                <div style="text-align:center; padding:24px; color:#859a91; font-size:0.75rem;">
+                  No new notifications.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <span class="header-profile">👤 Admin Workspace</span>
+          <button type="button" class="btn-header-lock" id="btn-header-lock" title="Lock Workspace">
+            <span>🔒</span> Logout
+          </button>
+        </div>
+      </header>
+
+      <main class="content-body">
+        
+        <!-- VIEW 1: DASHBOARD TAB -->
+        <section id="tab-dashboard" class="tab-view active">
+          <div class="kpi-grid">
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">Today's Sales</span>
+                <div class="kpi-icon-wrap">💵</div>
+              </div>
+              <div class="kpi-value" id="kpi-today-sales">₹ 0</div>
+              <div class="kpi-footer">
+                <span class="badge-emerald">Live</span>
+                <span style="color:var(--text-muted)">Today's Total</span>
+              </div>
+            </div>
+
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">Revenue (MTD)</span>
+                <div class="kpi-icon-wrap">📈</div>
+              </div>
+              <div class="kpi-value" id="kpi-revenue-mtd">₹ 0</div>
+              <div class="kpi-footer">
+                <span class="badge-pink">Live</span>
+                <span style="color:var(--text-muted)">Current Month</span>
+              </div>
+            </div>
+
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">Total Orders</span>
+                <div class="kpi-icon-wrap">📦</div>
+              </div>
+              <div class="kpi-value" id="kpi-total-orders">0</div>
+              <div class="kpi-footer">
+                <span class="badge-emerald">Live</span>
+                <span style="color:var(--text-muted)">Today's Count</span>
+              </div>
+            </div>
+
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">Avg Order Value</span>
+                <div class="kpi-icon-wrap">🏷️</div>
+              </div>
+              <div class="kpi-value" id="kpi-aov">₹ 0</div>
+              <div class="kpi-footer">
+                <span class="badge-emerald">Live</span>
+                <span style="color:var(--text-muted)">Average Basket</span>
+              </div>
+            </div>
+
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">New Customers</span>
+                <div class="kpi-icon-wrap">👥</div>
+              </div>
+              <div class="kpi-value" id="kpi-new-customers">0</div>
+              <div class="kpi-footer">
+                <span class="badge-emerald">Live</span>
+                <span style="color:var(--text-muted)">Registered Today</span>
+              </div>
+            </div>
+
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">Conversion Rate</span>
+                <div class="kpi-icon-wrap">🎯</div>
+              </div>
+              <div class="kpi-value" id="kpi-conversion-rate">0.0%</div>
+              <div class="kpi-footer">
+                <span class="badge-emerald">Live</span>
+                <span style="color:var(--text-muted)">Traffic Ratio</span>
+              </div>
+            </div>
+
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">Cart Abandonment</span>
+                <div class="kpi-icon-wrap">🛒</div>
+              </div>
+              <div class="kpi-value" id="kpi-cart-abandon">0%</div>
+              <div class="kpi-footer">
+                <span class="badge-pink">Live</span>
+                <span style="color:var(--text-muted)">Pending Carts</span>
+              </div>
+            </div>
+
+            <div class="glass-panel kpi-card">
+              <div class="kpi-top">
+                <span class="kpi-title">Refund Rate</span>
+                <div class="kpi-icon-wrap">↩️</div>
+              </div>
+              <div class="kpi-value" id="kpi-refund-rate">0%</div>
+              <div class="kpi-footer">
+                <span class="badge-emerald">Live</span>
+                <span style="color:var(--text-muted)">Returns</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="dashboard-columns">
+            <div class="glass-panel panel-container">
+              <div class="panel-head">
+                <h3>Recent Customer Orders</h3>
+              </div>
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Item</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-orders-body">
+                  <tr><td colspan="6" style="text-align:center; padding:16px;">Loading live orders...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="glass-panel panel-container">
+              <div class="panel-head">
+                <h3>Low Stock Alert</h3>
+              </div>
+              <ul id="low-stock-list" style="list-style: none; display: flex; flex-direction: column; gap: 14px; font-size: 0.88rem;">
+                <li style="color:var(--text-muted); text-align:center; padding:12px 0;">Loading stock alerts...</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 2: PRODUCTS TAB -->
+        <section id="tab-products" class="tab-view" style="display: none;">
+          <div class="section-header-row">
+            <h2 class="section-title">Product Catalog & Inventory</h2>
+            <button class="btn-primary" id="btn-open-add-product">+ Add Product</button>
+          </div>
+
+          <div class="filter-bar">
+            <input type="text" id="product-search-filter" class="filter-input" placeholder="Search by name, brand, SKU..." style="width:280px;">
+            <select id="product-category-filter" class="filter-select">
+              <option value="all">All Categories</option>
+            </select>
+          </div>
+
+          <div class="glass-panel panel-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:60px;">Image</th>
+                  <th>Product Details</th>
+                  <th>Category</th>
+                  <th>Price</th>
+                  <th>Stock</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="products-table-body">
+                <tr><td colspan="7" style="text-align:center; padding:20px;">Loading live products...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW 3: MASTERS TAB -->
+        <section id="tab-categories" class="tab-view" style="display: none;">
+          <div class="section-header-row">
+            <h2 class="section-title">Store Masters & Dropdown Attributes</h2>
+          </div>
+
+          <div class="masters-hub-grid">
+            <div class="master-hub-card" data-master="category">
+              <div class="hub-card-top"><span class="hub-card-title">Categories</span><span class="hub-card-icon">📁</span></div>
+              <div class="hub-card-footer"><span class="hub-count-badge" id="count-category">0 Items</span><span class="hub-card-action-text">Manage List &rarr;</span></div>
+            </div>
+            <div class="master-hub-card" data-master="subcategory">
+              <div class="hub-card-top"><span class="hub-card-title">Sub-Categories</span><span class="hub-card-icon">📂</span></div>
+              <div class="hub-card-footer"><span class="hub-count-badge" id="count-subcategory">0 Items</span><span class="hub-card-action-text">Manage List &rarr;</span></div>
+            </div>
+            <div class="master-hub-card" data-master="brand">
+              <div class="hub-card-top"><span class="hub-card-title">Brands</span><span class="hub-card-icon">🏷️</span></div>
+              <div class="hub-card-footer"><span class="hub-count-badge" id="count-brand">0 Items</span><span class="hub-card-action-text">Manage List &rarr;</span></div>
+            </div>
+            <div class="master-hub-card" data-master="colour">
+              <div class="hub-card-top"><span class="hub-card-title">Colours</span><span class="hub-card-icon">🎨</span></div>
+              <div class="hub-card-footer"><span class="hub-count-badge" id="count-colour">0 Items</span><span class="hub-card-action-text">Manage List &rarr;</span></div>
+            </div>
+            <div class="master-hub-card" data-master="size">
+              <div class="hub-card-top"><span class="hub-card-title">Sizes</span><span class="hub-card-icon">📏</span></div>
+              <div class="hub-card-footer"><span class="hub-count-badge" id="count-size">0 Items</span><span class="hub-card-action-text">Manage List &rarr;</span></div>
+            </div>
+            <div class="master-hub-card" data-master="fabric">
+              <div class="hub-card-top"><span class="hub-card-title">Fabrics / Materials</span><span class="hub-card-icon">🧵</span></div>
+              <div class="hub-card-footer"><span class="hub-count-badge" id="count-fabric">0 Items</span><span class="hub-card-action-text">Manage List &rarr;</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 4: ORDERS TAB -->
+        <section id="tab-orders" class="tab-view" style="display: none;">
+          <div class="section-header-row">
+            <h2 class="section-title">Order Fulfillment & Verification Pipeline</h2>
+          </div>
+
+          <div class="orders-filter-row">
+            <input type="text" id="order-search-input" class="filter-input" placeholder="Search Order ID, Customer, Phone..." style="width:280px;">
+            <div class="order-status-pills">
+              <button type="button" class="status-pill-btn active" data-status="all">All</button>
+              <button type="button" class="status-pill-btn" data-status="new">New</button>
+              <button type="button" class="status-pill-btn" data-status="payment_check">Payment Check</button>
+              <button type="button" class="status-pill-btn" data-status="order_check">Order Check</button>
+              <button type="button" class="status-pill-btn" data-status="processing">Processing</button>
+              <button type="button" class="status-pill-btn" data-status="packing">Packing</button>
+              <button type="button" class="status-pill-btn" data-status="ready_to_dispatch">Ready to Dispatch</button>
+              <button type="button" class="status-pill-btn" data-status="dispatched">Dispatched</button>
+              <button type="button" class="status-pill-btn" data-status="delivered">Delivered</button>
+              <button type="button" class="status-pill-btn" data-status="cancelled">Cancelled</button>
+            </div>
+          </div>
+
+          <div class="glass-panel panel-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Customer Info</th>
+                  <th>Items</th>
+                  <th>Amount</th>
+                  <th>Current Stage</th>
+                  <th>Pipeline Action</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="orders-table-body">
+                <tr><td colspan="7" style="text-align:center; padding:20px;">Loading live orders...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- VIEW 5: BANNERS & CMS TAB -->
+        <section id="tab-cms" class="tab-view" style="display: none;">
+          <div class="section-header-row">
+            <h2 class="section-title">Homepage Banners & Storefront CMS</h2>
+            <button class="btn-primary" id="btn-add-banner">+ Add Banner</button>
+          </div>
+          <div class="glass-panel panel-container" style="padding: 24px;">
+            <p style="font-size: 0.88rem; color: var(--text-muted); margin-bottom: 16px;">
+              Manage hero sliders, promotional cards, and announcement text for your storefront.
+            </p>
+            <div class="cms-banner-grid" id="cms-banners-container">
+              <div style="grid-column:1/-1; border: 1px dashed rgba(0,86,75,0.25); border-radius: 10px; padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                Loading live banners...
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 6: PINCODE DATABASE TAB -->
+        <section id="tab-pincodes" class="tab-view" style="display: none;">
+          <div class="section-header-row" style="margin-bottom: 16px;">
+            <div>
+              <h2 class="section-title">PINCODE DIRECTORY & SERVICEABILITY</h2>
+              <p style="font-size: 0.8rem; color: var(--text-muted);">Manage serviceable delivery postal codes, districts, and coverage zones.</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <span class="badge-emerald" id="pincode-badge-count" style="font-size: 0.8rem; padding: 6px 12px;">Total: 1889 Pincodes</span>
+            </div>
+          </div>
+
+          <div class="filter-bar" style="margin-bottom: 16px;">
+            <input type="text" id="pincode-search-input" class="filter-input" placeholder="Search by Pincode, City, or District..." style="width: 320px;">
+          </div>
+
+          <div class="glass-panel panel-container">
+            <div style="overflow-x: auto; max-height: 65vh;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width: 140px;">PINCODE</th>
+                    <th>DISTRICT / AREA</th>
+                    <th>CITY / TOWN</th>
+                    <th>STATE</th>
+                    <th style="width: 140px;">STATUS</th>
+                    <th style="width: 120px; text-align: right;">ACTION</th>
+                  </tr>
+                </thead>
+                <tbody id="pincodes-table-body">
+                  <tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading pincodes...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 7: DELIVERY RATES MATRIX TAB -->
+        <section id="tab-delivery-rates" class="tab-view" style="display: none;">
+          <div class="section-header-row" style="margin-bottom: 16px;">
+            <div>
+              <h2 class="section-title">DELIVERY RATES</h2>
+              <p style="font-size: 0.8rem; color: var(--text-muted);">Smart Operations, Real-time Fulfilment Hub & Matrix Controls</p>
+            </div>
+            <div style="display:flex; gap:10px;">
+              <button type="button" class="btn-primary" id="btn-toggle-edit-rates">✏️ Configure / Edit Rates</button>
+              <button type="button" class="btn-secondary" id="btn-cancel-edit-rates" style="display:none;">Cancel</button>
+              <button type="button" class="btn-primary" id="btn-save-delivery-rates" style="display:none;">💾 Save Changes</button>
+            </div>
+          </div>
+
+          <div class="rate-matrix-card">
+            <div class="rate-matrix-header">
+              <div>
+                <h3>India Post Delivery Rate Matrix</h3>
+                <p>Weight slab charges mapped directly to India Post speed postal tariffs.</p>
+              </div>
+            </div>
+
+            <div style="overflow-x: auto;">
+              <table class="rate-matrix-table">
+                <thead>
+                  <tr>
+                    <th style="width: 180px;">WEIGHT SLAB</th>
+                    <th>LOCAL RATE (₹)</th>
+                    <th>WITHIN STATE (₹)</th>
+                    <th>ZONE / METRO (₹)</th>
+                    <th>OTHER STATES (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="delivery-rates-tbody">
+                  <tr><td colspan="5" style="text-align:center; padding:20px;">Loading live India Post rates...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VIEW 8: STORE SETTINGS TAB -->
+        <section id="tab-settings" class="tab-view" style="display: none;">
+          <div class="section-header-row" style="margin-bottom: 24px;">
+            <h2 class="section-title">Store Configuration & Checkout Rules</h2>
+          </div>
+
+          <form id="store-settings-form">
+            <div class="settings-container-grid">
+              
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <div class="settings-card-title-group">
+                    <div class="settings-icon-bubble">🏢</div>
+                    <div>
+                      <h3>Store Profile & Sender Info</h3>
+                      <p>Details printed on shipping labels, tax invoices, and store header.</p>
+                    </div>
+                  </div>
+                  <span class="badge-emerald">Live Identity</span>
+                </div>
+                <div class="settings-card-body">
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label>Store Brand Name *</label>
+                      <input type="text" id="set-store-name" class="form-input" placeholder="e.g. Kashvi Fashions" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Support Phone Number *</label>
+                      <input type="text" id="set-support-phone" class="form-input" placeholder="e.g. 9876543210" required>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>Support Email Address</label>
+                    <input type="email" id="set-support-email" class="form-input" placeholder="e.g. contact@kashvifashions.com">
+                  </div>
+                  <div class="form-group">
+                    <label>Return / Sender Street Address *</label>
+                    <input type="text" id="set-sender-address" class="form-input" placeholder="e.g. Main Road, Near Clock Tower" required>
+                  </div>
+                  <div class="form-row-3">
+                    <div class="form-group">
+                      <label>City *</label>
+                      <input type="text" id="set-city" class="form-input" placeholder="Kakinada" required>
+                    </div>
+                    <div class="form-group">
+                      <label>State *</label>
+                      <input type="text" id="set-state" class="form-input" placeholder="Andhra Pradesh" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Pincode *</label>
+                      <input type="text" id="set-pincode" class="form-input" placeholder="533001" required>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <div class="settings-card-title-group">
+                    <div class="settings-icon-bubble">💳</div>
+                    <div>
+                      <h3>Direct UPI Payment Settings</h3>
+                      <p>Used as fallback or direct customer UPI payment receiver credentials.</p>
+                    </div>
+                  </div>
+                  <span class="badge-pink">Direct Checkout</span>
+                </div>
+                <div class="settings-card-body">
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label>Business UPI ID (VPA) *</label>
+                      <input type="text" id="set-upi-id" class="form-input" placeholder="e.g. kashvifashions@okaxis">
+                    </div>
+                    <div class="form-group">
+                      <label>Payee / Beneficiary Name *</label>
+                      <input type="text" id="set-upi-payee" class="form-input" placeholder="e.g. Kashvi Fashions">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-card">
+                <div class="settings-card-header">
+                  <div class="settings-card-title-group">
+                    <div class="settings-icon-bubble">🚚</div>
+                    <div>
+                      <h3>Delivery Rules & Security PINs</h3>
+                      <p>Automated shipping rates, workspace login PIN & fulfillment rollback lock.</p>
+                    </div>
+                  </div>
+                  <span class="badge-emerald">Automation & Security</span>
+                </div>
+                <div class="settings-card-body">
+                  <div class="form-row-2">
+                    <div class="form-group">
+                      <label>Free Delivery Threshold (₹)</label>
+                      <input type="number" id="set-free-delivery" class="form-input" placeholder="999" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Flat Delivery Charge (₹)</label>
+                      <input type="number" id="set-flat-delivery" class="form-input" placeholder="60" required>
+                    </div>
+                  </div>
+                  <div class="form-row-3" style="margin-top: 6px;">
+                    <div class="form-group">
+                      <label>Admin Login ID *</label>
+                      <input type="text" id="set-admin-id" class="form-input" placeholder="admin" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Admin Login PIN *</label>
+                      <input type="password" id="set-admin-pin" class="form-input" maxlength="8" placeholder="1234" required>
+                    </div>
+                    <div class="form-group">
+                      <label>Pipeline Rollback PIN *</label>
+                      <input type="password" id="set-pipeline-pin" class="form-input" maxlength="8" placeholder="1234" required>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="settings-save-bar">
+                <button type="submit" class="btn-primary" style="padding: 12px 32px; font-size: 0.9rem;">
+                  💾 Save All Store Settings
+                </button>
+              </div>
+
+            </div>
+          </form>
+        </section>
+
+        <!-- VIEW 9: PAYMENT GATEWAYS TAB -->
+        <section id="tab-payment-gateways" class="tab-view" style="display: none;">
+          <div class="section-header-row" style="margin-bottom: 24px;">
+            <div>
+              <h2 class="section-title">Payment Gateways Manager</h2>
+              <p style="font-size: 0.8rem; color: var(--text-muted);">Centralized control panel for Cashfree, Razorpay, PhonePe & credentials.</p>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <label style="font-weight:700; font-size:0.85rem; color:var(--brand-emerald-dark);">Active Checkout Gateway:</label>
+              <select id="pg-active-select" class="form-select" style="width:200px; font-weight:700; background:#f0f8f6; border-color:var(--brand-emerald);">
+                <option value="cashfree">Cashfree Payments</option>
+                <option value="razorpay">Razorpay</option>
+                <option value="phonepe">PhonePe</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-container-grid">
+            
+            <div class="settings-card" id="card-gateway-cashfree">
+              <div class="settings-card-header">
+                <div class="settings-card-title-group">
+                  <div class="settings-icon-bubble">⚡</div>
+                  <div>
+                    <h3>Cashfree Payments</h3>
+                    <p>Card, UPI, NetBanking & Wallet auto checkout modal.</p>
+                  </div>
+                </div>
+                <span class="badge-emerald" id="pg-status-cashfree">Active</span>
+              </div>
+              <div class="settings-card-body">
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>Environment Mode *</label>
+                    <select id="cf-env" class="form-select">
+                      <option value="sandbox">Sandbox (Testing / Demo)</option>
+                      <option value="production">Production (Live)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Cashfree App ID (Client ID) *</label>
+                    <input type="text" id="cf-app-id" class="form-input" placeholder="TEST10293847...">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Cashfree Secret Key *</label>
+                  <input type="password" id="cf-secret-key" class="form-input" placeholder="cfsk_ma_test_...">
+                </div>
+                <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                  <button type="button" class="btn-primary" id="btn-save-cashfree">💾 Save Cashfree Configuration</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card" id="card-gateway-razorpay">
+              <div class="settings-card-header">
+                <div class="settings-card-title-group">
+                  <div class="settings-icon-bubble">💳</div>
+                  <div>
+                    <h3>Razorpay</h3>
+                    <p>Standard Razorpay payment checkout integration.</p>
+                  </div>
+                </div>
+                <span class="badge-pink" id="pg-status-razorpay">Standby</span>
+              </div>
+              <div class="settings-card-body">
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>Environment Mode</label>
+                    <select id="rzp-env" class="form-select">
+                      <option value="sandbox">Test Mode</option>
+                      <option value="production">Live Mode</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Key ID</label>
+                    <input type="text" id="rzp-key-id" class="form-input" placeholder="rzp_test_...">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Key Secret</label>
+                  <input type="password" id="rzp-key-secret" class="form-input" placeholder="••••••••••••">
+                </div>
+                <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                  <button type="button" class="btn-primary" id="btn-save-razorpay">💾 Save Razorpay Configuration</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-card" id="card-gateway-phonepe">
+              <div class="settings-card-header">
+                <div class="settings-card-title-group">
+                  <div class="settings-icon-bubble">📱</div>
+                  <div>
+                    <h3>PhonePe Payment Gateway</h3>
+                    <p>Direct merchant integration for PhonePe UPI & PG.</p>
+                  </div>
+                </div>
+                <span class="badge-pink" id="pg-status-phonepe">Standby</span>
+              </div>
+              <div class="settings-card-body">
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>Environment Mode</label>
+                    <select id="phonepe-env" class="form-select">
+                      <option value="sandbox">UAT / Sandbox</option>
+                      <option value="production">Production</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Merchant ID</label>
+                    <input type="text" id="phonepe-mid" class="form-input" placeholder="MERCHANTUAT">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Salt Key / Secret</label>
+                  <input type="password" id="phonepe-salt-key" class="form-input" placeholder="••••••••••••">
+                </div>
+                <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                  <button type="button" class="btn-primary" id="btn-save-phonepe">💾 Save PhonePe Configuration</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- MODALS & DRAWERS -->
+
+  <div class="modal-overlay" id="banner-modal">
+    <div class="modal-drawer" style="width: 540px;">
+      <div class="modal-header">
+        <h3 id="banner-modal-title">Add New Storefront Banner</h3>
+        <button class="modal-close-btn" id="btn-close-banner-modal">&times;</button>
+      </div>
+      <form id="banner-form" style="display: contents;">
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Banner Title *</label>
+            <input type="text" id="banner-title" class="form-input" placeholder="e.g. Diwali Silk Festive Sale" required>
+          </div>
+          <div class="form-group">
+            <label>Subtitle / Offer Text</label>
+            <input type="text" id="banner-subtitle" class="form-input" placeholder="e.g. Flat 30% Off on Pure Kanjeevarams">
+          </div>
+          <div class="form-row-2">
+            <div class="form-group">
+              <label>Banner Placement</label>
+              <select id="banner-type" class="form-select">
+                <option value="hero">Hero Main Slider</option>
+                <option value="promo_grid">Middle Promo Grid</option>
+                <option value="announcement">Top Announcement</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Display Priority / Order</label>
+              <input type="number" id="banner-order" class="form-input" value="1" min="1">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Banner Image (File or Direct URL) *</label>
+            <input type="file" id="banner-file-input" accept="image/*" class="form-input" style="font-size: 0.78rem; margin-bottom: 6px;">
+            <input type="url" id="banner-image-url" class="form-input" placeholder="https://example.com/banner.jpg" required>
+          </div>
+          <div class="form-group">
+            <label>Redirect Link / Target URL</label>
+            <input type="text" id="banner-redirect" class="form-input" placeholder="e.g. #sarees, #jewellery, or KF0001">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-cancel-banner">Cancel</button>
+          <button type="submit" class="btn-primary">Save Banner</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="pipeline-pin-modal">
+    <div class="modal-drawer" style="width:420px; height:auto; max-height:85vh; margin:auto; border-radius:12px;">
+      <div class="modal-header">
+        <h3 style="color:var(--brand-pink);">🔒 Security Authorisation PIN</h3>
+        <button class="modal-close-btn" id="btn-close-pin-modal">&times;</button>
+      </div>
+      <form id="pipeline-pin-form">
+        <div class="modal-body" style="padding:20px;">
+          <p id="pin-modal-desc" style="font-size:0.82rem; color:var(--text-muted); margin-bottom:12px;">
+            Authorisation required to rollback this order to a previous step.
+          </p>
+          <div class="form-group">
+            <label>Enter Pipeline PIN *</label>
+            <input type="password" id="rollback-pin-input" class="form-input" placeholder="Enter PIN" maxlength="8" required autofocus>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn-primary" style="background:var(--brand-pink); width:100%; justify-content:center;">Verify PIN & Rollback Step</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="dispatch-courier-modal">
+    <div class="modal-drawer" style="width:460px; height:auto; max-height:85vh; margin:auto; border-radius:12px;">
+      <div class="modal-header">
+        <h3>Dispatch Order</h3>
+        <button class="modal-close-btn" id="btn-close-dispatch-modal">&times;</button>
+      </div>
+      <form id="dispatch-form">
+        <div class="modal-body" style="padding:20px;">
+          <input type="hidden" id="dispatch-order-id">
+          <div class="form-group">
+            <label>Courier Service</label>
+            <input type="text" id="dispatch-courier-name" class="form-input" value="India Post" readonly>
+          </div>
+          <div class="form-group" style="margin-top:12px;">
+            <label>Consignment / Tracking Number *</label>
+            <input type="text" id="dispatch-tracking-no" class="form-input" placeholder="e.g. EM123456789IN" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn-primary" style="width:100%; justify-content:center;">Confirm & Dispatch Package</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="refund-modal">
+    <div class="modal-drawer" style="width:460px; height:auto; max-height:85vh; margin:auto; border-radius:12px;">
+      <div class="modal-header">
+        <h3 style="color:var(--stat-red);">Issue Customer Refund</h3>
+        <button class="modal-close-btn" id="btn-close-refund-modal">&times;</button>
+      </div>
+      <form id="refund-form">
+        <div class="modal-body" style="padding:20px;">
+          <input type="hidden" id="refund-order-id">
+          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:12px;">
+            Please send the refund via UPI/Bank transfer and enter the bank <strong>UTR Number</strong> below to confirm refund completion and cancel this order.
+          </p>
+          <div class="form-group">
+            <label>Bank Refund UTR Number *</label>
+            <input type="text" id="refund-utr-input" class="form-input" placeholder="e.g. 324156789012" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn-primary" style="background:var(--stat-red); width:100%; justify-content:center;">Submit Refund & Cancel Order</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="order-detail-modal">
+    <div class="modal-drawer" style="width:720px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <img src="assets/logo.png" alt="Logo" class="brand-logo-img" style="width:32px; height:32px;" onerror="this.src='https://placehold.co/80x80/00564b/ffffff?text=KF'">
+          <h3 id="order-modal-title" style="margin:0;">Order Lifecycle & Details</h3>
+        </div>
+        <button class="modal-close-btn" id="btn-close-order-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="pipeline-stepper" id="order-stepper-container"></div>
+        <div class="order-detail-grid">
+          <div class="order-detail-card">
+            <h4>Customer Details</h4>
+            <div id="modal-cust-name" style="font-weight:700;">-</div>
+            <div id="modal-cust-phone" style="font-size:0.85rem; color:var(--text-muted);">-</div>
+            <div id="modal-cust-address" style="font-size:0.82rem; margin-top:4px;">-</div>
+          </div>
+          <div class="order-detail-card">
+            <h4>Payment Summary</h4>
+            <div style="font-size:0.85rem;">Payment Method: <strong id="modal-payment">-</strong></div>
+            <div style="font-size:0.85rem;">Subtotal: <span id="modal-subtotal">₹ 0</span></div>
+            <div style="font-size:0.85rem;">Delivery: <span id="modal-delivery">₹ 0</span></div>
+            <div style="font-size:1rem; font-weight:700; color:var(--brand-emerald-dark); margin-top:4px;">
+              Total: <span id="modal-total">₹ 0</span>
+            </div>
+          </div>
+        </div>
+        <h4>Purchased Items</h4>
+        <table class="order-items-table">
+          <thead>
+            <tr>
+              <th>Item & Variant</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody id="order-modal-items-tbody"></tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-primary" onclick="window.print();">🖨️ Print Invoice</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="master-drawer-overlay" id="master-drawer">
+    <div class="master-drawer-panel">
+      <div class="master-drawer-header">
+        <h3 id="master-drawer-title">Manage Attributes</h3>
+        <button class="modal-close-btn" id="btn-close-master-drawer">&times;</button>
+      </div>
+      <form id="master-drawer-form" class="quick-add-bar">
+        <div id="drawer-parent-row" style="display:none;">
+          <label style="font-size:0.75rem; font-weight:600; color:var(--text-muted); text-transform:uppercase;">Parent Category *</label>
+          <select id="drawer-parent-select" class="form-select" style="margin-top:4px; width:100%;"></select>
+        </div>
+        <div class="quick-add-row">
+          <input type="text" id="drawer-item-name" class="form-input" placeholder="Enter item name (e.g. Sarees, Silk, XL)" style="flex:1;" required>
+          <button type="submit" class="btn-primary" id="btn-drawer-submit">+ Add</button>
+          <button type="button" class="btn-secondary" id="btn-cancel-edit" style="display:none;">Cancel</button>
+        </div>
+      </form>
+      <div class="master-items-list-body" id="master-items-list">
+        <div style="text-align:center; padding:20px; color:var(--text-muted);">Loading items...</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="product-modal">
+    <div class="modal-drawer">
+      <div class="modal-header">
+        <h3 id="modal-drawer-title">Add New Product</h3>
+        <button class="modal-close-btn" id="btn-close-product-modal">&times;</button>
+      </div>
+      <form id="product-form" style="display:contents;">
+        <div class="modal-body">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label>Product Code</label>
+              <input type="text" id="prod-code" class="form-input" placeholder="KF0001" required>
+            </div>
+            <div class="form-group">
+              <label>Product Name *</label>
+              <input type="text" id="prod-name" class="form-input" placeholder="e.g. Pure Banarasi Kanjeevaram Saree" required>
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Category *</label>
+              <select id="prod-category" class="form-select" required>
+                <option value="">Select Category</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Sub-Category</label>
+              <select id="prod-subcategory" class="form-select">
+                <option value="">Select Sub-Category</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Brand</label>
+              <select id="prod-brand" class="form-select">
+                <option value="Kashvi Fashions">Kashvi Fashions</option>
+                <option value="Kashvi Jewellery">Kashvi Jewellery</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Selling Price (₹) *</label>
+              <input type="number" id="prod-price" class="form-input" placeholder="2499" required>
+            </div>
+            <div class="form-group">
+              <label>MRP (₹)</label>
+              <input type="number" id="prod-mrp" class="form-input" placeholder="4999">
+            </div>
+            <div class="form-group">
+              <label>Unit</label>
+              <select id="prod-unit" class="form-select">
+                <option value="">Select Unit</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label>Colour (Multi-Select)</label>
+              <div class="multi-picker-box" id="picker-colours"></div>
+            </div>
+            <div class="form-group">
+              <label>Size (Multi-Select)</label>
+              <div class="multi-picker-box" id="picker-sizes"></div>
+            </div>
+            <div class="form-group">
+              <label>Fabric / Material (Multi-Select)</label>
+              <div class="multi-picker-box" id="picker-materials"></div>
+            </div>
+          </div>
+
+          <div class="variant-generator-section">
+            <div class="variant-gen-header">
+              <label style="margin:0; font-size:0.82rem; font-weight:700; color:var(--brand-emerald-dark);">
+                ⚡ Variant Matrix Breakdown (Price & Stock per Variant)
+              </label>
+              <button type="button" class="btn-generate" id="btn-generate-variants">⚡ Generate Variants</button>
+            </div>
+            <div style="overflow-x:auto;">
+              <table class="variant-matrix-table" id="variant-matrix-table">
+                <thead>
+                  <tr>
+                    <th>Variant Combination</th>
+                    <th style="width:100px;">Colour</th>
+                    <th style="width:90px;">Size</th>
+                    <th style="width:110px;">Selling Price (₹)</th>
+                    <th style="width:110px;">MRP (₹)</th>
+                    <th style="width:90px;">Stock</th>
+                    <th style="width:40px;"></th>
+                  </tr>
+                </thead>
+                <tbody id="variant-matrix-tbody">
+                  <tr>
+                    <td colspan="7" style="text-align:center; padding:16px; color:var(--text-muted); font-size:0.8rem;">
+                      Select Colour & Size above, then click "⚡ Generate Variants" to create rows.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="form-group" id="image-uploader-section">
+            <label>Product Dress Images (Upload & Assign Colour to Each Image)</label>
+            <div class="image-uploader-box">
+              <div class="image-upload-controls">
+                <input type="file" id="prod-image-file" accept="image/*" class="form-input" style="font-size:0.75rem;">
+                <input type="url" id="prod-image-url" class="form-input" placeholder="Or direct HTTPS Image URL">
+                <button type="button" class="btn-primary" id="btn-add-image-tag" style="padding:7px 14px; font-size:0.78rem;">+ Add Image</button>
+              </div>
+              <div class="image-filter-tabs" id="gallery-filter-tabs"></div>
+              <div class="uploaded-gallery" id="uploaded-gallery-container"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Description & Product Details</label>
+            <textarea id="prod-desc" rows="3" class="form-textarea" placeholder="Fabric care, weave type, wash instructions..."></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-cancel-product">Cancel</button>
+          <button type="submit" class="btn-primary">Save Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="lightbox-modal" id="image-lightbox">
+    <button class="lightbox-close" id="btn-close-lightbox">&times;</button>
+    <img src="" alt="Enlarged View" class="lightbox-img" id="lightbox-target-img">
+    <div class="lightbox-caption" id="lightbox-caption"></div>
+  </div>
+
+  <!-- Master App Controller Script -->
+  <script type="module">
+    import { supabase } from './js/supabase.js';
+    import { initDashboard } from './js/modules/dashboard.js';
+    import { initProductsModule } from './js/modules/products.js';
+    import { initCategoriesModule } from './js/modules/categories.js';
+    import { initOrdersModule } from './js/modules/orders.js';
+    import { initCMSModule } from './js/modules/cms.js';
+    import { initDeliveryRatesModule } from './js/modules/delivery-rates.js';
+    import { initSettingsModule } from './js/modules/settings.js';
+
+    // -------------------------------------------------------------
+    // Real-Time Notifications Module
+    // -------------------------------------------------------------
+    function playNotificationChime() {
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+      } catch (e) {
+        console.warn("Audio chime fallback:", e);
+      }
+    }
+
+    async function loadNotifications() {
+      const container = document.getElementById('notif-items-container');
+      const badge = document.getElementById('notif-badge');
+      if (!container) return;
+
+      try {
+        const { data: list, error } = await supabase
+          .from('admin_notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (error) throw error;
+
+        const unreadCount = (list || []).filter(n => !n.is_read).length;
+        if (badge) {
+          if (unreadCount > 0) {
+            badge.innerText = unreadCount > 99 ? '99+' : unreadCount;
+            badge.style.display = 'block';
+          } else {
+            badge.style.display = 'none';
+          }
+        }
+
+        if (!list || list.length === 0) {
+          container.innerHTML = `<div style="text-align:center; padding:24px; color:#859a91; font-size:0.75rem;">No new notifications.</div>`;
+          return;
+        }
+
+        container.innerHTML = list.map(item => {
+          let icon = '🔔';
+          if (item.type === 'NEW_ORDER') icon = '🛍️';
+          else if (item.type === 'PAYMENT_RECEIVED') icon = '💵';
+          else if (item.type === 'COMPLAINT') icon = '⚠️';
+          else if (item.type === 'LOW_STOCK') icon = '📦';
+
+          const timeStr = new Date(item.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+          return `
+            <div class="notif-item ${!item.is_read ? 'unread' : ''}" data-id="${item.id}">
+              <span class="notif-item-icon">${icon}</span>
+              <div class="notif-item-content">
+                <div class="notif-item-title">${item.title}</div>
+                <div class="notif-item-msg">${item.message}</div>
+                <div class="notif-item-time">${timeStr}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.warn("Notifications load fallback:", err);
+      }
+    }
+
+    function initRealtimeNotifications() {
+      const bellBtn = document.getElementById('btn-notif-bell');
+      const dropdown = document.getElementById('notif-dropdown-menu');
+      const markAllBtn = document.getElementById('btn-mark-all-read');
+
+      if (bellBtn && dropdown) {
+        bellBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          dropdown.classList.toggle('active');
+        });
+        window.addEventListener('click', () => {
+          dropdown.classList.remove('active');
+        });
+      }
+
+      if (markAllBtn) {
+        markAllBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await supabase.from('admin_notifications').update({ is_read: true }).eq('is_read', false);
+          loadNotifications();
+        });
+      }
+
+      // Initial Fetch
+      loadNotifications();
+
+      // Listen Live for New Notifications
+      supabase
+        .channel('admin-live-alerts')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'admin_notifications' }, (payload) => {
+          playNotificationChime();
+          loadNotifications();
+        })
+        // Also listen live to 'orders' table directly to auto-insert new order alerts
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, async (payload) => {
+          const ord = payload.new;
+          playNotificationChime();
+          await supabase.from('admin_notifications').insert([{
+            type: 'NEW_ORDER',
+            title: `New Order #${ord.id}`,
+            message: `Amount ₹${ord.total_amount || ord.total || 0} received via ${ord.payment_method || 'Online'}`,
+            reference_id: ord.id
+          }]);
+          loadNotifications();
+        })
+        .subscribe();
+    }
+
+    // -------------------------------------------------------------
+    // Pincode Database Manager Logic
+    // -------------------------------------------------------------
+    async function loadPincodes(query = '') {
+      const tbody = document.getElementById('pincodes-table-body');
+      const badge = document.getElementById('pincode-badge-count');
+      const sideBadge = document.getElementById('sidebar-pincode-count');
+      if (!tbody) return;
+
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading pincodes...</td></tr>`;
+
+      try {
+        let req = supabase.from('pincodes').select('*', { count: 'exact' });
+
+        if (query) {
+          req = req.or(`pincode.ilike.%${query}%,city.ilike.%${query}%,district.ilike.%${query}%,area.ilike.%${query}%`);
+        }
+
+        const { data, count, error } = await req.order('pincode', { ascending: true }).limit(100);
+        if (error) throw error;
+
+        if (count !== null) {
+          if (badge) badge.innerText = `Total: ${count} Pincodes`;
+          if (sideBadge) sideBadge.innerText = count;
+        }
+
+        if (!data || data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--text-muted);">No pincodes match your query.</td></tr>`;
+          return;
+        }
+
+        tbody.innerHTML = data.map(p => {
+          const isOk = p.is_serviceable !== false;
+          return `
+            <tr style="border-bottom: 1px solid #edf2f0; font-size: 0.82rem;">
+              <td style="padding: 12px 10px; font-weight: 800; font-family: monospace; color: var(--brand-emerald-dark);">${p.pincode}</td>
+              <td style="padding: 12px 10px;">${p.area || p.district || '-'}</td>
+              <td style="padding: 12px 10px;">${p.city || '-'}</td>
+              <td style="padding: 12px 10px;">${p.state || 'Andhra Pradesh'}</td>
+              <td style="padding: 12px 10px;">
+                <span style="font-size: 0.68rem; font-weight: 800; padding: 3px 8px; border-radius: 12px; background: ${isOk ? '#eaf8f1' : '#fff1f0'}; color: ${isOk ? '#00875a' : '#cf1322'};">
+                  ${isOk ? '● SERVICEABLE' : '● BLOCKED'}
+                </span>
+              </td>
+              <td style="padding: 12px 10px; text-align: right;">
+                <button type="button" class="btn-toggle-pin-service" data-id="${p.id}" data-current="${isOk}" style="background: none; border: 1px solid #dce8e2; padding: 4px 10px; border-radius: 4px; font-size: 0.72rem; cursor: pointer; font-weight: 600;">
+                  ${isOk ? 'Block' : 'Enable'}
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+      } catch (err) {
+        console.error("Pincode error:", err);
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 24px; color: var(--stat-red);">Error loading pincodes: ${err.message}</td></tr>`;
+      }
+    }
+
+    function initPincodesModule() {
+      const searchInput = document.getElementById('pincode-search-input');
+      if (searchInput) {
+        let timer = null;
+        searchInput.addEventListener('input', (e) => {
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            loadPincodes(e.target.value.trim());
+          }, 300);
+        });
+      }
+
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.btn-toggle-pin-service');
+        if (!btn) return;
+
+        const id = btn.dataset.id;
+        const current = btn.dataset.current === 'true';
+
+        btn.disabled = true;
+        btn.innerText = 'Updating...';
+
+        const { error } = await supabase.from('pincodes').update({ is_serviceable: !current }).eq('id', id);
+        if (!error) {
+          const q = document.getElementById('pincode-search-input')?.value.trim() || '';
+          loadPincodes(q);
+        } else {
+          alert('Failed to update status: ' + error.message);
+          btn.disabled = false;
+        }
+      });
+    }
+
+    // -------------------------------------------------------------
+    // Payment Gateways Manager Logic
+    // -------------------------------------------------------------
+    async function initPaymentGatewaysManager() {
+      const activeSelect = document.getElementById('pg-active-select');
+      const cfEnv = document.getElementById('cf-env');
+      const cfAppId = document.getElementById('cf-app-id');
+      const cfSecretKey = document.getElementById('cf-secret-key');
+      const btnSaveCf = document.getElementById('btn-save-cashfree');
+
+      const rzpEnv = document.getElementById('rzp-env');
+      const rzpKeyId = document.getElementById('rzp-key-id');
+      const rzpKeySecret = document.getElementById('rzp-key-secret');
+      const btnSaveRzp = document.getElementById('btn-save-razorpay');
+
+      const phonepeEnv = document.getElementById('phonepe-env');
+      const phonepeMid = document.getElementById('phonepe-mid');
+      const phonepeSaltKey = document.getElementById('phonepe-salt-key');
+      const btnSavePhonepe = document.getElementById('btn-save-phonepe');
+
+      try {
+        const { data: configs, error } = await supabase.from('payment_gateway_configs').select('*');
+        if (!error && configs) {
+          configs.forEach(cfg => {
+            if (cfg.is_active && activeSelect) {
+              activeSelect.value = cfg.id;
+            }
+
+            const badge = document.getElementById(`pg-status-${cfg.id}`);
+            if (badge) {
+              badge.className = cfg.is_active ? 'badge-emerald' : 'badge-pink';
+              badge.innerText = cfg.is_active ? 'Active' : 'Standby';
+            }
+
+            if (cfg.id === 'cashfree') {
+              if (cfEnv) cfEnv.value = cfg.environment || 'sandbox';
+              if (cfAppId) cfAppId.value = cfg.app_id || '';
+              if (cfSecretKey) cfSecretKey.value = cfg.secret_key || '';
+            } else if (cfg.id === 'razorpay') {
+              if (rzpEnv) rzpEnv.value = cfg.environment || 'sandbox';
+              if (rzpKeyId) rzpKeyId.value = cfg.app_id || '';
+              if (rzpKeySecret) rzpKeySecret.value = cfg.secret_key || '';
+            } else if (cfg.id === 'phonepe') {
+              if (phonepeEnv) phonepeEnv.value = cfg.environment || 'sandbox';
+              if (phonepeMid) phonepeMid.value = cfg.app_id || '';
+              if (phonepeSaltKey) phonepeSaltKey.value = cfg.secret_key || '';
+            }
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load payment gateway configs:', err);
+      }
+
+      if (activeSelect) {
+        activeSelect.addEventListener('change', async () => {
+          const selected = activeSelect.value;
+          try {
+            await supabase.from('payment_gateway_configs').update({ is_active: false }).neq('id', 'dummy');
+            await supabase.from('payment_gateway_configs').update({ is_active: true }).eq('id', selected);
+
+            ['cashfree', 'razorpay', 'phonepe'].forEach(id => {
+              const b = document.getElementById(`pg-status-${id}`);
+              if (b) {
+                const isCur = id === selected;
+                b.className = isCur ? 'badge-emerald' : 'badge-pink';
+                b.innerText = isCur ? 'Active' : 'Standby';
+              }
+            });
+            alert(`✓ Default active gateway changed to: ${selected.toUpperCase()}`);
+          } catch (e) {
+            alert('Failed to switch gateway: ' + e.message);
+          }
+        });
+      }
+
+      if (btnSaveCf) {
+        btnSaveCf.addEventListener('click', async () => {
+          btnSaveCf.innerText = 'Saving...';
+          const { error } = await supabase.from('payment_gateway_configs').upsert({
+            id: 'cashfree',
+            name: 'Cashfree Payments',
+            environment: cfEnv.value,
+            app_id: cfAppId.value.trim(),
+            secret_key: cfSecretKey.value.trim(),
+            updated_at: new Date().toISOString()
+          });
+          btnSaveCf.innerText = '💾 Save Cashfree Configuration';
+          if (error) alert('Error: ' + error.message);
+          else alert('✓ Cashfree configuration saved successfully!');
+        });
+      }
+
+      if (btnSaveRzp) {
+        btnSaveRzp.addEventListener('click', async () => {
+          btnSaveRzp.innerText = 'Saving...';
+          const { error } = await supabase.from('payment_gateway_configs').upsert({
+            id: 'razorpay',
+            name: 'Razorpay',
+            environment: rzpEnv.value,
+            app_id: rzpKeyId.value.trim(),
+            secret_key: rzpKeySecret.value.trim(),
+            updated_at: new Date().toISOString()
+          });
+          btnSaveRzp.innerText = '💾 Save Razorpay Configuration';
+          if (error) alert('Error: ' + error.message);
+          else alert('✓ Razorpay configuration saved successfully!');
+        });
+      }
+
+      if (btnSavePhonepe) {
+        btnSavePhonepe.addEventListener('click', async () => {
+          btnSavePhonepe.innerText = 'Saving...';
+          const { error } = await supabase.from('payment_gateway_configs').upsert({
+            id: 'phonepe',
+            name: 'PhonePe',
+            environment: phonepeEnv.value,
+            app_id: phonepeMid.value.trim(),
+            secret_key: phonepeSaltKey.value.trim(),
+            updated_at: new Date().toISOString()
+          });
+          btnSavePhonepe.innerText = '💾 Save PhonePe Configuration';
+          if (error) alert('Error: ' + error.message);
+          else alert('✓ PhonePe configuration saved successfully!');
+        });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Main App Initialization
+    // -------------------------------------------------------------
+    document.addEventListener('DOMContentLoaded', async () => {
+      const isAuth = sessionStorage.getItem('kashvi_admin_auth');
+      if (isAuth !== 'true') {
+        window.location.replace('login.html');
+        return;
+      }
+
+      const loggedUser = sessionStorage.getItem('kashvi_admin_user');
+      if (loggedUser) {
+        const nameEl = document.getElementById('display-admin-name');
+        const initialEl = document.getElementById('avatar-initial');
+        if (nameEl) nameEl.innerText = loggedUser.charAt(0).toUpperCase() + loggedUser.slice(1);
+        if (initialEl) initialEl.innerText = loggedUser.charAt(0).toUpperCase();
+      }
+
+      initDashboard();
+      initProductsModule();
+      initCategoriesModule();
+      initOrdersModule();
+      initCMSModule();
+      initDeliveryRatesModule();
+      initSettingsModule();
+      initPaymentGatewaysManager();
+      initPincodesModule();
+      initRealtimeNotifications();
+
+      const handleLogout = () => {
+        if (confirm("Are you sure you want to lock and exit the workspace?")) {
+          sessionStorage.removeItem('kashvi_admin_auth');
+          sessionStorage.removeItem('kashvi_admin_user');
+          window.location.replace('login.html');
+        }
+      };
+
+      const sidebarLogoutBtn = document.getElementById('btn-sidebar-logout');
+      const headerLockBtn = document.getElementById('btn-header-lock');
+      if (sidebarLogoutBtn) sidebarLogoutBtn.addEventListener('click', handleLogout);
+      if (headerLockBtn) headerLockBtn.addEventListener('click', handleLogout);
+
+      const navItems = document.querySelectorAll('.sidebar-nav .nav-item, .sidebar-accordion-menu .sub-nav-item');
+      const settingsTrigger = document.getElementById('btn-settings-accordion');
+      const settingsSubmenu = document.getElementById('settings-submenu');
+      const accordionArrow = document.getElementById('accordion-arrow');
+
+      if (settingsTrigger && settingsSubmenu) {
+        settingsTrigger.addEventListener('click', (e) => {
+          e.preventDefault();
+          const isHidden = settingsSubmenu.style.display === 'none';
+          settingsSubmenu.style.display = isHidden ? 'flex' : 'none';
+          if (accordionArrow) accordionArrow.innerText = isHidden ? '▾' : '▸';
+        });
+      }
+
+      navItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+          const targetTab = item.dataset.tab;
+          if (!targetTab) return;
+          e.preventDefault();
+
+          navItems.forEach(n => n.classList.remove('active'));
+          item.classList.add('active');
+
+          document.querySelectorAll('.tab-view').forEach(view => {
+            view.style.display = 'none';
+          });
+          const activeView = document.getElementById(targetTab);
+          if (activeView) {
+            activeView.style.display = 'block';
+            if (targetTab === 'tab-pincodes') {
+              loadPincodes();
+            }
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>
