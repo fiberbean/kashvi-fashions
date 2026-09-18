@@ -1,602 +1,1009 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import {
   Layers,
-  FolderTree,
-  Tag,
   Palette,
   Ruler,
-  Scroll,
+  Scissors,
+  Scale,
   Plus,
-  Edit2,
   Trash2,
-  Image as ImageIcon,
-  Check,
+  CheckCircle2,
+  XCircle,
   X,
-  Loader2,
-  UploadCloud,
+  Truck,
+  Users,
   Search,
-  ChevronRight
+  MessageCircle,
+  Sparkles,
+  MapPin,
+  Tag
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import {
+  CategoryRecord,
+  SubCategoryRecord,
+  ColourRecord,
+  SizeRecord,
+  FabricRecord,
+  UnitRecord,
+  PincodeRecord,
+  DeliveryRateCardRecord,
+  CustomerMasterRecord,
+  AdminStaffUser
+} from '../types';
 
-type MasterType = 'category' | 'subcategory' | 'brand' | 'colour' | 'size' | 'fabric';
-
-interface MasterItem {
-  id: string;
-  name?: string;
-  title?: string;
-  category_name?: string;
-  category_id?: string;
-  image_url?: string;
-  code?: string;
-  created_at?: string;
+interface AdminMastersProps {
+  currentUser: AdminStaffUser | null;
 }
 
-const TABS: { id: MasterType; label: string; icon: any; desc: string; table: string }[] = [
-  { id: 'category', label: 'Categories', icon: Layers, desc: 'Fashions, Jewellery & Main Departments', table: 'categories' },
-  { id: 'subcategory', label: 'Sub-Categories', icon: FolderTree, desc: 'Royal Arch Banners & Sub-collections', table: 'sub_categories' },
-  { id: 'brand', label: 'Brands', icon: Tag, desc: 'Designer Labels & In-house Lines', table: 'brands' },
-  { id: 'colour', label: 'Colours', icon: Palette, desc: 'Hex Shades & Palette Swatches', table: 'colours' },
-  { id: 'size', label: 'Sizes', icon: Ruler, desc: 'Dress & Bangle Size Standards', table: 'sizes' },
-  { id: 'fabric', label: 'Fabrics', icon: Scroll, desc: 'Silks, Kundan & Raw Materials', table: 'fabrics' },
-];
+export default function AdminMasters({ currentUser }: AdminMastersProps) {
+  // Main Pillar Tabs
+  const [activeTab, setActiveTab] = useState<'categories' | 'variants' | 'logistics' | 'customers'>('categories');
+  const [variantSubTab, setVariantSubTab] = useState<'colours' | 'sizes' | 'fabrics' | 'units'>('colours');
+  const [logisticsSubTab, setLogisticsSubTab] = useState<'pincodes' | 'ratecards'>('pincodes');
 
-export default function AdminMasters() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as MasterType) || 'category';
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  const [items, setItems] = useState<MasterItem[]>([]);
-  const [categoriesList, setCategoriesList] = useState<MasterItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  // Data States matched to database tables
+  const [categories, setCategories] = useState<CategoryRecord[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
+  const [colours, setColours] = useState<ColourRecord[]>([]);
+  const [sizes, setSizes] = useState<SizeRecord[]>([]);
+  const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
+  const [units, setUnits] = useState<UnitRecord[]>([]);
+  const [pincodes, setPincodes] = useState<PincodeRecord[]>([]);
+  const [rateCards, setRateCards] = useState<DeliveryRateCardRecord[]>([]);
+  const [customers, setCustomers] = useState<CustomerMasterRecord[]>([]);
 
-  // Drawer / Form State
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  // Permissions
+  const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'manager';
+  const canDelete = currentUser?.role === 'admin';
 
-  // Form Fields
-  const [itemName, setItemName] = useState('');
-  const [parentCategory, setParentCategory] = useState('');
-  const [parentCategoryId, setParentCategoryId] = useState('');
-  const [imageUrl, setImageUrl] = useState('');
-  const [colorCode, setColorCode] = useState('#0b3b2c');
-  const [uploadingImage, setUploadingImage] = useState(false);
+  // Modals state
+  const [activeModal, setActiveModal] = useState<string | null>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Form Inputs
+  const [catName, setCatName] = useState('');
+  const [catDept, setCatDept] = useState('fashions');
 
-  const currentTabMeta = TABS.find((t) => t.id === activeTab) || TABS[0];
+  const [subCatName, setSubCatName] = useState('');
+  const [subCatParentId, setSubCatParentId] = useState('');
 
-  // Fetch Parent Categories for subcategory dropdown
-  const fetchParentCategories = async () => {
+  const [variantNameInput, setVariantNameInput] = useState('');
+  const [unitShortName, setUnitShortName] = useState('');
+
+  // Pincode Inputs
+  const [pinNumber, setPinNumber] = useState('');
+  const [pinCity, setPinCity] = useState('');
+  const [pinState, setPinState] = useState('');
+  const [pinZone, setPinZone] = useState('Within State');
+
+  // Load all master tables data
+  const loadMastersData = async () => {
+    setLoading(true);
     try {
-      const { data } = await supabase.from('categories').select('*').order('name', { ascending: true });
-      if (data) setCategoriesList(data);
-    } catch (e) {
-      console.error('Error fetching parent categories:', e);
-    }
-  };
+      // 1. Categories & Subcategories
+      const { data: catData } = await supabase.from('categories').select('*').order('name');
+      if (catData) setCategories(catData);
 
-  // Fetch Current Master Data
-  const fetchMasterItems = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from(currentTabMeta.table)
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: subCatData } = await supabase.from('sub_categories').select('*').order('name');
+      if (subCatData) setSubCategories(subCatData);
 
-      if (!error && data) {
-        setItems(data);
-      } else {
-        setItems([]);
+      // 2. Variants: Colours, Sizes, Fabrics, Units
+      const { data: colData } = await supabase.from('colours').select('*').order('name');
+      if (colData) setColours(colData);
+
+      const { data: sizeData } = await supabase.from('sizes').select('*').order('name');
+      if (sizeData) setSizes(sizeData);
+
+      const { data: fabData } = await supabase.from('fabrics').select('*').order('name');
+      if (fabData) setFabrics(fabData);
+
+      const { data: unitData } = await supabase.from('units').select('*').order('name');
+      if (unitData) setUnits(unitData);
+
+      // 3. Logistics: Pincodes & Rate Cards
+      const { data: pinData } = await supabase.from('pincodes').select('*').order('pincode').limit(150);
+      if (pinData) setPincodes(pinData);
+
+      const { data: rateData } = await supabase.from('delivery_rate_cards').select('*').order('weight_from');
+      if (rateData) setRateCards(rateData);
+
+      // 4. Customers List from Orders
+      const { data: orders } = await supabase.from('orders').select('*');
+      if (orders && orders.length > 0) {
+        const custMap = new Map<string, CustomerMasterRecord>();
+        orders.forEach((o: any) => {
+          const phone = o.customer_phone || 'N/A';
+          const name = o.customer_name || 'Guest User';
+          const amt = Number(o.total_amount) || 0;
+          const city = o.shipping_address ? o.shipping_address.split(',').slice(-2, -1)[0]?.trim() : 'AP';
+
+          if (custMap.has(phone)) {
+            const existing = custMap.get(phone)!;
+            existing.total_orders += 1;
+            existing.total_spend += amt;
+          } else {
+            custMap.set(phone, {
+              id: phone,
+              name,
+              phone,
+              email: o.customer_email,
+              total_orders: 1,
+              total_spend: amt,
+              city,
+              last_order_date: o.created_at
+            });
+          }
+        });
+        setCustomers(Array.from(custMap.values()));
       }
     } catch (err) {
-      console.error('Error loading master records:', err);
+      console.error('Failed to fetch masters state:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchParentCategories();
+    loadMastersData();
   }, []);
 
-  useEffect(() => {
-    fetchMasterItems();
-    closeDrawer();
-  }, [activeTab]);
+  // Helper ID generator for text primary keys
+  const makeId = (prefix: string) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
-  const openNewDrawer = () => {
-    setIsEditing(false);
-    setEditingId(null);
-    setItemName('');
-    setParentCategory(categoriesList[0]?.name || '');
-    setParentCategoryId(categoriesList[0]?.id || '');
-    setImageUrl('');
-    setColorCode('#0b3b2c');
-    setIsDrawerOpen(true);
-  };
-
-  const openEditDrawer = (item: MasterItem) => {
-    setIsEditing(true);
-    setEditingId(item.id);
-    setItemName(item.name || item.title || '');
-    setParentCategory(item.category_name || '');
-    setParentCategoryId(item.category_id || '');
-    setImageUrl(item.image_url || '');
-    setColorCode(item.code || '#0b3b2c');
-    setIsDrawerOpen(true);
-  };
-
-  const closeDrawer = () => {
-    setIsDrawerOpen(false);
-    setIsEditing(false);
-    setEditingId(null);
-    setItemName('');
-    setImageUrl('');
-    setSaving(false);
-  };
-
-  // Direct Supabase Storage Uploader
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      setUploadingImage(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${activeTab}_${Date.now()}.${fileExt}`;
-      const filePath = `masters/${fileName}`;
-
-      let { error: uploadError } = await supabase.storage
-        .from('categories')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) {
-        // Fallback bucket
-        const { error: fallbackErr } = await supabase.storage
-          .from('public-assets')
-          .upload(filePath, file, { upsert: true });
-        if (fallbackErr) throw fallbackErr;
-      }
-
-      const { data } = supabase.storage.from('categories').getPublicUrl(filePath);
-      setImageUrl(data.publicUrl);
-    } catch (err: any) {
-      console.error('Image upload failed:', err);
-      alert('Upload failed: ' + (err.message || 'Check storage permissions.'));
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
+  // 1. Add Category
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!itemName.trim()) return;
+    if (!catName.trim()) return;
 
-    setSaving(true);
-    try {
-      const payload: any = {
-        name: itemName.trim(),
-      };
+    const id = makeId('cat');
+    const slug = catName.trim().toLowerCase().replace(/\s+/g, '-');
 
-      if (activeTab === 'category') {
-        payload.slug = itemName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        payload.image_url = imageUrl || null;
-        payload.active = true;
-      } else if (activeTab === 'subcategory') {
-        payload.category_name = parentCategory;
-        payload.category_id = parentCategoryId || null;
-        payload.image_url = imageUrl || null;
-        payload.active = true;
-      } else if (activeTab === 'colour') {
-        payload.code = colorCode;
-      }
+    const { data, error } = await supabase
+      .from('categories')
+      .insert([{
+        id,
+        name: catName.trim(),
+        slug,
+        department: catDept,
+        active: true
+      }])
+      .select()
+      .single();
 
-      if (isEditing && editingId) {
-        const { error } = await supabase
-          .from(currentTabMeta.table)
-          .update(payload)
-          .eq('id', editingId);
-        if (error) throw error;
-      } else {
-        const newId = `${activeTab.slice(0, 3).toUpperCase()}_${Date.now().toString(36).toUpperCase()}`;
-        const { error } = await supabase
-          .from(currentTabMeta.table)
-          .insert([{ id: newId, ...payload }]);
-        if (error) throw error;
-      }
-
-      closeDrawer();
-      await fetchMasterItems();
-    } catch (err: any) {
-      console.error('Save error:', err);
-      alert('Failed to save: ' + err.message);
-    } finally {
-      setSaving(false);
+    if (!error && data) {
+      setCategories((prev) => [...prev, data]);
+      setCatName('');
+      setActiveModal(null);
     }
   };
 
-  const handleDelete = async (item: MasterItem) => {
-    const name = item.name || item.title;
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+  // 2. Add Sub-Category
+  const handleSaveSubCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subCatName.trim() || !subCatParentId) return;
 
-    try {
-      const { error } = await supabase
-        .from(currentTabMeta.table)
-        .delete()
-        .eq('id', item.id);
-      if (error) throw error;
-      await fetchMasterItems();
-    } catch (err: any) {
-      console.error('Delete error:', err);
-      alert('Delete failed: ' + err.message);
+    const parent = categories.find((c) => c.id === subCatParentId);
+    const id = makeId('subcat');
+
+    const { data, error } = await supabase
+      .from('sub_categories')
+      .insert([{
+        id,
+        name: subCatName.trim(),
+        category_id: subCatParentId,
+        category_name: parent?.name || '',
+        active: true
+      }])
+      .select()
+      .single();
+
+    if (!error && data) {
+      setSubCategories((prev) => [...prev, data]);
+      setSubCatName('');
+      setActiveModal(null);
     }
   };
 
-  const filteredItems = items.filter((item) => {
-    const name = (item.name || item.title || '').toLowerCase();
-    const sub = (item.category_name || '').toLowerCase();
-    const query = searchTerm.toLowerCase().trim();
-    return name.includes(query) || sub.includes(query);
-  });
+  // 3. Add Variant (Colour / Size / Fabric / Unit)
+  const handleSaveVariant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!variantNameInput.trim()) return;
+
+    const name = variantNameInput.trim();
+
+    if (variantSubTab === 'colours') {
+      const id = makeId('col');
+      const { data, error } = await supabase.from('colours').insert([{ id, name, active: true }]).select().single();
+      if (!error && data) setColours((prev) => [...prev, data]);
+    } else if (variantSubTab === 'sizes') {
+      const id = makeId('sz');
+      const { data, error } = await supabase.from('sizes').insert([{ id, name, active: true }]).select().single();
+      if (!error && data) setSizes((prev) => [...prev, data]);
+    } else if (variantSubTab === 'fabrics') {
+      const id = makeId('fab');
+      const { data, error } = await supabase.from('fabrics').insert([{ id, name }]).select().single();
+      if (!error && data) setFabrics((prev) => [...prev, data]);
+    } else if (variantSubTab === 'units') {
+      const id = makeId('unt');
+      const { data, error } = await supabase
+        .from('units')
+        .insert([{ id, name, short_name: unitShortName.trim() || name, active: true }])
+        .select()
+        .single();
+      if (!error && data) setUnits((prev) => [...prev, data]);
+    }
+
+    setVariantNameInput('');
+    setUnitShortName('');
+    setActiveModal(null);
+  };
+
+  // 4. Add Pincode
+  const handleSavePincode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pinNumber.trim().length !== 6) {
+      alert('Pincode must be exactly 6 digits.');
+      return;
+    }
+
+    const id = makeId('pin');
+    const { data, error } = await supabase
+      .from('pincodes')
+      .insert([{
+        id,
+        pincode: pinNumber.trim(),
+        city: pinCity.trim() || 'Kakinada',
+        state: pinState.trim() || 'Andhra Pradesh',
+        zone_type: pinZone,
+        delivery_available: true
+      }])
+      .select()
+      .single();
+
+    if (!error && data) {
+      setPincodes((prev) => [data, ...prev]);
+      setPinNumber('');
+      setPinCity('');
+      setPinState('');
+      setActiveModal(null);
+    }
+  };
+
+  // Generic Delete Action for text ID primary keys
+  const handleDeleteItem = async (table: string, id: string) => {
+    if (!canDelete) {
+      alert('Access Denied: Only Admin can delete master records.');
+      return;
+    }
+    if (!confirm('Permanently delete this record?')) return;
+
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (!error) {
+      loadMastersData();
+    }
+  };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
       
-      {/* Top Header & Attribute Pills */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* 1. Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-[#e2eae6] shadow-xs">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#0b3b2c]">
-            Store Masters & Dropdown Attributes
-          </h1>
-          <p className="text-xs sm:text-sm text-[#4d6960] mt-1">
-            {currentTabMeta.desc}
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={openNewDrawer}
-          className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#0b3b2c] hover:bg-[#06231a] text-white text-xs font-bold uppercase tracking-wider shadow-md shadow-[#0b3b2c]/20 transition-all active:scale-95 cursor-pointer self-start md:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add {currentTabMeta.label.slice(0, -1)}</span>
-        </button>
-      </div>
-
-      {/* Pill Navigation Bar for Masters */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 border-b border-[#dce6e1] scrollbar-none">
-        {TABS.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setSearchParams({ tab: tab.id })}
-              className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-                isActive
-                  ? 'bg-[#0b3b2c] text-white shadow-md'
-                  : 'bg-white border border-[#dce6e1] text-[#4d6960] hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
-              }`}
-            >
-              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#e5c07b]' : ''}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Search & Filter Bar */}
-      <div className="flex items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-[#dce6e1] shadow-xs">
-        <div className="flex items-center gap-2 flex-1 max-w-md">
-          <Search className="w-4 h-4 text-[#809c93]" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={`Filter ${currentTabMeta.label}...`}
-            className="w-full text-xs text-[#0c2b22] bg-transparent outline-none placeholder:text-[#809c93]"
-          />
-        </div>
-        <span className="text-xs font-bold text-[#4d6960] bg-[#f0f4f2] px-3 py-1 rounded-full shrink-0">
-          {filteredItems.length} Registered
-        </span>
-      </div>
-
-      {/* Master Items Grid Cards */}
-      {loading ? (
-        <div className="py-20 flex flex-col items-center justify-center text-center space-y-3">
-          <Loader2 className="w-8 h-8 text-[#0b3b2c] animate-spin" />
-          <p className="text-xs font-semibold text-[#4d6960]">Loading master items...</p>
-        </div>
-      ) : filteredItems.length === 0 ? (
-        <div className="py-20 bg-white rounded-3xl border border-[#dce6e1] text-center p-8 space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-[#f0f4f2] text-[#4d6960] flex items-center justify-center mx-auto">
-            <Tag className="w-6 h-6 stroke-[1.5]" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#e4efe9] text-[#0b3b2c] text-[9.5px] font-bold uppercase tracking-wider mb-1 border border-[#dce6e1]">
+            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Master Vaults
           </div>
-          <h4 className="text-sm font-bold text-[#0c2b22]">No items found</h4>
-          <p className="text-xs text-[#809c93] max-w-xs mx-auto">
-            Get started by creating your first entry in {currentTabMeta.label}.
+          <h1 className="text-xl font-serif font-bold text-[#0b3b2c] leading-none">
+            Store Masters, Variants & Logistics Engine
+          </h1>
+          <p className="text-[11px] text-[#4d6960] mt-1">
+            Connected to tables: categories, sub_categories, colours, sizes, fabrics, units, pincodes, rate cards.
           </p>
+        </div>
+
+        {/* Pillar Switcher */}
+        <div className="flex flex-wrap items-center gap-1 p-1 bg-[#f0f4f2] rounded-full self-start sm:self-center">
           <button
             type="button"
-            onClick={openNewDrawer}
-            className="mt-2 px-5 py-2 rounded-full bg-[#0b3b2c] text-white text-xs font-bold cursor-pointer hover:bg-[#06231a]"
+            onClick={() => setActiveTab('categories')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'categories'
+                ? 'bg-[#0b3b2c] text-white shadow-xs'
+                : 'text-[#4d6960] hover:text-[#0b3b2c]'
+            }`}
           >
-            + Add New
+            <Layers className="w-3.5 h-3.5" />
+            <span>Categories</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('variants')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'variants'
+                ? 'bg-[#0b3b2c] text-white shadow-xs'
+                : 'text-[#4d6960] hover:text-[#0b3b2c]'
+            }`}
+          >
+            <Palette className="w-3.5 h-3.5" />
+            <span>Dynamic Variants</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('logistics')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'logistics'
+                ? 'bg-[#0b3b2c] text-white shadow-xs'
+                : 'text-[#4d6960] hover:text-[#0b3b2c]'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5" />
+            <span>Pincodes & Rates</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('customers')}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'customers'
+                ? 'bg-[#0b3b2c] text-white shadow-xs'
+                : 'text-[#4d6960] hover:text-[#0b3b2c]'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Customers</span>
           </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filteredItems.map((item) => {
-            const hasImage = activeTab === 'category' || activeTab === 'subcategory';
-            const name = item.name || item.title;
+      </div>
 
-            return (
-              <div
-                key={item.id}
-                className="bg-white rounded-3xl border border-[#dce6e1] p-4.5 shadow-[6px_6px_18px_rgba(11,59,44,0.03)] hover:shadow-lg transition-all flex flex-col justify-between group"
-              >
-                <div className="flex items-start gap-3.5">
-                  {/* Arch Thumbnail for Category/Subcategory */}
-                  {hasImage && (
-                    <div className="w-14 h-18 rounded-t-[20px] rounded-b-xl overflow-hidden bg-[#f0f4f2] border border-[#dce6e1] shrink-0 p-0.5 shadow-2xs">
-                      {item.image_url ? (
-                        <img
-                          src={item.image_url}
-                          alt={name}
-                          className="w-full h-full object-cover object-top rounded-t-[18px] rounded-b-lg"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-neutral-400 bg-white rounded-t-[18px] rounded-b-lg text-[9px] font-bold uppercase tracking-wider">
-                          <ImageIcon className="w-4 h-4 mb-0.5 text-[#809c93]" />
-                          Arch
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Color Swatch Preview for Colours */}
-                  {activeTab === 'colour' && (
-                    <div
-                      className="w-10 h-10 rounded-2xl border border-black/10 shadow-xs shrink-0"
-                      style={{ backgroundColor: item.code || '#0b3b2c' }}
-                    />
-                  )}
-
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-[#0c2b22] truncate leading-snug">
-                      {name}
-                    </h3>
-                    {item.category_name && (
-                      <span className="inline-block mt-1 text-[10px] font-bold text-[#0b3b2c] bg-[#e4efe9] px-2 py-0.5 rounded-md">
-                        Parent: {item.category_name}
-                      </span>
-                    )}
-                    {item.code && (
-                      <span className="inline-block mt-1 text-[10px] font-mono text-[#809c93]">
-                        {item.code}
-                      </span>
-                    )}
-                    <span className="text-[10px] font-mono text-neutral-400 block mt-1.5 truncate">
-                      ID: {item.id}
-                    </span>
-                  </div>
+      {/* ========================================================================= */}
+      {/* 2. TAB 1: CATEGORIES & SUB-CATEGORIES */}
+      {/* ========================================================================= */}
+      {activeTab === 'categories' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            
+            {/* Left: Main Categories */}
+            <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden flex flex-col">
+              <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-4 h-4 text-[#0b3b2c]" />
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
+                    Main Categories ({categories.length})
+                  </h3>
                 </div>
-
-                {/* Card Actions */}
-                <div className="mt-4 pt-3 border-t border-[#edf2ef] flex items-center justify-end gap-1.5">
+                {canEdit && (
                   <button
                     type="button"
-                    onClick={() => openEditDrawer(item)}
-                    className="p-1.5 rounded-xl hover:bg-[#f0f4f2] text-[#4d6960] hover:text-[#0b3b2c] transition-colors cursor-pointer"
-                    title="Edit Item"
+                    onClick={() => setActiveModal('category')}
+                    className="px-3 py-1 rounded-full bg-[#0b3b2c] text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs"
                   >
-                    <Edit2 className="w-3.5 h-3.5" />
+                    <Plus className="w-3 h-3 text-[#e5c07b]" />
+                    <span>Add Category</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(item)}
-                    className="p-1.5 rounded-xl hover:bg-rose-50 text-neutral-400 hover:text-rose-600 transition-colors cursor-pointer"
-                    title="Delete Item"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                )}
               </div>
-            );
-          })}
+
+              <div className="overflow-x-auto flex-1">
+                <table className="w-full text-left text-xs font-sans">
+                  <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                    <tr>
+                      <th className="py-2.5 px-4">Name</th>
+                      <th className="py-2.5 px-4">Department</th>
+                      <th className="py-2.5 px-4">Slug</th>
+                      <th className="py-2.5 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#edf2ef]">
+                    {categories.map((cat) => (
+                      <tr key={cat.id} className="hover:bg-[#f4f7f5] transition-colors">
+                        <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{cat.name}</td>
+                        <td className="py-2.5 px-4">
+                          <span className="px-2 py-0.5 rounded-full bg-[#f0f4f2] text-[#0b3b2c] text-[10px] font-semibold uppercase">
+                            {cat.department || 'fashions'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 font-mono text-[11px] text-neutral-400">{cat.slug}</td>
+                        <td className="py-2.5 px-4 text-right">
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem('categories', cat.id)}
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Right: Sub-Categories */}
+            <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden flex flex-col">
+              <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[#0b3b2c]" />
+                  <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
+                    Sub-Categories ({subCategories.length})
+                  </h3>
+                </div>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveModal('subcategory')}
+                    className="px-3 py-1 rounded-full bg-[#0b3b2c] text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs"
+                  >
+                    <Plus className="w-3 h-3 text-[#e5c07b]" />
+                    <span>Add Sub-Category</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="overflow-x-auto flex-1">
+                <table className="w-full text-left text-xs font-sans">
+                  <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                    <tr>
+                      <th className="py-2.5 px-4">Sub-Category</th>
+                      <th className="py-2.5 px-4">Parent Category</th>
+                      <th className="py-2.5 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#edf2ef]">
+                    {subCategories.map((sub) => (
+                      <tr key={sub.id} className="hover:bg-[#f4f7f5] transition-colors">
+                        <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{sub.name}</td>
+                        <td className="py-2.5 px-4">
+                          <span className="px-2 py-0.5 rounded-md bg-[#e4efe9] text-[#0b3b2c] font-bold text-[10px]">
+                            {sub.category_name || 'Category'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-4 text-right">
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem('sub_categories', sub.id)}
+                              className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
         </div>
       )}
 
-      {/* Slide-in Edit & Add Drawer */}
-      {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
-          <div
-            onClick={closeDrawer}
-            className="absolute inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
-          />
+      {/* ========================================================================= */}
+      {/* 3. TAB 2: DYNAMIC VARIANTS (COLOURS, SIZES, FABRICS, UNITS) */}
+      {/* ========================================================================= */}
+      {activeTab === 'variants' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setVariantSubTab('colours')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  variantSubTab === 'colours' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'bg-white border text-neutral-600'
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
+                <span>Colours ({colours.length})</span>
+              </button>
 
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col border-l border-[#dce6e1]">
-              
-              {/* Drawer Header */}
-              <div className="p-5 border-b border-[#edf2ef] flex items-center justify-between bg-[#f8faf9]">
-                <div>
-                  <h3 className="font-serif font-bold text-base text-[#0b3b2c]">
-                    {isEditing ? 'Edit Item' : `Add to ${currentTabMeta.label}`}
-                  </h3>
-                  <span className="text-xs text-[#809c93]">
-                    {currentTabMeta.table} table
-                  </span>
+              <button
+                type="button"
+                onClick={() => setVariantSubTab('sizes')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  variantSubTab === 'sizes' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'bg-white border text-neutral-600'
+                }`}
+              >
+                <Ruler className="w-3.5 h-3.5 text-blue-500" />
+                <span>Sizes ({sizes.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVariantSubTab('fabrics')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  variantSubTab === 'fabrics' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'bg-white border text-neutral-600'
+                }`}
+              >
+                <Scissors className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Fabrics ({fabrics.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setVariantSubTab('units')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  variantSubTab === 'units' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'bg-white border text-neutral-600'
+                }`}
+              >
+                <Scale className="w-3.5 h-3.5 text-amber-500" />
+                <span>Units ({units.length})</span>
+              </button>
+            </div>
+
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setActiveModal('variant')}
+                className="px-3.5 py-1.5 rounded-full bg-[#0b3b2c] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#e5c07b]" />
+                <span>+ Add {variantSubTab.slice(0, -1).toUpperCase()}</span>
+              </button>
+            )}
+          </div>
+
+          {/* Variants Grid List */}
+          <div className="bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+              {variantSubTab === 'colours' &&
+                colours.map((col) => (
+                  <div key={col.id} className="p-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-bold text-[#0c2b22] truncate">{col.name}</span>
+                    {canDelete && (
+                      <button onClick={() => handleDeleteItem('colours', col.id)} className="text-rose-500 hover:text-rose-700">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+              {variantSubTab === 'sizes' &&
+                sizes.map((sz) => (
+                  <div key={sz.id} className="p-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-bold text-[#0c2b22] truncate">{sz.name}</span>
+                    {canDelete && (
+                      <button onClick={() => handleDeleteItem('sizes', sz.id)} className="text-rose-500 hover:text-rose-700">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+              {variantSubTab === 'fabrics' &&
+                fabrics.map((fb) => (
+                  <div key={fb.id} className="p-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] flex items-center justify-between gap-1.5">
+                    <span className="text-xs font-bold text-[#0c2b22] truncate">{fb.name}</span>
+                    {canDelete && (
+                      <button onClick={() => handleDeleteItem('fabrics', fb.id)} className="text-rose-500 hover:text-rose-700">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+
+              {variantSubTab === 'units' &&
+                units.map((un) => (
+                  <div key={un.id} className="p-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] flex items-center justify-between gap-1.5">
+                    <div>
+                      <div className="text-xs font-bold text-[#0c2b22]">{un.name}</div>
+                      <span className="text-[10px] text-neutral-400 font-mono">{un.short_name}</span>
+                    </div>
+                    {canDelete && (
+                      <button onClick={() => handleDeleteItem('units', un.id)} className="text-rose-500 hover:text-rose-700">
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 4. TAB 3: LOGISTICS (PINCODES & DELIVERY RATE CARDS) */}
+      {/* ========================================================================= */}
+      {activeTab === 'logistics' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setLogisticsSubTab('pincodes')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  logisticsSubTab === 'pincodes' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'bg-white border text-neutral-600'
+                }`}
+              >
+                Delivery Pincodes ({pincodes.length})
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setLogisticsSubTab('ratecards')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  logisticsSubTab === 'ratecards' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'bg-white border text-neutral-600'
+                }`}
+              >
+                Shipping Rate Cards ({rateCards.length})
+              </button>
+            </div>
+
+            {canEdit && logisticsSubTab === 'pincodes' && (
+              <button
+                type="button"
+                onClick={() => setActiveModal('pincode')}
+                className="px-3.5 py-1.5 rounded-full bg-[#0b3b2c] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#e5c07b]" />
+                <span>+ Add Pincode</span>
+              </button>
+            )}
+          </div>
+
+          {/* Sub-Tab 1: Pincodes Table */}
+          {logisticsSubTab === 'pincodes' && (
+            <div className="bg-white rounded-2xl border border-[#e2eae6] overflow-hidden shadow-xs">
+              <table className="w-full text-left text-xs font-sans">
+                <thead className="bg-[#fbfcfc] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                  <tr>
+                    <th className="py-2.5 px-4">Pincode</th>
+                    <th className="py-2.5 px-4">City & State</th>
+                    <th className="py-2.5 px-4">Zone Type</th>
+                    <th className="py-2.5 px-4">Delivery Status</th>
+                    <th className="py-2.5 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#edf2ef]">
+                  {pincodes.map((pin) => (
+                    <tr key={pin.id} className="hover:bg-[#f4f7f5] transition-colors">
+                      <td className="py-2.5 px-4 font-mono font-bold text-[#0c2b22] text-sm">{pin.pincode}</td>
+                      <td className="py-2.5 px-4 font-semibold text-neutral-800">{pin.city}, {pin.state}</td>
+                      <td className="py-2.5 px-4">
+                        <span className="px-2 py-0.5 rounded-md bg-[#e4efe9] text-[#0b3b2c] font-bold text-[10px]">
+                          {pin.zone_type}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4">
+                        {pin.delivery_available ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            <CheckCircle2 className="w-3 h-3" /> Available
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                            <XCircle className="w-3 h-3" /> Blocked
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem('pincodes', pin.id)}
+                            className="p-1 text-rose-600 hover:bg-rose-50 rounded"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Sub-Tab 2: Rate Cards */}
+          {logisticsSubTab === 'ratecards' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {rateCards.map((rc) => (
+                <div key={rc.id} className="bg-white rounded-2xl p-5 border border-[#e2eae6] shadow-xs space-y-3">
+                  <div className="flex items-center justify-between border-b pb-2.5">
+                    <span className="font-bold text-sm text-[#0b3b2c]">
+                      Weight: {rc.weight_from}g - {rc.weight_to ? `${rc.weight_to}g` : 'Any'}
+                    </span>
+                    {rc.active && (
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full">
+                        ACTIVE CARD
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="p-2.5 bg-[#f8faf9] rounded-xl border border-[#edf2ef]">
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase block">Local Delivery</span>
+                      <span className="font-bold text-base text-[#0b3b2c]">₹{rc.local_rate}</span>
+                    </div>
+                    <div className="p-2.5 bg-[#f8faf9] rounded-xl border border-[#edf2ef]">
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase block">Within State</span>
+                      <span className="font-bold text-base text-[#0b3b2c]">₹{rc.within_state_rate}</span>
+                    </div>
+                    <div className="p-2.5 bg-[#f8faf9] rounded-xl border border-[#edf2ef]">
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase block">Metro / Zones</span>
+                      <span className="font-bold text-base text-[#0b3b2c]">₹{rc.zone_metro_rate}</span>
+                    </div>
+                    <div className="p-2.5 bg-[#f8faf9] rounded-xl border border-[#edf2ef]">
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase block">Other States</span>
+                      <span className="font-bold text-base text-[#0b3b2c]">₹{rc.other_states_rate}</span>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeDrawer}
-                  className="p-2 rounded-full hover:bg-neutral-100 text-neutral-500 cursor-pointer"
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 5. TAB 4: CUSTOMER DATABASE MASTER */}
+      {/* ========================================================================= */}
+      {activeTab === 'customers' && (
+        <div className="bg-white rounded-2xl border border-[#e2eae6] overflow-hidden shadow-xs">
+          <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#0b3b2c]" />
+              <h2 className="text-xs font-bold uppercase tracking-wider text-[#0b3b2c]">
+                Store Customers Directory ({customers.length})
+              </h2>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-sans">
+              <thead className="bg-[#fbfcfc] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                <tr>
+                  <th className="py-2.5 px-4">Customer Name</th>
+                  <th className="py-2.5 px-4">WhatsApp Phone</th>
+                  <th className="py-2.5 px-4">Location</th>
+                  <th className="py-2.5 px-4">Total Orders</th>
+                  <th className="py-2.5 px-4">Lifetime Spend (LTV)</th>
+                  <th className="py-2.5 px-4 text-right">Connect</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#edf2ef]">
+                {customers.map((cust) => (
+                  <tr key={cust.phone} className="hover:bg-[#f8faf9] transition-colors">
+                    <td className="py-3 px-4 font-bold text-[#0c2b22]">{cust.name}</td>
+                    <td className="py-3 px-4 font-mono text-neutral-600">{cust.phone}</td>
+                    <td className="py-3 px-4 text-neutral-700">{cust.city}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded-full bg-[#f0f4f2] text-[#0b3b2c] font-bold text-[10px]">
+                        {cust.total_orders} Orders
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-bold text-[#0b3b2c]">
+                      ₹{cust.total_spend.toLocaleString('en-IN')}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <a
+                        href={`https://wa.me/91${cust.phone.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(cust.name)},%20greetings%20from%20Kashvi!`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-xs"
+                      >
+                        <MessageCircle className="w-3 h-3" />
+                        <span>Ping</span>
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6. MODALS FOR RECORD CREATION */}
+      {/* ========================================================================= */}
+      {/* Add Category Modal */}
+      {activeModal === 'category' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-[#0b3b2c]">Add Main Category</h3>
+              <button onClick={() => setActiveModal(null)}><X className="w-4 h-4 text-neutral-400" /></button>
+            </div>
+            <form onSubmit={handleSaveCategory} className="space-y-3">
+              <div>
+                <label className="font-bold text-neutral-600 block mb-1">Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Sarees"
+                  value={catName}
+                  onChange={(e) => setCatName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                />
+              </div>
+              <div>
+                <label className="font-bold text-neutral-600 block mb-1">Department</label>
+                <select
+                  value={catDept}
+                  onChange={(e) => setCatDept(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
                 >
-                  <X className="w-5 h-5" />
-                </button>
+                  <option value="fashions">Fashions</option>
+                  <option value="jewellery">Jewellery</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
+                <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save Category</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Sub-Category Modal */}
+      {activeModal === 'subcategory' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-[#0b3b2c]">Add Sub-Category</h3>
+              <button onClick={() => setActiveModal(null)}><X className="w-4 h-4 text-neutral-400" /></button>
+            </div>
+            <form onSubmit={handleSaveSubCategory} className="space-y-3">
+              <div>
+                <label className="font-bold text-neutral-600 block mb-1">Select Parent Category *</label>
+                <select
+                  required
+                  value={subCatParentId}
+                  onChange={(e) => setSubCatParentId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                >
+                  <option value="">-- Choose Category --</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="font-bold text-neutral-600 block mb-1">Sub-Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Kanchipuram Silk"
+                  value={subCatName}
+                  onChange={(e) => setSubCatName(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
+                <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save Sub-Category</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Variant Modal */}
+      {activeModal === 'variant' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-[#0b3b2c]">
+                Add New {variantSubTab.slice(0, -1).toUpperCase()}
+              </h3>
+              <button onClick={() => setActiveModal(null)}><X className="w-4 h-4 text-neutral-400" /></button>
+            </div>
+            <form onSubmit={handleSaveVariant} className="space-y-3">
+              <div>
+                <label className="font-bold text-neutral-600 block mb-1">
+                  {variantSubTab.slice(0, -1).toUpperCase()} Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={
+                    variantSubTab === 'colours'
+                      ? 'e.g. Magenta Pink'
+                      : variantSubTab === 'sizes'
+                      ? 'e.g. XL / Free Size'
+                      : variantSubTab === 'fabrics'
+                      ? 'e.g. Pure Georgette'
+                      : 'e.g. Piece / Meter'
+                  }
+                  value={variantNameInput}
+                  onChange={(e) => setVariantNameInput(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                />
               </div>
 
-              {/* Drawer Form Body */}
-              <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
-                
-                {/* 1. Item Name */}
+              {variantSubTab === 'units' && (
                 <div>
-                  <label className="text-xs font-bold text-[#0c2b22] block mb-1.5 uppercase tracking-wider">
-                    {currentTabMeta.label.slice(0, -1)} Name *
-                  </label>
+                  <label className="font-bold text-neutral-600 block mb-1">Short Name / Code</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. pcs / mtr"
+                    value={unitShortName}
+                    onChange={(e) => setUnitShortName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
+                <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Pincode Modal */}
+      {activeModal === 'pincode' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
+            <div className="flex justify-between items-center border-b pb-2">
+              <h3 className="font-bold text-[#0b3b2c]">Add Delivery Pincode</h3>
+              <button onClick={() => setActiveModal(null)}><X className="w-4 h-4 text-neutral-400" /></button>
+            </div>
+            <form onSubmit={handleSavePincode} className="space-y-3">
+              <div>
+                <label className="font-bold text-neutral-600 block mb-1">6-Digit Pincode *</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={6}
+                  placeholder="533001"
+                  value={pinNumber}
+                  onChange={(e) => setPinNumber(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-mono font-bold outline-none"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold text-neutral-600 block mb-1">City</label>
                   <input
                     type="text"
                     required
-                    value={itemName}
-                    onChange={(e) => setItemName(e.target.value)}
-                    placeholder="e.g. Sarees, Kundan Bangles, XL, Pure Silk"
-                    className="w-full px-4 py-2.5 rounded-xl border border-[#dce6e1] bg-white text-xs text-[#0c2b22] outline-none focus:border-[#0b3b2c] focus:ring-2 focus:ring-[#0b3b2c]/10 font-semibold"
+                    placeholder="Kakinada"
+                    value={pinCity}
+                    onChange={(e) => setPinCity(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
                   />
                 </div>
-
-                {/* 2. Parent Category Select (Only for Subcategory) */}
-                {activeTab === 'subcategory' && (
-                  <div>
-                    <label className="text-xs font-bold text-[#0c2b22] block mb-1.5 uppercase tracking-wider">
-                      Parent Category *
-                    </label>
-                    <select
-                      value={parentCategory}
-                      onChange={(e) => {
-                        setParentCategory(e.target.value);
-                        const sel = categoriesList.find((c) => (c.name || c.title) === e.target.value);
-                        if (sel) setParentCategoryId(sel.id);
-                      }}
-                      className="w-full px-4 py-2.5 rounded-xl border border-[#dce6e1] bg-white text-xs text-[#0c2b22] outline-none focus:border-[#0b3b2c] font-semibold cursor-pointer"
-                    >
-                      {categoriesList.map((cat) => {
-                        const cName = cat.name || cat.title || cat.id;
-                        return (
-                          <option key={cat.id} value={cName}>
-                            {cName}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                )}
-
-                {/* 3. Color Hex Code (Only for Colours) */}
-                {activeTab === 'colour' && (
-                  <div>
-                    <label className="text-xs font-bold text-[#0c2b22] block mb-1.5 uppercase tracking-wider">
-                      Pick Color Swatch
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="color"
-                        value={colorCode}
-                        onChange={(e) => setColorCode(e.target.value)}
-                        className="w-10 h-10 rounded-xl border border-[#dce6e1] p-0.5 cursor-pointer bg-white"
-                      />
-                      <input
-                        type="text"
-                        value={colorCode}
-                        onChange={(e) => setColorCode(e.target.value)}
-                        placeholder="#0b3b2c"
-                        className="w-36 px-4 py-2 rounded-xl border border-[#dce6e1] font-mono text-xs uppercase"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. Arch Cover Image (For Category & Subcategory) */}
-                {(activeTab === 'category' || activeTab === 'subcategory') && (
-                  <div className="space-y-3 pt-2 border-t border-[#edf2ef]">
-                    <label className="text-xs font-bold text-[#0c2b22] block uppercase tracking-wider">
-                      Royal Arch Cover Image
-                    </label>
-
-                    <div className="flex items-center gap-4">
-                      {/* Image Preview Box */}
-                      <div className="w-18 h-22 rounded-t-[24px] rounded-b-xl overflow-hidden bg-[#f0f4f2] border-2 border-dashed border-[#dce6e1] shrink-0 flex items-center justify-center p-0.5 shadow-2xs">
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt="Arch Preview"
-                            className="w-full h-full object-cover object-top rounded-t-[22px] rounded-b-lg"
-                          />
-                        ) : (
-                          <span className="text-[10px] text-neutral-400 font-bold text-center">
-                            Arch Preview
-                          </span>
-                        )}
-                      </div>
-
-                      {/* File Upload / URL Controls */}
-                      <div className="flex-1 space-y-2">
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          accept="image/*"
-                          onChange={handleImageUpload}
-                          className="hidden"
-                        />
-                        <button
-                          type="button"
-                          disabled={uploadingImage}
-                          onClick={() => fileInputRef.current?.click()}
-                          className="w-full py-2 px-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9] hover:bg-[#edf2ef] text-[#0b3b2c] text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
-                        >
-                          {uploadingImage ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <UploadCloud className="w-3.5 h-3.5" />
-                          )}
-                          <span>{uploadingImage ? 'Uploading...' : 'Upload Image'}</span>
-                        </button>
-
-                        <input
-                          type="url"
-                          value={imageUrl}
-                          onChange={(e) => setImageUrl(e.target.value)}
-                          placeholder="Or paste direct image URL (https://...)"
-                          className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] text-[11px] text-[#0c2b22] outline-none focus:border-[#0b3b2c]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Submit Buttons */}
-                <div className="pt-6 border-t border-[#edf2ef] flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={closeDrawer}
-                    className="flex-1 py-3 rounded-xl border border-[#dce6e1] text-neutral-600 font-bold text-xs uppercase tracking-wider hover:bg-neutral-50 transition-colors cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving || !itemName.trim()}
-                    className="flex-1 py-3 rounded-xl bg-[#0b3b2c] hover:bg-[#06231a] text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50 shadow-md shadow-[#0b3b2c]/20"
-                  >
-                    {saving ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Check className="w-4 h-4" />
-                    )}
-                    <span>{isEditing ? 'Save Changes' : 'Add Item'}</span>
-                  </button>
+                <div>
+                  <label className="font-bold text-neutral-600 block mb-1">State</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Andhra Pradesh"
+                    value={pinState}
+                    onChange={(e) => setPinState(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                  />
                 </div>
-
-              </form>
-
-            </div>
+              </div>
+              <div>
+                <label className="font-bold text-neutral-600 block mb-1">Shipping Zone</label>
+                <select
+                  value={pinZone}
+                  onChange={(e) => setPinZone(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-semibold"
+                >
+                  <option value="Local">Local</option>
+                  <option value="Within State">Within State</option>
+                  <option value="Zone / Metro">Zone / Metro</option>
+                  <option value="Other States">Other States</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
+                <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save Pincode</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

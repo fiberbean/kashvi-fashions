@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
 import {
   BellRing,
   ExternalLink,
@@ -15,12 +14,13 @@ import {
   CreditCard,
   Settings,
   ChevronDown,
-  Search,
   Tag,
   ShieldCheck,
-  RotateCcw
+  RotateCcw,
+  Palette
 } from 'lucide-react';
 import { AdminStaffUser } from '../types';
+import { AdminViewType } from '../../AdminApp';
 
 interface AdminNavbarProps {
   unreadCount: number;
@@ -28,6 +28,8 @@ interface AdminNavbarProps {
   isSyncing: boolean;
   onManualSync: () => void;
   onLogout: () => void;
+  currentView: AdminViewType;
+  onViewChange: (view: AdminViewType) => void;
 }
 
 export default function AdminNavbar({
@@ -35,14 +37,14 @@ export default function AdminNavbar({
   currentUser,
   isSyncing,
   onManualSync,
-  onLogout
+  onLogout,
+  currentView,
+  onViewChange
 }: AdminNavbarProps) {
-  const location = useLocation();
   const isAdmin = currentUser?.role === 'admin';
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (navRef.current && !navRef.current.contains(event.target as Node)) {
@@ -55,6 +57,11 @@ export default function AdminNavbar({
 
   const toggleDropdown = (menu: string) => {
     setOpenDropdown((prev) => (prev === menu ? null : menu));
+  };
+
+  const handleSelectView = (view: AdminViewType) => {
+    onViewChange(view);
+    setOpenDropdown(null);
   };
 
   const getRoleBadge = (role: string = '') => {
@@ -77,13 +84,17 @@ export default function AdminNavbar({
     >
       <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-15 flex items-center justify-between gap-3">
         
-        {/* Left Section: Brand Logo & Navigation Menus */}
+        {/* Left Section: Brand Logo & Internal Navigation Menus */}
         <div className="flex items-center gap-4 lg:gap-5">
-          <Link to="/kfmama" className="flex items-center gap-2.5 shrink-0 group">
+          <button
+            type="button"
+            onClick={() => handleSelectView('dashboard')}
+            className="flex items-center gap-2.5 shrink-0 group cursor-pointer"
+          >
             <div className="w-8.5 h-8.5 rounded-xl bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-serif font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
               KF
             </div>
-            <div className="flex flex-col">
+            <div className="flex flex-col text-left">
               <span className="font-serif font-extrabold text-sm tracking-wide text-[#0b3b2c] leading-none">
                 KASHVI
               </span>
@@ -91,32 +102,32 @@ export default function AdminNavbar({
                 Command OS
               </span>
             </div>
-          </Link>
+          </button>
 
           {/* Primary Nav Links & Dropdowns */}
           <div className="hidden md:flex items-center gap-1 text-xs font-semibold text-[#4d6960]">
             
-            {/* Dashboard Link */}
-            <Link
-              to="/kfmama"
-              onClick={() => setOpenDropdown(null)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${
-                location.pathname === '/kfmama'
+            {/* 1. Dashboard View */}
+            <button
+              type="button"
+              onClick={() => handleSelectView('dashboard')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                currentView === 'dashboard'
                   ? 'bg-[#0b3b2c] text-white font-bold shadow-xs'
                   : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
               }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
               <span>Dashboard</span>
-            </Link>
+            </button>
 
-            {/* Catalog Dropdown */}
+            {/* 2. Catalog Dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => toggleDropdown('catalog')}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                  openDropdown === 'catalog'
+                  openDropdown === 'catalog' || currentView === 'products'
                     ? 'bg-[#f0f4f2] text-[#0b3b2c]'
                     : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
                 }`}
@@ -127,42 +138,42 @@ export default function AdminNavbar({
               </button>
 
               {openDropdown === 'catalog' && (
-                <div className="absolute top-full left-0 mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('products')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
-                    <Layers className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Product Catalog</span>
-                  </Link>
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                    <Package className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Product Catalog & Vault</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Tag className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Collections & Vaults</span>
-                  </Link>
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                    <span>Categories & Sub-Categories</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
-                    <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Stock & Inventory</span>
-                  </Link>
+                    <Palette className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Colours, Sizes & Fabrics</span>
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Masters Dropdown */}
+            {/* 3. Masters Dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => toggleDropdown('masters')}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                  openDropdown === 'masters'
+                  openDropdown === 'masters' || currentView === 'masters'
                     ? 'bg-[#f0f4f2] text-[#0b3b2c]'
                     : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
                 }`}
@@ -174,44 +185,48 @@ export default function AdminNavbar({
 
               {openDropdown === 'masters' && (
                 <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>All Masters Overview</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <MapPin className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Delivery Pincodes</span>
-                  </Link>
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Truck className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Rate Cards & Shipping</span>
-                  </Link>
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Users className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Customer Directory</span>
-                  </Link>
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Orders Dropdown */}
+            {/* 4. Orders Dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => toggleDropdown('orders')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                  openDropdown === 'orders'
-                    ? 'bg-[#f0f4f2] text-[#0b3b2c]'
-                    : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
-                }`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer hover:bg-[#f0f4f2] hover:text-[#0b3b2c]"
               >
                 <ShoppingBag className="w-3.5 h-3.5" />
                 <span>Orders</span>
@@ -225,10 +240,10 @@ export default function AdminNavbar({
 
               {openDropdown === 'orders' && (
                 <div className="absolute top-full left-0 mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center justify-between px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('dashboard')}
+                    className="w-full text-left flex items-center justify-between px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <span className="flex items-center gap-2">
                       <ShoppingBag className="w-3.5 h-3.5 text-neutral-400" />
@@ -239,34 +254,18 @@ export default function AdminNavbar({
                         {unreadCount}
                       </span>
                     )}
-                  </Link>
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
-                  >
-                    <Truck className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Dispatched Shipments</span>
-                  </Link>
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Returns & Exchanges</span>
-                  </Link>
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Store Config Dropdown */}
+            {/* 5. Store Config Dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => toggleDropdown('config')}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                  openDropdown === 'config' || location.pathname === '/kfmama/staff'
+                  openDropdown === 'config' || currentView === 'staff'
                     ? 'bg-[#f0f4f2] text-[#0b3b2c]'
                     : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
                 }`}
@@ -278,34 +277,24 @@ export default function AdminNavbar({
 
               {openDropdown === 'config' && (
                 <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Payment Gateways</span>
-                  </Link>
-
                   {isAdmin && (
-                    <Link
-                      to="/kfmama/staff"
-                      onClick={() => setOpenDropdown(null)}
-                      className="flex items-center gap-2 px-3.5 py-2 text-xs text-[#0b3b2c] hover:bg-[#f4f7f5] font-bold"
+                    <button
+                      type="button"
+                      onClick={() => handleSelectView('staff')}
+                      className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-[#0b3b2c] hover:bg-[#f4f7f5] font-bold cursor-pointer"
                     >
                       <Users className="w-3.5 h-3.5 text-[#0b3b2c]" />
                       <span>Staff & Duty PINs</span>
-                    </Link>
+                    </button>
                   )}
-
-                  <Link
-                    to="/kfmama"
-                    onClick={() => setOpenDropdown(null)}
-                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
-                    <Settings className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Store Profile Settings</span>
-                  </Link>
+                    <MapPin className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Pincodes & Shipping</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -315,8 +304,6 @@ export default function AdminNavbar({
 
         {/* Right Section: Auto Sync, Profile & Logout */}
         <div className="flex items-center gap-2.5">
-          
-          {/* Clickable Auto Sync Button */}
           <button
             type="button"
             onClick={onManualSync}
@@ -347,14 +334,15 @@ export default function AdminNavbar({
             </div>
           )}
 
-          <Link
-            to="/"
+          <a
+            href="/"
             target="_blank"
+            rel="noopener noreferrer"
             className="hidden sm:flex items-center gap-1 px-3 py-1 rounded-full border border-[#dce6e1] bg-white hover:bg-[#f0f4f2] text-[#0b3b2c] text-[10.5px] font-bold transition-all shadow-xs"
           >
             <span>Store</span>
             <ExternalLink className="w-2.5 h-2.5" />
-          </Link>
+          </a>
 
           <button
             type="button"
