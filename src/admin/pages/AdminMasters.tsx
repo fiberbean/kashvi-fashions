@@ -14,8 +14,7 @@ import {
   Upload,
   Check,
   Save,
-  Loader2,
-  AlertCircle
+  Loader2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -30,6 +29,8 @@ import {
 
 interface AdminMastersProps {
   currentUser: AdminStaffUser | null;
+  selectedSection?: 'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics' | null;
+  onClearSection?: () => void;
 }
 
 interface TaggedImage {
@@ -38,25 +39,37 @@ interface TaggedImage {
   color_tag: string;
 }
 
-export default function AdminMasters({ currentUser }: AdminMastersProps) {
+export default function AdminMasters({ currentUser, selectedSection, onClearSection }: AdminMastersProps) {
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Database Master States
+  // Database Data States
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
   const [colours, setColours] = useState<ColourRecord[]>([]);
   const [sizes, setSizes] = useState<SizeRecord[]>([]);
   const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
-  const [productsList, setProductsList] = useState<any[]>([]);
 
   // Permissions
   const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const canDelete = currentUser?.role === 'admin';
 
   // Active Popup Modal Controller
-  // Options: 'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics' | null
   const [activeModal, setActiveModal] = useState<string | null>(null);
+
+  // Sync with Navbar Selection
+  useEffect(() => {
+    if (selectedSection) {
+      setActiveModal(selectedSection);
+    }
+  }, [selectedSection]);
+
+  const handleCloseModal = () => {
+    setActiveModal(null);
+    if (onClearSection) {
+      onClearSection();
+    }
+  };
 
   // -------------------------------------------------------------
   // Form Inputs for Small Masters
@@ -88,20 +101,19 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
   const [imageUrlInput, setImageUrlInput] = useState<string>('');
   const [selectedColorForUpload, setSelectedColorForUpload] = useState<string>('');
   const [submittingProduct, setSubmittingProduct] = useState<boolean>(false);
-  const [productStatus, setProductStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [productError, setProductError] = useState<string | null>(null);
 
   // Load all master tables data
   const loadMastersData = async () => {
     setLoading(true);
     try {
-      const [catRes, subCatRes, colRes, sizeRes, fabRes, unitRes, prodRes] = await Promise.all([
+      const [catRes, subCatRes, colRes, sizeRes, fabRes, unitRes] = await Promise.all([
         supabase.from('categories').select('*').order('name'),
         supabase.from('sub_categories').select('*').order('name'),
         supabase.from('colours').select('*').order('name'),
         supabase.from('sizes').select('*').order('name'),
         supabase.from('fabrics').select('*').order('name'),
-        supabase.from('units').select('*').order('name'),
-        supabase.from('products').select('*').order('created_at', { ascending: false }).limit(20)
+        supabase.from('units').select('*').order('name')
       ]);
 
       if (catRes.data) setCategories(catRes.data);
@@ -113,7 +125,6 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
         setUnits(unitRes.data);
         if (unitRes.data.length > 0 && !selectedUnit) setSelectedUnit(unitRes.data[0].id);
       }
-      if (prodRes.data) setProductsList(prodRes.data);
     } catch (err) {
       console.error('Failed to fetch masters state:', err);
     } finally {
@@ -187,7 +198,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
     if (!error && data) {
       setCategories((prev) => [...prev, data]);
       setCatName('');
-      setActiveModal(null);
+      handleCloseModal();
     }
   };
 
@@ -214,7 +225,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
     if (!error && data) {
       setSubCategories((prev) => [...prev, data]);
       setSubCatName('');
-      setActiveModal(null);
+      handleCloseModal();
     }
   };
 
@@ -234,7 +245,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
       if (table === 'sizes') setSizes((prev) => [...prev, data]);
       if (table === 'fabrics') setFabrics((prev) => [...prev, data]);
       setVariantNameInput('');
-      setActiveModal(null);
+      handleCloseModal();
     }
   };
 
@@ -282,7 +293,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingProduct(true);
-    setProductStatus(null);
+    setProductError(null);
 
     try {
       const selectedCatObj = categories.find((c) => c.id === selectedCategory);
@@ -311,10 +322,8 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
         created_at: new Date().toISOString()
       };
 
-      const { data, error } = await supabase.from('products').insert([productPayload]).select().single();
+      const { error } = await supabase.from('products').insert([productPayload]);
       if (error) throw error;
-
-      if (data) setProductsList((prev) => [data, ...prev]);
 
       setName('');
       setDescription('');
@@ -325,13 +334,10 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
       setSelectedFabrics([]);
       setOpeningStock(0);
       setImages([]);
-      setActiveModal(null);
+      handleCloseModal();
       alert(`Product ${productCode} saved successfully!`);
     } catch (err: any) {
-      setProductStatus({
-        type: 'error',
-        text: err.message || 'Failed to save product record.'
-      });
+      setProductError(err.message || 'Failed to save product record.');
     } finally {
       setSubmittingProduct(false);
     }
@@ -344,79 +350,22 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
   return (
     <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
       
-      {/* 1. Header Bar with Direct Master Modal Launchers */}
+      {/* 1. Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-[#e2eae6] shadow-xs">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#e4efe9] text-[#0b3b2c] text-[9.5px] font-bold uppercase tracking-wider mb-1 border border-[#dce6e1]">
             <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Master Architecture
           </div>
           <h1 className="text-xl font-serif font-bold text-[#0b3b2c] leading-none">
-            Store Masters Hub
+            Store Masters Control
           </h1>
           <p className="text-[11px] text-[#4d6960] mt-1">
-            Click any button below to open its dedicated creation popup modal.
+            Access specific masters directly from the top Admin Navbar.
           </p>
-        </div>
-
-        {/* 6 Popup Modal Buttons */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-[#f0f4f2] rounded-2xl self-start sm:self-center border border-[#dce6e1]">
-          <button
-            type="button"
-            onClick={() => setActiveModal('product')}
-            className="px-3 py-1.5 rounded-xl bg-[#0b3b2c] text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:bg-[#082a20]"
-          >
-            <Package className="w-3.5 h-3.5 text-[#e5c07b]" />
-            <span>+ Product</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveModal('category')}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
-          >
-            <Tag className="w-3.5 h-3.5" />
-            <span>+ Category</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveModal('subcategory')}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>+ Sub-Category</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveModal('colours')}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
-          >
-            <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
-            <span>+ Colours</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveModal('sizes')}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
-          >
-            <Ruler className="w-3.5 h-3.5 text-blue-500" />
-            <span>+ Size</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveModal('fabrics')}
-            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
-          >
-            <Scissors className="w-3.5 h-3.5 text-emerald-500" />
-            <span>+ Fabric</span>
-          </button>
         </div>
       </div>
 
-      {/* 2. Unified Master Overview Dashboard */}
+      {/* 2. Overview Tables (Categories, Sub-Categories & Variant Summaries) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         
         {/* Categories Table */}
@@ -432,27 +381,27 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
               <button
                 type="button"
                 onClick={() => setActiveModal('category')}
-                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1"
+                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add
+                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add Category
               </button>
             )}
           </div>
-          <div className="max-h-60 overflow-y-auto">
+          <div className="max-h-64 overflow-y-auto">
             <table className="w-full text-left text-xs font-sans">
               <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
                 <tr>
-                  <th className="py-2 px-4">Name</th>
-                  <th className="py-2 px-4">Dept</th>
-                  <th className="py-2 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-4">Name</th>
+                  <th className="py-2.5 px-4">Dept</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#edf2ef]">
                 {categories.map((cat) => (
                   <tr key={cat.id} className="hover:bg-[#f4f7f5]">
-                    <td className="py-2 px-4 font-bold text-[#0c2b22]">{cat.name}</td>
-                    <td className="py-2 px-4 uppercase text-[10px] text-[#0b3b2c]">{cat.department}</td>
-                    <td className="py-2 px-4 text-right">
+                    <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{cat.name}</td>
+                    <td className="py-2.5 px-4 uppercase text-[10px] text-[#0b3b2c]">{cat.department}</td>
+                    <td className="py-2.5 px-4 text-right">
                       {canDelete && (
                         <button onClick={() => handleDeleteItem('categories', cat.id)} className="p-1 text-rose-600">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -479,27 +428,27 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
               <button
                 type="button"
                 onClick={() => setActiveModal('subcategory')}
-                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1"
+                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
               >
-                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add
+                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add Sub-Category
               </button>
             )}
           </div>
-          <div className="max-h-60 overflow-y-auto">
+          <div className="max-h-64 overflow-y-auto">
             <table className="w-full text-left text-xs font-sans">
               <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
                 <tr>
-                  <th className="py-2 px-4">Sub-Category</th>
-                  <th className="py-2 px-4">Parent Category</th>
-                  <th className="py-2 px-4 text-right">Action</th>
+                  <th className="py-2.5 px-4">Sub-Category</th>
+                  <th className="py-2.5 px-4">Parent Category</th>
+                  <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#edf2ef]">
                 {subCategories.map((sub) => (
                   <tr key={sub.id} className="hover:bg-[#f4f7f5]">
-                    <td className="py-2 px-4 font-bold text-[#0c2b22]">{sub.name}</td>
-                    <td className="py-2 px-4 text-[#0b3b2c] font-semibold">{sub.category_name}</td>
-                    <td className="py-2 px-4 text-right">
+                    <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{sub.name}</td>
+                    <td className="py-2.5 px-4 text-[#0b3b2c] font-semibold">{sub.category_name}</td>
+                    <td className="py-2.5 px-4 text-right">
                       {canDelete && (
                         <button onClick={() => handleDeleteItem('sub_categories', sub.id)} className="p-1 text-rose-600">
                           <Trash2 className="w-3.5 h-3.5" />
@@ -517,13 +466,13 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
         <div className="lg:col-span-2 bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b pb-2.5">
             <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-              Variant Masters Vaults (Colours, Sizes, Fabrics)
+              Variant Masters (Colours, Sizes, Fabrics)
             </h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Colours Pill Box */}
-            <div className="p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
+            {/* Colours */}
+            <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
                   <Palette className="w-3 h-3 text-[#ff4d6d]" /> Colours ({colours.length})
@@ -540,8 +489,8 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
               </div>
             </div>
 
-            {/* Sizes Pill Box */}
-            <div className="p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
+            {/* Sizes */}
+            <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
                   <Ruler className="w-3 h-3 text-blue-500" /> Sizes ({sizes.length})
@@ -558,8 +507,8 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
               </div>
             </div>
 
-            {/* Fabrics Pill Box */}
-            <div className="p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
+            {/* Fabrics */}
+            <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
                   <Scissors className="w-3 h-3 text-emerald-500" /> Fabrics ({fabrics.length})
@@ -581,7 +530,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. POPUP MODALS SECTION */}
+      {/* 3. DEDICATED POPUP MODALS */}
       {/* ========================================================================= */}
 
       {/* MODAL 1: PRODUCT MASTER POPUP */}
@@ -603,15 +552,15 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                     {codeLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : productCode}
                   </span>
                 </div>
-                <button onClick={() => setActiveModal(null)} className="p-1 rounded-full hover:bg-neutral-100 cursor-pointer">
+                <button onClick={handleCloseModal} className="p-1 rounded-full hover:bg-neutral-100 cursor-pointer">
                   <X className="w-5 h-5 text-neutral-400" />
                 </button>
               </div>
             </div>
 
-            {productStatus && (
+            {productError && (
               <div className="p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800 text-xs font-bold">
-                {productStatus.text}
+                {productError}
               </div>
             )}
 
@@ -846,7 +795,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
               <div className="flex justify-end gap-2 pt-2 border-t">
                 <button
                   type="button"
-                  onClick={() => setActiveModal(null)}
+                  onClick={handleCloseModal}
                   className="px-4 py-2 rounded-xl text-neutral-500 hover:bg-neutral-100 cursor-pointer font-bold"
                 >
                   Cancel
@@ -871,7 +820,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c]">Add Main Category</h3>
-              <button onClick={() => setActiveModal(null)}><X className="w-4 h-4 text-neutral-400" /></button>
+              <button onClick={handleCloseModal}><X className="w-4 h-4 text-neutral-400" /></button>
             </div>
             <form onSubmit={handleSaveCategory} className="space-y-3">
               <div>
@@ -897,7 +846,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
+                <button type="button" onClick={handleCloseModal} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
                 <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save Category</button>
               </div>
             </form>
@@ -911,7 +860,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c]">Add Sub-Category</h3>
-              <button onClick={() => setActiveModal(null)}><X className="w-4 h-4 text-neutral-400" /></button>
+              <button onClick={handleCloseModal}><X className="w-4 h-4 text-neutral-400" /></button>
             </div>
             <form onSubmit={handleSaveSubCategory} className="space-y-3">
               <div>
@@ -940,7 +889,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
+                <button type="button" onClick={handleCloseModal} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
                 <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save Sub-Category</button>
               </div>
             </form>
@@ -954,7 +903,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c] uppercase">Add New {activeModal.slice(0, -1)}</h3>
-              <button onClick={() => setActiveModal(null)}><X className="w-4 h-4 text-neutral-400" /></button>
+              <button onClick={handleCloseModal}><X className="w-4 h-4 text-neutral-400" /></button>
             </div>
             <div className="space-y-3">
               <div>
@@ -975,7 +924,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
+                <button type="button" onClick={handleCloseModal} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
                 <button
                   type="button"
                   onClick={() => handleSaveVariant(activeModal as 'colours' | 'sizes' | 'fabrics')}

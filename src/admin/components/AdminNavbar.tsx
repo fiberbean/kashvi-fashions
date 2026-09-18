@@ -24,6 +24,8 @@ import {
 import { AdminStaffUser } from '../types';
 import { AdminViewType } from '../../AdminApp';
 
+export type MasterSectionType = 'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics';
+
 interface AdminNavbarProps {
   unreadCount: number;
   currentUser: AdminStaffUser | null;
@@ -32,6 +34,7 @@ interface AdminNavbarProps {
   onLogout: () => void;
   currentView: AdminViewType;
   onViewChange: (view: AdminViewType) => void;
+  onSelectMaster?: (masterKey: MasterSectionType) => void;
 }
 
 export default function AdminNavbar({
@@ -41,7 +44,8 @@ export default function AdminNavbar({
   onManualSync,
   onLogout,
   currentView,
-  onViewChange
+  onViewChange,
+  onSelectMaster
 }: AdminNavbarProps) {
   const isAdmin = currentUser?.role === 'admin';
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -66,6 +70,14 @@ export default function AdminNavbar({
     setOpenDropdown(null);
   };
 
+  const handleMasterClick = (section: MasterSectionType) => {
+    onViewChange('masters');
+    if (onSelectMaster) {
+      onSelectMaster(section);
+    }
+    setOpenDropdown(null);
+  };
+
   const getRoleBadge = (role: string = '') => {
     switch (role) {
       case 'admin':
@@ -86,7 +98,7 @@ export default function AdminNavbar({
     >
       <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-15 flex items-center justify-between gap-3">
         
-        {/* Left Section: Brand Logo & Internal Navigation Menus */}
+        {/* Left Section: Brand Logo & Navigation */}
         <div className="flex items-center gap-4 lg:gap-5">
           <button
             type="button"
@@ -151,7 +163,7 @@ export default function AdminNavbar({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('category')}
                     className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Tag className="w-3.5 h-3.5 text-neutral-400" />
@@ -159,7 +171,7 @@ export default function AdminNavbar({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('colours')}
                     className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Palette className="w-3.5 h-3.5 text-neutral-400" />
@@ -169,7 +181,7 @@ export default function AdminNavbar({
               )}
             </div>
 
-            {/* 3. Masters Dropdown (Configured with Product, Category, Sub-Category, Colours, Size, Fabric) */}
+            {/* 3. Masters Dropdown (Product, Category, Sub-Category, Colours, Size, Fabric) */}
             <div className="relative">
               <button
                 type="button"
@@ -187,60 +199,54 @@ export default function AdminNavbar({
 
               {openDropdown === 'masters' && (
                 <div className="absolute top-full left-0 mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  {/* Master 1: Product */}
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('product')}
                     className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Package className="w-3.5 h-3.5 text-[#0b3b2c]" />
                     <span>Product Master</span>
                   </button>
 
-                  {/* Master 2: Category */}
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('category')}
                     className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Tag className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Category Master</span>
                   </button>
 
-                  {/* Master 3: Sub-Category */}
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('subcategory')}
                     className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Layers className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Sub-Category Master</span>
                   </button>
 
-                  {/* Master 4: Colours */}
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('colours')}
                     className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
                     <span>Colours Master</span>
                   </button>
 
-                  {/* Master 5: Size */}
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('sizes')}
                     className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Ruler className="w-3.5 h-3.5 text-blue-500" />
                     <span>Size Master</span>
                   </button>
 
-                  {/* Master 6: Fabric */}
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('fabrics')}
                     className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Scissors className="w-3.5 h-3.5 text-emerald-500" />
