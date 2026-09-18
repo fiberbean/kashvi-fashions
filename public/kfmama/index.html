@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kashvi Tokyo OS — Control Deck</title>
+  <title>Kashvi Hub — Nordic Ceramic Admin</title>
   <link rel="stylesheet" href="css/theme.css">
 </head>
 <body>
 
   <div class="app-wrapper">
-    <!-- Tokyo Minimal Sidebar -->
-    <aside class="tokyo-sidebar">
+    <!-- Nordic Minimal Sidebar -->
+    <aside class="nordic-sidebar">
       <div class="brand-portal">
         <div class="brand-avatar">KF</div>
         <div>
           <div class="brand-title">KASHVI</div>
-          <div class="brand-tag">TOKYO_OS v3.0</div>
+          <div class="brand-tag">CERAMIC STUDIO</div>
         </div>
       </div>
 
@@ -25,22 +25,22 @@
           <ul class="sidebar-nav-list">
             <li>
               <button type="button" class="nav-link-btn active" data-tab="tab-analytics">
-                <div class="nav-link-left"><span>⚡</span><span>Live Pulse</span></div>
+                <div class="nav-link-left"><span>📊</span><span>Analytics</span></div>
               </button>
             </li>
             <li>
               <button type="button" class="nav-link-btn" data-tab="tab-products">
-                <div class="nav-link-left"><span>📦</span><span>Vault Catalog</span></div>
+                <div class="nav-link-left"><span>👗</span><span>Catalog & Inventory</span></div>
               </button>
             </li>
             <li>
               <button type="button" class="nav-link-btn" data-tab="tab-masters">
-                <div class="nav-link-left"><span>🏛️</span><span>Arch Masters</span></div>
+                <div class="nav-link-left"><span>🏛️</span><span>Store Masters</span></div>
               </button>
             </li>
             <li>
               <button type="button" class="nav-link-btn" data-tab="tab-orders">
-                <div class="nav-link-left"><span>🚀</span><span>Order Matrix</span></div>
+                <div class="nav-link-left"><span>📦</span><span>Order Pipeline</span></div>
                 <span class="sidebar-count-badge" id="badge-orders">0</span>
               </button>
             </li>
@@ -49,69 +49,69 @@
       </div>
 
       <div class="sidebar-footer">
-        <button type="button" class="btn-lock" id="btn-lock-session">🔒 Lock Session</button>
+        <button type="button" class="btn-lock" id="btn-lock-session">🔒 Lock Workspace</button>
       </div>
     </aside>
 
     <!-- Main Workspace -->
     <main class="main-workspace">
       <header class="workspace-header">
-        <div class="neon-search-box">
-          <input type="text" placeholder="Search orders, SKU, customers...">
+        <div class="ceramic-search-box">
+          <input type="text" placeholder="Search orders, products, SKUs...">
         </div>
         <div style="display:flex; align-items:center; gap:16px;">
-          <span style="font-family:var(--font-code); font-size:0.75rem; color:var(--neon-cyan);">● NODE CONNECTED</span>
+          <span style="font-size:0.8rem; font-weight:700; color:var(--brand-forest);">🌿 Live Workspace</span>
         </div>
       </header>
 
       <div class="workspace-scroll">
-        <!-- 1. LIVE PULSE VIEW -->
+        <!-- 1. ANALYTICS VIEW -->
         <section id="tab-analytics" class="tab-view active">
           <div class="section-head">
-            <h2 class="section-title">Live Net Pulse</h2>
+            <h2 class="section-title">Store Overview</h2>
           </div>
 
-          <div class="neon-bento-grid">
-            <div class="neon-card">
-              <div class="neon-card-top">
-                <span class="neon-card-label">Net Inflow Today</span>
+          <div class="ceramic-bento-grid">
+            <div class="ceramic-card">
+              <div class="ceramic-card-top">
+                <span class="ceramic-card-label">Today's Sales</span>
                 <span>💵</span>
               </div>
-              <div class="neon-card-value" id="kpi-today-sales">₹ 0</div>
-              <div class="neon-card-badge">▲ Live Ledger Active</div>
+              <div class="ceramic-card-value" id="kpi-today-sales">₹ 0</div>
+              <div class="ceramic-card-badge">Verified Today</div>
             </div>
 
-            <div class="neon-card">
-              <div class="neon-card-top">
-                <span class="neon-card-label">Gross Orders</span>
+            <div class="ceramic-card">
+              <div class="ceramic-card-top">
+                <span class="ceramic-card-label">Orders Received</span>
                 <span>📦</span>
               </div>
-              <div class="neon-card-value" id="kpi-total-orders">0</div>
-              <div class="neon-card-badge">Fulfillment Pipeline</div>
+              <div class="ceramic-card-value" id="kpi-total-orders">0</div>
+              <div class="ceramic-card-badge">Live Pipeline</div>
             </div>
 
-            <div class="neon-card">
-              <div class="neon-card-top">
-                <span class="neon-card-label">Average Basket</span>
+            <div class="ceramic-card">
+              <div class="ceramic-card-top">
+                <span class="ceramic-card-label">Average Basket</span>
                 <span>🏷️</span>
               </div>
-              <div class="neon-card-value" id="kpi-aov">₹ 0</div>
-              <div class="neon-card-badge">Cart Average</div>
+              <div class="ceramic-card-value" id="kpi-aov">₹ 0</div>
+              <div class="ceramic-card-badge">AOV</div>
             </div>
           </div>
         </section>
 
-        <!-- 2. ARCH MASTERS VIEW -->
+        <!-- 2. MASTERS VIEW -->
         <section id="tab-masters" class="tab-view" style="display: none;">
           <div class="section-head">
-            <h2 class="section-title">Arch Masters Registry</h2>
+            <h2 class="section-title">Store Masters Hub</h2>
           </div>
 
           <div class="master-bento-grid">
             <div class="master-tile" data-master="category">
               <div>
                 <div class="master-tile-name">Categories</div>
-                <div class="master-tile-count" id="count-category">0 Units</div>
+                <div class="master-tile-count" id="count-category">0 Items</div>
               </div>
               <span>📁</span>
             </div>
@@ -119,7 +119,7 @@
             <div class="master-tile" data-master="subcategory">
               <div>
                 <div class="master-tile-name">Sub-Categories</div>
-                <div class="master-tile-count" id="count-subcategory">0 Units</div>
+                <div class="master-tile-count" id="count-subcategory">0 Items</div>
               </div>
               <span>🏛️</span>
             </div>
@@ -127,7 +127,7 @@
             <div class="master-tile" data-master="brand">
               <div>
                 <div class="master-tile-name">Brands</div>
-                <div class="master-tile-count" id="count-brand">0 Units</div>
+                <div class="master-tile-count" id="count-brand">0 Items</div>
               </div>
               <span>🏷️</span>
             </div>
@@ -135,7 +135,7 @@
             <div class="master-tile" data-master="colour">
               <div>
                 <div class="master-tile-name">Colours</div>
-                <div class="master-tile-count" id="count-colour">0 Units</div>
+                <div class="master-tile-count" id="count-colour">0 Items</div>
               </div>
               <span>🎨</span>
             </div>
@@ -143,7 +143,7 @@
             <div class="master-tile" data-master="size">
               <div>
                 <div class="master-tile-name">Sizes</div>
-                <div class="master-tile-count" id="count-size">0 Units</div>
+                <div class="master-tile-count" id="count-size">0 Items</div>
               </div>
               <span>📏</span>
             </div>
@@ -151,7 +151,7 @@
             <div class="master-tile" data-master="fabric">
               <div>
                 <div class="master-tile-name">Fabrics</div>
-                <div class="master-tile-count" id="count-fabric">0 Units</div>
+                <div class="master-tile-count" id="count-fabric">0 Items</div>
               </div>
               <span>🧵</span>
             </div>
@@ -161,22 +161,22 @@
         <!-- 3. INVENTORY VIEW -->
         <section id="tab-products" class="tab-view" style="display: none;">
           <div class="section-head">
-            <h2 class="section-title">Vault Inventory</h2>
-            <button type="button" class="btn-neon-primary">+ Add New Item</button>
+            <h2 class="section-title">Product Catalog</h2>
+            <button type="button" class="btn-ceramic-primary">+ Add New Product</button>
           </div>
-          <div class="neon-card" style="text-align: center; padding: 48px; color: var(--text-dim);">
-            Inventory matrix loaded.
+          <div class="ceramic-card" style="text-align: center; padding: 48px; color: var(--text-dim);">
+            Loading inventory items...
           </div>
         </section>
       </div>
     </main>
   </div>
 
-  <!-- Tokyo Slide-in Drawer -->
-  <div class="tokyo-drawer-overlay" id="tokyo-drawer">
-    <div class="tokyo-drawer">
-      <div class="tokyo-drawer-head">
-        <h3 class="tokyo-drawer-title" id="drawer-title">Manage Attribute</h3>
+  <!-- Nordic Drawer -->
+  <div class="nordic-drawer-overlay" id="nordic-drawer">
+    <div class="nordic-drawer">
+      <div class="nordic-drawer-head">
+        <h3 class="nordic-drawer-title" id="drawer-title">Manage Attribute</h3>
         <button type="button" id="btn-close-drawer" style="background:none; border:none; color:var(--text-dim); font-size:1.4rem; cursor:pointer;">&times;</button>
       </div>
       <div id="drawer-content" style="padding: 24px; flex: 1; overflow-y: auto;"></div>
@@ -200,7 +200,7 @@
       });
     });
 
-    const drawer = document.getElementById('tokyo-drawer');
+    const drawer = document.getElementById('nordic-drawer');
     document.getElementById('btn-close-drawer')?.addEventListener('click', () => {
       drawer.classList.remove('active');
     });
