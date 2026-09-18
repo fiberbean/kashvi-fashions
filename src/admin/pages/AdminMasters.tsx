@@ -5,17 +5,13 @@ import {
   Palette,
   Ruler,
   Scissors,
-  Plus,
-  Trash2,
   X,
-  Sparkles,
   Building2,
   Tag,
   Upload,
   Check,
   Save,
-  Loader2,
-  Scale
+  Loader2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -41,8 +37,6 @@ interface TaggedImage {
 }
 
 export default function AdminMasters({ currentUser, selectedSection, onClearSection }: AdminMastersProps) {
-  const [loading, setLoading] = useState<boolean>(true);
-
   // Database Data States
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
@@ -50,10 +44,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
   const [sizes, setSizes] = useState<any[]>([]);
   const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
-
-  // Permissions
-  const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'manager';
-  const canDelete = currentUser?.role === 'admin';
 
   // Active Popup Modal Controller
   const [activeModal, setActiveModal] = useState<string | null>(null);
@@ -108,7 +98,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
 
   // Load all master tables data
   const loadMastersData = async () => {
-    setLoading(true);
     try {
       const [catRes, subCatRes, colRes, sizeRes, fabRes, unitRes] = await Promise.all([
         supabase.from('categories').select('*').order('name'),
@@ -132,8 +121,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
       }
     } catch (err) {
       console.error('Failed to fetch masters state:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -244,7 +231,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     const payload: any = { id, name: nameVal };
     if (table !== 'fabrics') payload.active = true;
 
-    // Attach Category if Size Master
     if (table === 'sizes' && sizeCategoryId) {
       payload.category_id = sizeCategoryId;
       const catObj = categories.find((c) => String(c.id) === String(sizeCategoryId));
@@ -259,20 +245,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
       setVariantNameInput('');
       setSizeCategoryId('');
       handleCloseModal();
-    }
-  };
-
-  // Delete Item
-  const handleDeleteItem = async (table: string, id: string) => {
-    if (!canDelete) {
-      alert('Access Denied: Only Admin can delete master records.');
-      return;
-    }
-    if (!confirm('Permanently delete this record?')) return;
-
-    const { error } = await supabase.from(table).delete().eq('id', id);
-    if (!error) {
-      loadMastersData();
     }
   };
 
@@ -411,8 +383,8 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
 
   // Size Filter by Selected Category
   const filteredSizes = sizes.filter((sz) => {
-    if (!selectedCategory) return true; // If no category selected, show all sizes
-    if (!sz.category_id && !sz.category_name) return true; // Show universal sizes if any
+    if (!selectedCategory) return true;
+    if (!sz.category_id && !sz.category_name) return true;
     const matchById = String(sz.category_id).trim() === String(selectedCategory).trim();
     const matchByName = selectedCatObject && sz.category_name
       ? sz.category_name.trim().toLowerCase() === selectedCatObject.name.trim().toLowerCase()
@@ -421,190 +393,22 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
   });
 
   return (
-    <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
-      
-      {/* 1. Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-[#e2eae6] shadow-xs">
-        <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#e4efe9] text-[#0b3b2c] text-[9.5px] font-bold uppercase tracking-wider mb-1 border border-[#dce6e1]">
-            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Master Architecture
+    <div className="select-none font-sans">
+      {/* Background jab koi modal open na ho */}
+      {!activeModal && (
+        <div className="min-h-[50vh] flex flex-col items-center justify-center text-center p-8">
+          <div className="w-14 h-14 rounded-2xl bg-[#e4efe9] text-[#0b3b2c] flex items-center justify-center mb-3">
+            <Layers className="w-7 h-7 text-[#0b3b2c]" />
           </div>
-          <h1 className="text-xl font-serif font-bold text-[#0b3b2c] leading-none">
-            Store Masters Control
-          </h1>
-          <p className="text-[11px] text-[#4d6960] mt-1">
-            Access specific masters directly from the top Admin Navbar.
+          <h2 className="text-lg font-serif font-bold text-[#0b3b2c]">Kashvi Master Vaults</h2>
+          <p className="text-xs text-[#4d6960] mt-1 max-w-sm">
+            Top Navbar me <b>Masters</b> dropdown se Product, Category, Sub-Category, Colours, Size ya Fabric select karein.
           </p>
         </div>
-      </div>
-
-      {/* 2. Overview Tables */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        
-        {/* Categories Table */}
-        <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
-          <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
-            <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-[#0b3b2c]" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Categories
-              </h3>
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setActiveModal('category')}
-                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add Category
-              </button>
-            )}
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            <table className="w-full text-left text-xs font-sans">
-              <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
-                <tr>
-                  <th className="py-2.5 px-4">Name</th>
-                  <th className="py-2.5 px-4">Brand</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#edf2ef]">
-                {categories.map((cat) => (
-                  <tr key={cat.id} className="hover:bg-[#f4f7f5]">
-                    <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{cat.name}</td>
-                    <td className="py-2.5 px-4 uppercase text-[10px] text-[#0b3b2c]">{cat.department}</td>
-                    <td className="py-2.5 px-4 text-right">
-                      {canDelete && (
-                        <button onClick={() => handleDeleteItem('categories', cat.id)} className="p-1 text-rose-600">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Sub-Categories Table */}
-        <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
-          <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[#0b3b2c]" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Sub-Categories
-              </h3>
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setActiveModal('subcategory')}
-                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-              >
-                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add Sub-Category
-              </button>
-            )}
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            <table className="w-full text-left text-xs font-sans">
-              <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
-                <tr>
-                  <th className="py-2.5 px-4">Sub-Category</th>
-                  <th className="py-2.5 px-4">Parent Category</th>
-                  <th className="py-2.5 px-4 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#edf2ef]">
-                {subCategories.map((sub) => (
-                  <tr key={sub.id} className="hover:bg-[#f4f7f5]">
-                    <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{sub.name}</td>
-                    <td className="py-2.5 px-4 text-[#0b3b2c] font-semibold">{sub.category_name}</td>
-                    <td className="py-2.5 px-4 text-right">
-                      {canDelete && (
-                        <button onClick={() => handleDeleteItem('sub_categories', sub.id)} className="p-1 text-rose-600">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Variants Summary Card */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b pb-2.5">
-            <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-              Variant Masters
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Colours */}
-            <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
-                  <Palette className="w-3 h-3 text-[#ff4d6d]" /> Colours
-                </span>
-                <button onClick={() => setActiveModal('colours')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
-              </div>
-              <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
-                {colours.map((c) => (
-                  <span key={c.id} className="px-2 py-0.5 rounded-md bg-white border border-[#dce6e1] text-[10.5px] font-semibold flex items-center gap-1">
-                    {c.name}
-                    {canDelete && <X onClick={() => handleDeleteItem('colours', c.id)} className="w-2.5 h-2.5 text-rose-500 cursor-pointer" />}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Sizes */}
-            <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
-                  <Ruler className="w-3 h-3 text-blue-500" /> Sizes
-                </span>
-                <button onClick={() => setActiveModal('sizes')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
-              </div>
-              <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
-                {sizes.map((s) => (
-                  <span key={s.id} className="px-2 py-0.5 rounded-md bg-white border border-[#dce6e1] text-[10.5px] font-semibold flex items-center gap-1">
-                    <span>{s.name}</span>
-                    {s.category_name && <span className="text-[9px] text-[#4d6960] font-normal">({s.category_name})</span>}
-                    {canDelete && <X onClick={() => handleDeleteItem('sizes', s.id)} className="w-2.5 h-2.5 text-rose-500 cursor-pointer" />}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* Fabrics */}
-            <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
-                  <Scissors className="w-3 h-3 text-emerald-500" /> Fabrics
-                </span>
-                <button onClick={() => setActiveModal('fabrics')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
-              </div>
-              <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
-                {fabrics.map((f) => (
-                  <span key={f.id} className="px-2 py-0.5 rounded-md bg-white border border-[#dce6e1] text-[10.5px] font-semibold flex items-center gap-1">
-                    {f.name}
-                    {canDelete && <X onClick={() => handleDeleteItem('fabrics', f.id)} className="w-2.5 h-2.5 text-rose-500 cursor-pointer" />}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
+      )}
 
       {/* ========================================================================= */}
-      {/* 3. DEDICATED POPUP MODALS */}
+      {/* DEDICATED POPUP MODALS */}
       {/* ========================================================================= */}
 
       {/* MODAL 1: PRODUCT MASTER POPUP */}
@@ -641,7 +445,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             )}
 
             <form onSubmit={handleSaveProduct} className="space-y-4">
-              
               {/* Brand Toggle Switch (Fashion vs Jewellery) */}
               <div>
                 <label className="text-xs font-bold text-[#0b3b2c] block mb-1.5">Brand *</label>
@@ -698,7 +501,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 </div>
               </div>
 
-              {/* Categories, Sub-Categories, Units & Opening Stock (4-Column Layout) */}
+              {/* Categories, Sub-Categories, Units & Opening Stock */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                 <div>
                   <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category *</label>
@@ -708,7 +511,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     onChange={(e) => {
                       setSelectedCategory(e.target.value);
                       setSelectedSubCategory('');
-                      setSelectedSizes([]); // Reset sizes when category changes
+                      setSelectedSizes([]);
                     }}
                     className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
                   >
@@ -734,7 +537,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                   </select>
                 </div>
 
-                {/* Base Unit Dropdown (from units master) */}
                 <div>
                   <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Unit *</label>
                   <select
@@ -746,7 +548,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     <option value="">Select Unit</option>
                     {units.map((u) => (
                       <option key={u.id} value={u.id}>
-                        {u.name} {u.short_name ? `(${u.short_name})` : ''}
+                        {u.name}
                       </option>
                     ))}
                   </select>
@@ -795,16 +597,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
 
                 {/* Sizes Filtered by Selected Category */}
                 <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] font-bold text-neutral-600 block">
-                      Sizes {selectedCategory && selectedCatObject ? `(Filtered for ${selectedCatObject.name})` : ''}:
-                    </span>
-                    {!selectedCategory && (
-                      <span className="text-[9.5px] text-amber-700 italic">
-                        Tip: Select a Category above to filter relevant sizes
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-[10px] font-bold text-neutral-600 block mb-1">Sizes:</span>
                   <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
                     {filteredSizes.length > 0 ? (
                       filteredSizes.map((s) => {
@@ -824,7 +617,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                         );
                       })
                     ) : (
-                      <span className="text-[10px] text-neutral-400 italic">No sizes mapped to this category yet.</span>
+                      <span className="text-[10px] text-neutral-400 italic">No sizes mapped.</span>
                     )}
                   </div>
                 </div>
@@ -860,11 +653,10 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     Product Images & Colour Tagging
                   </span>
                   <p className="text-[10px] text-[#4d6960] mt-0.5">
-                    Upload product photos directly. Once uploaded, tag each photo to its corresponding variant colour below the image.
+                    Upload product photos directly. Once uploaded, tag each photo to its variant colour below.
                   </p>
                 </div>
 
-                {/* Upload Action Box */}
                 <div className="flex items-center gap-3">
                   <input
                     ref={fileInputRef}
@@ -889,7 +681,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                   <span className="text-[11px] text-neutral-400">Supports JPG, PNG, WEBP</span>
                 </div>
 
-                {/* Uploaded Images Grid with Colour Tagging */}
                 {images.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-2">
                     {images.map((img) => (
@@ -905,7 +696,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                           </button>
                         </div>
                         
-                        {/* Tag to Colour Dropdown */}
                         <div className="p-2 border-t border-[#edf2ef] bg-[#fbfcfc] space-y-1">
                           <span className="text-[9px] font-bold uppercase tracking-wider text-[#4d6960] block">Tag To Colour:</span>
                           <select
@@ -1041,7 +831,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
               <button onClick={handleCloseModal}><X className="w-4 h-4 text-neutral-400" /></button>
             </div>
             <div className="space-y-3">
-              {/* Category Dropdown specifically when adding Size */}
               {activeModal === 'sizes' && (
                 <div>
                   <label className="font-bold text-neutral-600 block mb-1">Map To Category</label>
@@ -1089,7 +878,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
           </div>
         </div>
       )}
-
     </div>
   );
 }
