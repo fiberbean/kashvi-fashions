@@ -3,214 +3,189 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kashvi Neural Hub — Imperial OS</title>
+  <title>Kashvi Tokyo OS — Control Deck</title>
   <link rel="stylesheet" href="css/theme.css">
 </head>
 <body>
 
-  <div class="app-container">
-    <!-- 1. Futuristic Floating Sidebar -->
-    <aside class="glass-sidebar">
+  <div class="app-wrapper">
+    <!-- Tokyo Minimal Sidebar -->
+    <aside class="tokyo-sidebar">
       <div class="brand-portal">
-        <div class="brand-avatar">
-          <span style="font-family:var(--font-display); font-size:1.1rem; color:var(--accent-gold);">KF</span>
-        </div>
+        <div class="brand-avatar">KF</div>
         <div>
           <div class="brand-title">KASHVI</div>
-          <div class="brand-version">NEURAL HUB v3.0</div>
+          <div class="brand-tag">TOKYO_OS v3.0</div>
         </div>
       </div>
 
-      <div style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 20px; overflow-y: auto;">
         <div>
-          <div class="nav-section-title">CORE SPACES</div>
-          <div class="nav-cluster">
-            <button type="button" class="nav-link-btn active" data-tab="tab-analytics">
-              <div class="nav-link-left">
-                <span>⚡</span>
-                <span>Live Analytics</span>
-              </div>
-            </button>
-            <button type="button" class="nav-link-btn" data-tab="tab-vault">
-              <div class="nav-link-left">
-                <span>💎</span>
-                <span>Inventory & Vault</span>
-              </div>
-            </button>
-            <button type="button" class="nav-link-btn" data-tab="tab-arches">
-              <div class="nav-link-left">
-                <span>🏛️</span>
-                <span>Arch Masters</span>
-              </div>
-            </button>
-            <button type="button" class="nav-link-btn" data-tab="tab-pipeline">
-              <div class="nav-link-left">
-                <span>🚀</span>
-                <span>Order Flow</span>
-              </div>
-              <span id="badge-orders" style="font-family:var(--font-tech); font-size:0.7rem; font-weight:800; background:var(--accent-rose); padding:2px 8px; border-radius:12px;">0</span>
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <div class="nav-section-title">STORE PROTOCOLS</div>
-          <div class="nav-cluster">
-            <button type="button" class="nav-link-btn" data-tab="tab-matrix">
-              <div class="nav-link-left">
-                <span>🛰️</span>
-                <span>Delivery Matrix</span>
-              </div>
-            </button>
-            <button type="button" class="nav-link-btn" data-tab="tab-config">
-              <div class="nav-link-left">
-                <span>⚙️</span>
-                <span>Settings</span>
-              </div>
-            </button>
-          </div>
+          <div class="sidebar-nav-title">WORKSPACE</div>
+          <ul class="sidebar-nav-list">
+            <li>
+              <button type="button" class="nav-link-btn active" data-tab="tab-analytics">
+                <div class="nav-link-left"><span>⚡</span><span>Live Pulse</span></div>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="nav-link-btn" data-tab="tab-products">
+                <div class="nav-link-left"><span>📦</span><span>Vault Catalog</span></div>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="nav-link-btn" data-tab="tab-masters">
+                <div class="nav-link-left"><span>🏛️</span><span>Arch Masters</span></div>
+              </button>
+            </li>
+            <li>
+              <button type="button" class="nav-link-btn" data-tab="tab-orders">
+                <div class="nav-link-left"><span>🚀</span><span>Order Matrix</span></div>
+                <span class="sidebar-count-badge" id="badge-orders">0</span>
+              </button>
+            </li>
+          </ul>
         </div>
       </div>
 
-      <!-- Quick Profile Pill -->
-      <div style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid var(--border-glass); border-radius:18px; display:flex; align-items:center; justify-content:space-between;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <div style="width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,#e5c07b,#b38728); color:#030a08; font-weight:800; display:flex; align-items:center; justify-content:center; font-family:var(--font-tech);">A</div>
-          <div>
-            <div style="font-size:0.82rem; font-weight:700;">Super Admin</div>
-            <div style="font-size:0.65rem; color:var(--accent-emerald);">● Online</div>
-          </div>
-        </div>
-        <button type="button" id="btn-lock" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;" title="Lock">🔒</button>
+      <div class="sidebar-footer">
+        <button type="button" class="btn-lock" id="btn-lock-session">🔒 Lock Session</button>
       </div>
     </aside>
 
-    <!-- 2. Work Surface Area -->
-    <main class="work-surface">
-      <header class="surface-header">
-        <div class="omni-search">
-          <span class="omni-search-icon">🔍</span>
-          <input type="text" placeholder="Omni Search (Orders, SKUs, Customers)...">
+    <!-- Main Workspace -->
+    <main class="main-workspace">
+      <header class="workspace-header">
+        <div class="neon-search-box">
+          <input type="text" placeholder="Search orders, SKU, customers...">
         </div>
-
         <div style="display:flex; align-items:center; gap:16px;">
-          <div style="padding:8px 16px; border-radius:14px; background:rgba(255,255,255,0.03); border:1px solid var(--border-glass); font-family:var(--font-tech); font-size:0.82rem; color:var(--accent-gold);">
-            ✨ Live Sync Active
-          </div>
+          <span style="font-family:var(--font-code); font-size:0.75rem; color:var(--neon-cyan);">● NODE CONNECTED</span>
         </div>
       </header>
 
       <div class="workspace-scroll">
-        <!-- VIEW 1: LIVE ANALYTICS BENTO -->
-        <section id="tab-analytics" class="tab-content active">
-          <div class="bento-grid">
-            <div class="futuristic-card bento-cell-4">
-              <span class="card-title-sub">REAL-TIME INFLOW</span>
-              <div class="card-numeric-highlight" id="kpi-today">₹ 0</div>
-              <div style="font-size:0.75rem; color:var(--accent-emerald); font-family:var(--font-tech);">▲ Live Transaction Ledger</div>
-            </div>
+        <!-- 1. LIVE PULSE VIEW -->
+        <section id="tab-analytics" class="tab-view active">
+          <div class="section-head">
+            <h2 class="section-title">Live Net Pulse</h2>
+          </div>
 
-            <div class="futuristic-card bento-cell-4">
-              <span class="card-title-sub">ORDERS DISPATCHED</span>
-              <div class="card-numeric-highlight" id="kpi-orders">0</div>
-              <div style="font-size:0.75rem; color:var(--text-secondary); font-family:var(--font-tech);">Today's Volume</div>
-            </div>
-
-            <div class="futuristic-card bento-cell-4">
-              <span class="card-title-sub">AVG BASKET SIZE</span>
-              <div class="card-numeric-highlight" id="kpi-aov">₹ 0</div>
-              <div style="font-size:0.75rem; color:var(--accent-gold); font-family:var(--font-tech);">Cart Average</div>
-            </div>
-
-            <div class="futuristic-card bento-cell-12">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
-                <span class="card-title-sub">LIVE ORDER CONSOLE</span>
-                <span style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);">Auto-refreshing</span>
+          <div class="neon-bento-grid">
+            <div class="neon-card">
+              <div class="neon-card-top">
+                <span class="neon-card-label">Net Inflow Today</span>
+                <span>💵</span>
               </div>
-              <div id="live-orders-stream" style="display:flex; flex-direction:column; gap:10px;">
-                <div style="text-align:center; padding:32px; color:var(--text-muted); font-size:0.85rem;">Listening for incoming customer orders...</div>
+              <div class="neon-card-value" id="kpi-today-sales">₹ 0</div>
+              <div class="neon-card-badge">▲ Live Ledger Active</div>
+            </div>
+
+            <div class="neon-card">
+              <div class="neon-card-top">
+                <span class="neon-card-label">Gross Orders</span>
+                <span>📦</span>
               </div>
+              <div class="neon-card-value" id="kpi-total-orders">0</div>
+              <div class="neon-card-badge">Fulfillment Pipeline</div>
+            </div>
+
+            <div class="neon-card">
+              <div class="neon-card-top">
+                <span class="neon-card-label">Average Basket</span>
+                <span>🏷️</span>
+              </div>
+              <div class="neon-card-value" id="kpi-aov">₹ 0</div>
+              <div class="neon-card-badge">Cart Average</div>
             </div>
           </div>
         </section>
 
-        <!-- VIEW 2: ARCH MASTERS -->
-        <section id="tab-arches" class="tab-content" style="display:none;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <div>
-              <h2 style="font-family:var(--font-display); font-size:1.6rem; color:var(--accent-gold);">Arch Masters Hub</h2>
-              <p style="font-size:0.8rem; color:var(--text-secondary);">Manage storefront collections, sub-categories, and image vaults.</p>
-            </div>
+        <!-- 2. ARCH MASTERS VIEW -->
+        <section id="tab-masters" class="tab-view" style="display: none;">
+          <div class="section-head">
+            <h2 class="section-title">Arch Masters Registry</h2>
           </div>
 
-          <div class="arch-manage-grid">
-            <div class="arch-node-card" data-master="category">
+          <div class="master-bento-grid">
+            <div class="master-tile" data-master="category">
               <div>
-                <h3 style="font-size:1.05rem; font-weight:700;">Categories</h3>
-                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-category">0 Units</p>
+                <div class="master-tile-name">Categories</div>
+                <div class="master-tile-count" id="count-category">0 Units</div>
               </div>
-              <span style="font-size:1.5rem;">📁</span>
+              <span>📁</span>
             </div>
 
-            <div class="arch-node-card" data-master="subcategory">
+            <div class="master-tile" data-master="subcategory">
               <div>
-                <h3 style="font-size:1.05rem; font-weight:700;">Sub-Categories</h3>
-                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-subcategory">0 Units</p>
+                <div class="master-tile-name">Sub-Categories</div>
+                <div class="master-tile-count" id="count-subcategory">0 Units</div>
               </div>
-              <span style="font-size:1.5rem;">🏛️</span>
+              <span>🏛️</span>
             </div>
 
-            <div class="arch-node-card" data-master="brand">
+            <div class="master-tile" data-master="brand">
               <div>
-                <h3 style="font-size:1.05rem; font-weight:700;">Brands</h3>
-                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-brand">0 Units</p>
+                <div class="master-tile-name">Brands</div>
+                <div class="master-tile-count" id="count-brand">0 Units</div>
               </div>
-              <span style="font-size:1.5rem;">🏷️</span>
+              <span>🏷️</span>
             </div>
 
-            <div class="arch-node-card" data-master="colour">
+            <div class="master-tile" data-master="colour">
               <div>
-                <h3 style="font-size:1.05rem; font-weight:700;">Colours</h3>
-                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-colour">0 Units</p>
+                <div class="master-tile-name">Colours</div>
+                <div class="master-tile-count" id="count-colour">0 Units</div>
               </div>
-              <span style="font-size:1.5rem;">🎨</span>
+              <span>🎨</span>
+            </div>
+
+            <div class="master-tile" data-master="size">
+              <div>
+                <div class="master-tile-name">Sizes</div>
+                <div class="master-tile-count" id="count-size">0 Units</div>
+              </div>
+              <span>📏</span>
+            </div>
+
+            <div class="master-tile" data-master="fabric">
+              <div>
+                <div class="master-tile-name">Fabrics</div>
+                <div class="master-tile-count" id="count-fabric">0 Units</div>
+              </div>
+              <span>🧵</span>
             </div>
           </div>
         </section>
 
-        <!-- VIEW 3: INVENTORY -->
-        <section id="tab-vault" class="tab-content" style="display:none;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
-            <h2 style="font-family:var(--font-display); font-size:1.6rem; color:var(--accent-gold);">Product Vault & Inventory</h2>
-            <button type="button" class="glow-btn-primary">+ Add New Item</button>
+        <!-- 3. INVENTORY VIEW -->
+        <section id="tab-products" class="tab-view" style="display: none;">
+          <div class="section-head">
+            <h2 class="section-title">Vault Inventory</h2>
+            <button type="button" class="btn-neon-primary">+ Add New Item</button>
           </div>
-          <div class="futuristic-card">
-            <div id="vault-items-container" style="text-align:center; padding:40px; color:var(--text-muted);">
-              Loading product matrix...
-            </div>
+          <div class="neon-card" style="text-align: center; padding: 48px; color: var(--text-dim);">
+            Inventory matrix loaded.
           </div>
         </section>
       </div>
     </main>
   </div>
 
-  <!-- Neural Slide-in Drawer -->
-  <div class="future-drawer-overlay" id="future-drawer">
-    <div class="future-drawer">
-      <div style="padding:24px 30px; border-bottom:1px solid var(--border-glass); display:flex; justify-content:space-between; align-items:center;">
-        <h3 id="future-drawer-title" style="font-family:var(--font-display); color:var(--accent-gold);">Manage Master</h3>
-        <button type="button" id="btn-close-drawer" style="background:none; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer;">&times;</button>
+  <!-- Tokyo Slide-in Drawer -->
+  <div class="tokyo-drawer-overlay" id="tokyo-drawer">
+    <div class="tokyo-drawer">
+      <div class="tokyo-drawer-head">
+        <h3 class="tokyo-drawer-title" id="drawer-title">Manage Attribute</h3>
+        <button type="button" id="btn-close-drawer" style="background:none; border:none; color:var(--text-dim); font-size:1.4rem; cursor:pointer;">&times;</button>
       </div>
-      <div id="future-drawer-body" style="padding:30px; flex:1; overflow-y:auto;">
-        <!-- Dynamic Attributes Content -->
-      </div>
+      <div id="drawer-content" style="padding: 24px; flex: 1; overflow-y: auto;"></div>
     </div>
   </div>
 
   <script type="module">
     import { supabase } from './js/supabase.js';
 
-    // Tab Router
     document.querySelectorAll('.nav-link-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const target = btn.dataset.tab;
@@ -219,16 +194,23 @@
         document.querySelectorAll('.nav-link-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
 
-        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-        const activeTab = document.getElementById(target);
-        if (activeTab) activeTab.style.display = 'block';
+        document.querySelectorAll('.tab-view').forEach(v => v.style.display = 'none');
+        const view = document.getElementById(target);
+        if (view) view.style.display = 'block';
       });
     });
 
-    // Drawer Closer
-    const drawer = document.getElementById('future-drawer');
+    const drawer = document.getElementById('tokyo-drawer');
     document.getElementById('btn-close-drawer')?.addEventListener('click', () => {
       drawer.classList.remove('active');
+    });
+
+    document.querySelectorAll('.master-tile').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const mType = tile.dataset.master;
+        document.getElementById('drawer-title').innerText = `Manage ${mType.toUpperCase()}`;
+        drawer.classList.add('active');
+      });
     });
   </script>
 </body>
