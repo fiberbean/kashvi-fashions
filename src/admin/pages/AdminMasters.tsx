@@ -14,8 +14,7 @@ import {
   Upload,
   Check,
   Save,
-  Loader2,
-  Image as ImageIcon
+  Loader2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -138,7 +137,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     loadMastersData();
   }, []);
 
-  // Automated Product Code Generator (KFXXXX vs KJXXXX)
+  // Automated Product Code Generator (KF vs KJ)
   useEffect(() => {
     if (activeModal !== 'product') return;
 
@@ -209,7 +208,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     e.preventDefault();
     if (!subCatName.trim() || !subCatParentId) return;
 
-    const parent = categories.find((c) => c.id === subCatParentId);
+    const parent = categories.find((c) => String(c.id) === String(subCatParentId));
     const id = makeId('subcat');
 
     const { data, error } = await supabase
@@ -231,7 +230,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     }
   };
 
-  // Save Variant (Colours, Sizes, Fabrics)
+  // Save Variant
   const handleSaveVariant = async (table: 'colours' | 'sizes' | 'fabrics') => {
     if (!variantNameInput.trim()) return;
     const nameVal = variantNameInput.trim();
@@ -287,7 +286,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
         const filePath = `products/${fileName}`;
 
-        // Attempt Supabase Storage Upload
         const { error: uploadError } = await supabase.storage
           .from('product-images')
           .upload(filePath, file);
@@ -299,7 +297,6 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             .getPublicUrl(filePath);
           finalUrl = publicData.publicUrl;
         } else {
-          // Fallback to local base64 preview if bucket doesn't exist
           finalUrl = await new Promise<string>((resolve) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
@@ -318,7 +315,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
       }
     } catch (err) {
       console.error('File upload error:', err);
-      alert('Failed to upload image. Please try again.');
+      alert('Failed to upload image.');
     } finally {
       setUploadingImage(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -342,8 +339,8 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     setProductError(null);
 
     try {
-      const selectedCatObj = categories.find((c) => c.id === selectedCategory);
-      const selectedSubCatObj = subCategories.find((sc) => sc.id === selectedSubCategory);
+      const selectedCatObj = categories.find((c) => String(c.id) === String(selectedCategory));
+      const selectedSubCatObj = subCategories.find((sc) => String(sc.id) === String(selectedSubCategory));
 
       const productPayload = {
         id: `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
@@ -389,10 +386,16 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     }
   };
 
-  // Dynamic Sub-Category Filtering
-  const filteredSubCategories = subCategories.filter(
-    (sub) => sub.category_id === selectedCategory
-  );
+  // Robust Sub-Category Filter (Matches by ID or by Category Name)
+  const selectedCatObject = categories.find((c) => String(c.id) === String(selectedCategory));
+  const filteredSubCategories = subCategories.filter((sub) => {
+    if (!selectedCategory) return false;
+    const matchById = String(sub.category_id).trim() === String(selectedCategory).trim();
+    const matchByName = selectedCatObject && sub.category_name
+      ? sub.category_name.trim().toLowerCase() === selectedCatObject.name.trim().toLowerCase()
+      : false;
+    return matchById || matchByName;
+  });
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
@@ -421,7 +424,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             <div className="flex items-center gap-2">
               <Tag className="w-4 h-4 text-[#0b3b2c]" />
               <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Categories ({categories.length})
+                Categories
               </h3>
             </div>
             {canEdit && (
@@ -468,7 +471,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-[#0b3b2c]" />
               <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Sub-Categories ({subCategories.length})
+                Sub-Categories
               </h3>
             </div>
             {canEdit && (
@@ -509,11 +512,11 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
           </div>
         </div>
 
-        {/* Variants Summary Card (Colours, Sizes, Fabrics) */}
+        {/* Variants Summary Card */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b pb-2.5">
             <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-              Variant Masters (Colours, Sizes, Fabrics)
+              Variant Masters
             </h3>
           </div>
 
@@ -522,7 +525,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
-                  <Palette className="w-3 h-3 text-[#ff4d6d]" /> Colours ({colours.length})
+                  <Palette className="w-3 h-3 text-[#ff4d6d]" /> Colours
                 </span>
                 <button onClick={() => setActiveModal('colours')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
               </div>
@@ -540,7 +543,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
-                  <Ruler className="w-3 h-3 text-blue-500" /> Sizes ({sizes.length})
+                  <Ruler className="w-3 h-3 text-blue-500" /> Sizes
                 </span>
                 <button onClick={() => setActiveModal('sizes')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
               </div>
@@ -558,7 +561,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             <div className="p-3.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
-                  <Scissors className="w-3 h-3 text-emerald-500" /> Fabrics ({fabrics.length})
+                  <Scissors className="w-3 h-3 text-emerald-500" /> Fabrics
                 </span>
                 <button onClick={() => setActiveModal('fabrics')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
               </div>
@@ -585,13 +588,13 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/50 backdrop-blur-2xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-[#dce6e1] space-y-4 text-xs">
             
-            {/* Modal Header with "PRODUCT CODE" Display */}
+            {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3 sticky top-0 bg-white z-10">
               <div className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-[#0b3b2c]" />
                 <div>
                   <h2 className="text-base font-bold text-[#0b3b2c]">Product Master Creator</h2>
-                  <span className="text-[10px] text-[#4d6960]">Create retail catalog item with code & live masters</span>
+                  <span className="text-[10px] text-[#4d6960]">Create retail catalog item with code and live masters</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -629,7 +632,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     }`}
                   >
                     <Building2 className="w-3.5 h-3.5" />
-                    <span>Fashion (KF)</span>
+                    <span>Fashion</span>
                   </button>
                   <button
                     type="button"
@@ -641,7 +644,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     }`}
                   >
                     <Tag className="w-3.5 h-3.5" />
-                    <span>Jewellery (KJ)</span>
+                    <span>Jewellery</span>
                   </button>
                 </div>
               </div>
@@ -674,7 +677,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
               {/* Categories, Sub-Categories & Opening Stock */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category (Live Masters) *</label>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category *</label>
                   <select
                     required
                     value={selectedCategory}
@@ -684,7 +687,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     }}
                     className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
                   >
-                    <option value="">-- Select Category --</option>
+                    <option value="">Select Category</option>
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
@@ -692,14 +695,14 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Sub-Category (Dynamic)</label>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Sub-Category</label>
                   <select
                     value={selectedSubCategory}
                     onChange={(e) => setSelectedSubCategory(e.target.value)}
                     disabled={!selectedCategory}
                     className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none disabled:opacity-50"
                   >
-                    <option value="">-- Select Sub-Category --</option>
+                    <option value="">Select Sub-Category</option>
                     {filteredSubCategories.map((sc) => (
                       <option key={sc.id} value={sc.id}>{sc.name}</option>
                     ))}
@@ -721,7 +724,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
               {/* Multi-Select Variant Pills */}
               <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-2.5">
                 <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">
-                  Select Variants (From Live Masters)
+                  Select Variants
                 </span>
 
                 {/* Colours */}
@@ -794,7 +797,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 </div>
               </div>
 
-              {/* Direct File Image Upload & Underneath Color Tagging */}
+              {/* Direct File Image Upload & Color Tagging */}
               <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-3">
                 <div>
                   <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">
@@ -830,7 +833,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                   <span className="text-[11px] text-neutral-400">Supports JPG, PNG, WEBP</span>
                 </div>
 
-                {/* Uploaded Images Grid with Underneath Colour Tagging */}
+                {/* Uploaded Images Grid with Colour Tagging */}
                 {images.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-2">
                     {images.map((img) => (
@@ -846,7 +849,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                           </button>
                         </div>
                         
-                        {/* Underneath Tag to Colour Dropdown */}
+                        {/* Tag to Colour Dropdown */}
                         <div className="p-2 border-t border-[#edf2ef] bg-[#fbfcfc] space-y-1">
                           <span className="text-[9px] font-bold uppercase tracking-wider text-[#4d6960] block">Tag To Colour:</span>
                           <select
@@ -917,7 +920,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                   onChange={(e) => setCatDept(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
                 >
-                  <option value="fashions">Fashions</option>
+                  <option value="fashions">Fashion</option>
                   <option value="jewellery">Jewellery</option>
                 </select>
               </div>
@@ -947,7 +950,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                   onChange={(e) => setSubCatParentId(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-semibold"
                 >
-                  <option value="">-- Choose Category --</option>
+                  <option value="">Select Category</option>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
