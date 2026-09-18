@@ -1,6 +1,25 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { BellRing, ExternalLink, LogOut, LayoutDashboard, Users, RefreshCw } from 'lucide-react';
+import {
+  BellRing,
+  ExternalLink,
+  LogOut,
+  LayoutDashboard,
+  Users,
+  RefreshCw,
+  ShoppingBag,
+  Package,
+  Layers,
+  MapPin,
+  Truck,
+  CreditCard,
+  Settings,
+  ChevronDown,
+  Search,
+  Tag,
+  ShieldCheck,
+  RotateCcw
+} from 'lucide-react';
 import { AdminStaffUser } from '../types';
 
 interface AdminNavbarProps {
@@ -20,6 +39,23 @@ export default function AdminNavbar({
 }: AdminNavbarProps) {
   const location = useLocation();
   const isAdmin = currentUser?.role === 'admin';
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const navRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (navRef.current && !navRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleDropdown = (menu: string) => {
+    setOpenDropdown((prev) => (prev === menu ? null : menu));
+  };
 
   const getRoleBadge = (role: string = '') => {
     switch (role) {
@@ -35,13 +71,16 @@ export default function AdminNavbar({
   };
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#e2eae6] shadow-[0_2px_12px_rgba(11,59,44,0.03)] select-none font-sans">
-      <div className="max-w-[1540px] mx-auto px-4 sm:px-8 h-14 flex items-center justify-between gap-4">
+    <nav
+      ref={navRef}
+      className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#e2eae6] shadow-[0_2px_12px_rgba(11,59,44,0.03)] select-none font-sans"
+    >
+      <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-15 flex items-center justify-between gap-3">
         
-        {/* Brand Logo & Tabs */}
-        <div className="flex items-center gap-6">
+        {/* Left Section: Brand Logo & Navigation Menus */}
+        <div className="flex items-center gap-4 lg:gap-5">
           <Link to="/kfmama" className="flex items-center gap-2.5 shrink-0 group">
-            <div className="w-8 h-8 rounded-xl bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-serif font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
+            <div className="w-8.5 h-8.5 rounded-xl bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-serif font-black text-sm shadow-sm group-hover:scale-105 transition-transform">
               KF
             </div>
             <div className="flex flex-col">
@@ -54,45 +93,230 @@ export default function AdminNavbar({
             </div>
           </Link>
 
-          <div className="hidden md:flex items-center gap-1.5">
+          {/* Primary Nav Links & Dropdowns */}
+          <div className="hidden md:flex items-center gap-1 text-xs font-semibold text-[#4d6960]">
+            
+            {/* Dashboard Link */}
             <Link
               to="/kfmama"
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+              onClick={() => setOpenDropdown(null)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${
                 location.pathname === '/kfmama'
-                  ? 'bg-[#0b3b2c] text-white shadow-xs'
-                  : 'text-[#4d6960] hover:text-[#0b3b2c]'
+                  ? 'bg-[#0b3b2c] text-white font-bold shadow-xs'
+                  : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
               }`}
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
               <span>Dashboard</span>
             </Link>
 
-            {isAdmin && (
-              <Link
-                to="/kfmama/staff"
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                  location.pathname === '/kfmama/staff'
-                    ? 'bg-[#0b3b2c] text-white shadow-xs'
-                    : 'text-[#4d6960] hover:text-[#0b3b2c]'
+            {/* Catalog Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => toggleDropdown('catalog')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                  openDropdown === 'catalog'
+                    ? 'bg-[#f0f4f2] text-[#0b3b2c]'
+                    : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
                 }`}
               >
-                <Users className="w-3.5 h-3.5" />
-                <span>Staff & PINs</span>
-              </Link>
-            )}
+                <Package className="w-3.5 h-3.5" />
+                <span>Catalog</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === 'catalog' ? 'rotate-180' : ''}`} />
+              </button>
 
-            {unreadCount > 0 && (
-              <span className="ml-1 inline-flex items-center gap-1 text-[9.5px] font-bold bg-[#ff4d6d] text-white px-2 py-0.5 rounded-full shadow-xs animate-bounce">
-                <BellRing className="w-2.5 h-2.5" /> {unreadCount} New
-              </span>
-            )}
+              {openDropdown === 'catalog' && (
+                <div className="absolute top-full left-0 mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Product Catalog</span>
+                  </Link>
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <Tag className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Collections & Vaults</span>
+                  </Link>
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Stock & Inventory</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* Masters Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => toggleDropdown('masters')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                  openDropdown === 'masters'
+                    ? 'bg-[#f0f4f2] text-[#0b3b2c]'
+                    : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Masters</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === 'masters' ? 'rotate-180' : ''}`} />
+              </button>
+
+              {openDropdown === 'masters' && (
+                <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Delivery Pincodes</span>
+                  </Link>
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <Truck className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Rate Cards & Shipping</span>
+                  </Link>
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <Users className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Customer Directory</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* Orders Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => toggleDropdown('orders')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                  openDropdown === 'orders'
+                    ? 'bg-[#f0f4f2] text-[#0b3b2c]'
+                    : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
+                }`}
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Orders</span>
+                {unreadCount > 0 && (
+                  <span className="bg-[#ff4d6d] text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
+                <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === 'orders' ? 'rotate-180' : ''}`} />
+              </button>
+
+              {openDropdown === 'orders' && (
+                <div className="absolute top-full left-0 mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center justify-between px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ShoppingBag className="w-3.5 h-3.5 text-neutral-400" />
+                      <span>Live Order Stream</span>
+                    </span>
+                    {unreadCount > 0 && (
+                      <span className="bg-[#ff4d6d] text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </Link>
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <Truck className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Dispatched Shipments</span>
+                  </Link>
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Returns & Exchanges</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* Store Config Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => toggleDropdown('config')}
+                className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                  openDropdown === 'config' || location.pathname === '/kfmama/staff'
+                    ? 'bg-[#f0f4f2] text-[#0b3b2c]'
+                    : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>Store Config</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === 'config' ? 'rotate-180' : ''}`} />
+              </button>
+
+              {openDropdown === 'config' && (
+                <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <CreditCard className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Payment Gateways</span>
+                  </Link>
+
+                  {isAdmin && (
+                    <Link
+                      to="/kfmama/staff"
+                      onClick={() => setOpenDropdown(null)}
+                      className="flex items-center gap-2 px-3.5 py-2 text-xs text-[#0b3b2c] hover:bg-[#f4f7f5] font-bold"
+                    >
+                      <Users className="w-3.5 h-3.5 text-[#0b3b2c]" />
+                      <span>Staff & Duty PINs</span>
+                    </Link>
+                  )}
+
+                  <Link
+                    to="/kfmama"
+                    onClick={() => setOpenDropdown(null)}
+                    className="flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Store Profile Settings</span>
+                  </Link>
+                </div>
+              )}
+            </div>
+
           </div>
         </div>
 
-        {/* Right Section: Auto Sync Button, Profile & Logout */}
+        {/* Right Section: Auto Sync, Profile & Logout */}
         <div className="flex items-center gap-2.5">
           
-          {/* Auto Sync Pill Button - Clicking triggers instant manual sync */}
+          {/* Clickable Auto Sync Button */}
           <button
             type="button"
             onClick={onManualSync}
