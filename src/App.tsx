@@ -1,7 +1,7 @@
 import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import CustomerApp from './CustomerApp';
-import AdminApp from './admin/AdminApp';
+import AdminApp from "./AdminApp";
 
 export default function App() {
   return (
