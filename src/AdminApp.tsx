@@ -9,7 +9,7 @@ import AdminMasters from './admin/pages/AdminMasters';
 import AdminProducts from './admin/pages/AdminProducts';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
-export type AdminViewType = 'dashboard' | 'products' | 'masters' | 'staff';
+export type AdminViewType = 'dashboard' | 'products' | 'staff';
 
 export default function AdminApp() {
   const location = useLocation();
@@ -19,10 +19,7 @@ export default function AdminApp() {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncTrigger, setSyncTrigger] = useState<number>(0);
 
-  // Security: Internal view switching without changing URL path
   const [currentView, setCurrentView] = useState<AdminViewType>('dashboard');
-
-  // Direct Master Modal Section Trigger State
   const [selectedMasterSection, setSelectedMasterSection] = useState<MasterSectionType | null>(null);
 
   const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
@@ -149,8 +146,15 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
+      {selectedMasterSection && (
+        <AdminMasters
+          currentUser={currentUser}
+          selectedSection={selectedMasterSection}
+          onClearSection={() => setSelectedMasterSection(null)}
+        />
+      )}
+
       <main className="flex-1 w-full max-w-[1540px] mx-auto p-3 sm:p-5">
-        {/* Secure In-App View Render */}
         {currentView === 'dashboard' && (
           <AdminDashboard
             currentUser={currentUser}
@@ -161,14 +165,6 @@ export default function AdminApp() {
 
         {currentView === 'products' && (
           <AdminProducts currentUser={currentUser} />
-        )}
-
-        {currentView === 'masters' && (
-          <AdminMasters
-            currentUser={currentUser}
-            selectedSection={selectedMasterSection}
-            onClearSection={() => setSelectedMasterSection(null)}
-          />
         )}
 
         {currentView === 'staff' && (
