@@ -18,7 +18,6 @@ import {
   CategoryRecord,
   SubCategoryRecord,
   ColourRecord,
-  SizeRecord,
   FabricRecord,
   UnitRecord,
   AdminStaffUser
@@ -392,28 +391,17 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     return matchById || matchByName;
   });
 
+  // Background lo tables ledu, kevalam modal state unte matrame popup modal vastundi
+  if (!activeModal) {
+    return null;
+  }
+
   return (
     <div className="select-none font-sans">
-      {/* Background jab koi modal open na ho */}
-      {!activeModal && (
-        <div className="min-h-[50vh] flex flex-col items-center justify-center text-center p-8">
-          <div className="w-14 h-14 rounded-2xl bg-[#e4efe9] text-[#0b3b2c] flex items-center justify-center mb-3">
-            <Layers className="w-7 h-7 text-[#0b3b2c]" />
-          </div>
-          <h2 className="text-lg font-serif font-bold text-[#0b3b2c]">Kashvi Master Vaults</h2>
-          <p className="text-xs text-[#4d6960] mt-1 max-w-sm">
-            Top Navbar me <b>Masters</b> dropdown se Product, Category, Sub-Category, Colours, Size ya Fabric select karein.
-          </p>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* DEDICATED POPUP MODALS */}
-      {/* ========================================================================= */}
-
+      
       {/* MODAL 1: PRODUCT MASTER POPUP */}
       {activeModal === 'product' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/50 backdrop-blur-2xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-[#dce6e1] space-y-4 text-xs">
             
             {/* Modal Header */}
@@ -741,7 +729,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
 
       {/* MODAL 2: CATEGORY POPUP */}
       {activeModal === 'category' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c]">Add Main Category</h3>
@@ -781,7 +769,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
 
       {/* MODAL 3: SUB-CATEGORY POPUP */}
       {activeModal === 'subcategory' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c]">Add Sub-Category</h3>
@@ -824,7 +812,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
 
       {/* MODAL 4, 5, 6: (COLOURS / SIZES / FABRICS) DYNAMIC POPUP */}
       {(activeModal === 'colours' || activeModal === 'sizes' || activeModal === 'fabrics') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c] uppercase">Add New {activeModal.slice(0, -1)}</h3>
