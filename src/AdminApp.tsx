@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import AdminNavbar from './admin/components/AdminNavbar';
+import AdminNavbar, { MasterSectionType } from './admin/components/AdminNavbar';
 import AdminLoginScreen from './admin/components/AdminLoginScreen';
 import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
 import AdminDashboard from './admin/pages/AdminDashboard';
@@ -22,6 +22,9 @@ export default function AdminApp() {
   // Security: Internal view switching without changing URL path
   const [currentView, setCurrentView] = useState<AdminViewType>('dashboard');
 
+  // Direct Master Modal Section Trigger State
+  const [selectedMasterSection, setSelectedMasterSection] = useState<MasterSectionType | null>(null);
+
   const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -31,6 +34,7 @@ export default function AdminApp() {
     sessionStorage.removeItem('kfmama_auth_timestamp');
     setCurrentUser(null);
     setCurrentView('dashboard');
+    setSelectedMasterSection(null);
     if (timerRef.current) clearTimeout(timerRef.current);
   };
 
@@ -137,6 +141,7 @@ export default function AdminApp() {
         onLogout={logoutSession}
         currentView={currentView}
         onViewChange={(view) => setCurrentView(view)}
+        onSelectMaster={(section) => setSelectedMasterSection(section)}
       />
 
       <StickyOrderAlerts
@@ -145,7 +150,7 @@ export default function AdminApp() {
       />
 
       <main className="flex-1 w-full max-w-[1540px] mx-auto p-3 sm:p-5">
-        {/* Secure In-App View Render: URL లో ఎక్కడా లీక్ అవ్వదు */}
+        {/* Secure In-App View Render */}
         {currentView === 'dashboard' && (
           <AdminDashboard
             currentUser={currentUser}
@@ -159,7 +164,11 @@ export default function AdminApp() {
         )}
 
         {currentView === 'masters' && (
-          <AdminMasters currentUser={currentUser} />
+          <AdminMasters
+            currentUser={currentUser}
+            selectedSection={selectedMasterSection}
+            onClearSection={() => setSelectedMasterSection(null)}
+          />
         )}
 
         {currentView === 'staff' && (
