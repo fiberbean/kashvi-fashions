@@ -31,6 +31,7 @@ import WishlistModal from './components/wishlist/WishlistModal';
 import AdminNavbar from './admin/components/AdminNavbar';
 import AdminDashboard from './admin/pages/AdminDashboard';
 import AdminMasters from './admin/pages/AdminMasters';
+import AdminProducts from './admin/pages/AdminProducts';
 
 // Assets నుండి నేరుగా ఇంపోర్ట్
 import fashionLogo from './assets/fashion-logo.png';
@@ -401,6 +402,8 @@ function AppContent() {
                 <Routes>
                   <Route path="" element={<AdminDashboard />} />
                   <Route path="masters" element={<AdminMasters />} />
+                  <Route path="products" element={<AdminProducts />} />
+                  <Route path="products/new" element={<AdminProducts />} />
                 </Routes>
               </main>
             </div>
