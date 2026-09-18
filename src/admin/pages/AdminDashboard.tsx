@@ -14,7 +14,8 @@ import {
   Calendar,
   Sparkles,
   Flame,
-  Award
+  Award,
+  Volume2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { OrderRecord, AbandonedCartUser, AdminStaffUser } from '../types';
@@ -66,28 +67,86 @@ export default function AdminDashboard({
 
   // Velocity / Top Items Filter State
   const [itemTimeFilter, setItemTimeFilter] = useState<TimeRangeFilter>('today');
+  const [audioReady, setAudioReady] = useState<boolean>(false);
 
   const role = currentUser?.role || 'operations';
   const canEdit = role === 'admin' || role === 'manager';
   const canDelete = role === 'admin';
 
-  const playChime = () => {
+  // --- LOUD DUAL-TONE ALERT SOUND ---
+  const playAlertSound = () => {
     try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.5);
-    } catch (e) {
-      console.warn('Audio play failed:', e);
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      // First Tone
+      const osc1 = ctx.createOscillator();
+      const gain1 = ctx.createGain();
+      osc1.type = 'triangle';
+      osc1.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+      gain1.gain.setValueAtTime(0.4, ctx.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc1.connect(gain1);
+      gain1.connect(ctx.destination);
+      osc1.start();
+      osc1.stop(ctx.currentTime + 0.4);
+
+      // Louder Second Bell Tone
+      setTimeout(() => {
+        try {
+          const osc2 = ctx.createOscillator();
+          const gain2 = ctx.createGain();
+          osc2.type = 'sine';
+          osc2.frequency.setValueAtTime(1174.66, ctx.currentTime);
+          gain2.gain.setValueAtTime(0.5, ctx.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.6);
+          osc2.connect(gain2);
+          gain2.connect(ctx.destination);
+          osc2.start();
+          osc2.stop(ctx.currentTime + 0.6);
+        } catch (e) {
+          console.warn('Secondary audio tone error:', e);
+        }
+      }, 180);
+    } catch (err) {
+      console.warn('Audio play restricted by browser:', err);
     }
+  };
+
+  // --- BROWSER DESKTOP PUSH NOTIFICATION (PRODUCT SPECIFIC) ---
+  const triggerBrowserNotification = (ord: OrderRecord) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const items = Array.isArray(ord.items) ? ord.items : [];
+        const firstItem = items[0] || null;
+        const itemName = firstItem ? firstItem.name : 'Exclusive Product';
+        const itemQty = firstItem ? firstItem.qty || 1 : 1;
+        const extraItems = items.length > 1 ? ` (+${items.length - 1} more products)` : '';
+
+        new Notification(`🚨 NEW ORDER: ${itemName}`, {
+          body: `Qty: ${itemQty} ${firstItem?.size ? `• Size: ${firstItem.size}` : ''}${extraItems}\nCustomer: ${ord.customer_name || 'Direct Customer'} • ${ord.id}`,
+          icon: firstItem?.image || '/favicon.ico',
+          requireInteraction: true
+        });
+      } catch (e) {
+        console.warn('Desktop notification trigger failed:', e);
+      }
+    }
+  };
+
+  // Test sound and request notification permission
+  const handleEnableAlerts = () => {
+    if ('Notification' in window && Notification.permission !== 'granted') {
+      Notification.requestPermission();
+    }
+    playAlertSound();
+    setAudioReady(true);
   };
 
   const fetchDashboardData = async (silent = false) => {
@@ -150,25 +209,41 @@ export default function AdminDashboard({
     fetchDashboardData(true);
   }, [syncTrigger]);
 
+  // Realtime WebSocket Subscription with Immediate Alert Dispatch
   useEffect(() => {
     fetchDashboardData();
 
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     const channel = supabase
-      .channel('kfmama-realtime-orders')
+      .channel('kfmama-realtime-orders-stream')
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'orders' },
         (payload) => {
           const newOrder = payload.new as OrderRecord;
-          playChime();
+
+          // 1. Play Loud Bell
+          playAlertSound();
+
+          // 2. Trigger Product Specific Desktop Notification
+          triggerBrowserNotification(newOrder);
+
+          // 3. Update Dashboard Stats
           setRecentOrders((prev) => [newOrder, ...prev]);
           setNewOrdersCount((c) => c + 1);
           setTotalOrdersToday((c) => c + 1);
           setTodaySales((s) => s + (Number(newOrder.total_amount) || 0));
+
+          // 4. Send to Sticky Alert Bar
           onNewOrderNotice(newOrder);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime orders stream node status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -213,7 +288,7 @@ export default function AdminDashboard({
     }
   };
 
-  // --- FILTER AND COMPUTE TOP SELLING ITEMS ---
+  // --- TOP SELLING ITEMS COMPUTATION ---
   const topSellingItems = useMemo(() => {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -225,47 +300,38 @@ export default function AdminDashboard({
       switch (itemTimeFilter) {
         case 'today':
           return orderTime >= todayStart;
-
         case 'yesterday': {
           const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
           return orderTime >= yesterdayStart && orderTime < todayStart;
         }
-
         case '3days': {
           const threeDaysAgo = todayStart - 3 * 24 * 60 * 60 * 1000;
           return orderTime >= threeDaysAgo;
         }
-
         case '1week': {
           const oneWeekAgo = todayStart - 7 * 24 * 60 * 60 * 1000;
           return orderTime >= oneWeekAgo;
         }
-
         case 'half_month': {
           const fifteenDaysAgo = todayStart - 15 * 24 * 60 * 60 * 1000;
           return orderTime >= fifteenDaysAgo;
         }
-
         case 'full_month': {
           const thirtyDaysAgo = todayStart - 30 * 24 * 60 * 60 * 1000;
           return orderTime >= thirtyDaysAgo;
         }
-
         case '3months': {
           const ninetyDaysAgo = todayStart - 90 * 24 * 60 * 60 * 1000;
           return orderTime >= ninetyDaysAgo;
         }
-
         case 'half_year': {
           const halfYearAgo = todayStart - 180 * 24 * 60 * 60 * 1000;
           return orderTime >= halfYearAgo;
         }
-
         case 'year': {
           const oneYearAgo = todayStart - 365 * 24 * 60 * 60 * 1000;
           return orderTime >= oneYearAgo;
         }
-
         default:
           return true;
       }
@@ -298,7 +364,6 @@ export default function AdminDashboard({
           }
         });
       } else {
-        // Fallback for orders without item array
         const name = 'Handcrafted Heritage Order';
         const qty = 1;
         const price = Number(ord.total_amount) || 0;
@@ -322,7 +387,7 @@ export default function AdminDashboard({
     return Array.from(itemMap.values()).sort((a, b) => b.unitsSold - a.unitsSold);
   }, [recentOrders, itemTimeFilter]);
 
-  // --- PDF GENERATOR FUNCTION ---
+  // --- PDF REPORT EXPORT ---
   const handleDownloadPDF = () => {
     const filterLabels: Record<TimeRangeFilter, string> = {
       today: 'Today',
@@ -453,7 +518,23 @@ export default function AdminDashboard({
   return (
     <div className="space-y-4.5 animate-in fade-in duration-200 select-none font-sans">
       
-      {/* 1. Compact Metric Bento Cards */}
+      {/* Sound & Push Notification Unlock Header if not initialized */}
+      {!audioReady && (
+        <div
+          onClick={handleEnableAlerts}
+          className="bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 border border-amber-200 p-2.5 rounded-2xl flex items-center justify-between cursor-pointer hover:shadow-xs transition-all"
+        >
+          <div className="flex items-center gap-2 text-xs font-bold text-[#0b3b2c]">
+            <Volume2 className="w-4 h-4 text-[#ff4d6d] animate-bounce" />
+            <span>Click to test & allow Order Dispatch Bell Sound & Product Popups</span>
+          </div>
+          <span className="text-[10.5px] font-bold bg-[#0b3b2c] text-white px-3 py-1 rounded-full shadow-2xs">
+            Test Sound 🔔
+          </span>
+        </div>
+      )}
+
+      {/* 1. Metric Bento Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="bg-white rounded-xl p-3.5 border border-[#ffccd5] shadow-xs">
           <div className="flex items-center justify-between">
@@ -532,10 +613,10 @@ export default function AdminDashboard({
         </div>
       </div>
 
-      {/* 2. SIDE-BY-SIDE MAIN WORKSPACE: Live Orders Table (Left 65%) & Top Selling Items Velocity Leaderboard (Right 35%) */}
+      {/* 2. MAIN WORKSPACE */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         
-        {/* LEFT 7-8 COLUMNS: LIVE ORDERS TABLE */}
+        {/* LEFT: LIVE ORDERS STREAM */}
         <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
           <div className="px-4 py-2.5 border-b border-[#edf2ef] flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 p-0.5 bg-[#f0f4f2] rounded-full">
@@ -571,7 +652,7 @@ export default function AdminDashboard({
             </div>
           </div>
 
-          {/* Table Tab 1: Orders */}
+          {/* Table 1: Live Orders */}
           {tableTab === 'orders' && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-sans">
@@ -682,7 +763,7 @@ export default function AdminDashboard({
             </div>
           )}
 
-          {/* Table Tab 2: Abandoned */}
+          {/* Table 2: Abandoned Carts */}
           {tableTab === 'abandoned' && (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-sans">
@@ -728,10 +809,8 @@ export default function AdminDashboard({
           )}
         </div>
 
-        {/* RIGHT 4-5 COLUMNS: TOP SELLING ITEMS / HIGH DEMAND LEADERBOARD WITH PDF EXPORT */}
+        {/* RIGHT: TOP SELLING ITEMS DEMAND LEADERBOARD */}
         <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden flex flex-col">
-          
-          {/* Header with Title & PDF Download Button */}
           <div className="px-3.5 py-2.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
             <div className="flex items-center gap-1.5">
               <Flame className="w-4 h-4 text-[#ff4d6d]" />
@@ -751,7 +830,6 @@ export default function AdminDashboard({
             </button>
           </div>
 
-          {/* Timeframe Filter Bar */}
           <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-[#f8faf9] flex items-center justify-between gap-2">
             <div className="flex items-center gap-1 text-[10px] text-neutral-500 font-semibold">
               <Calendar className="w-3 h-3 text-[#c6933a]" />
@@ -775,7 +853,6 @@ export default function AdminDashboard({
             </select>
           </div>
 
-          {/* Top Selling Items List */}
           <div className="divide-y divide-[#edf2ef] overflow-y-auto max-h-[420px] flex-1">
             {topSellingItems.length === 0 ? (
               <div className="p-8 text-center text-xs text-neutral-400 space-y-1">
@@ -795,7 +872,6 @@ export default function AdminDashboard({
                     className="p-3 hover:bg-[#f8faf9] transition-colors flex items-center justify-between gap-2.5 group"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      {/* Rank Badge */}
                       <div
                         className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10.5px] shrink-0 ${
                           isTop1
@@ -810,7 +886,6 @@ export default function AdminDashboard({
                         {isTop1 ? <Award className="w-3.5 h-3.5 text-amber-600" /> : `#${idx + 1}`}
                       </div>
 
-                      {/* Item Thumbnail & Details */}
                       {item.image && (
                         <img
                           src={item.image}
@@ -829,7 +904,6 @@ export default function AdminDashboard({
                       </div>
                     </div>
 
-                    {/* Sales Metrics */}
                     <div className="text-right shrink-0">
                       <div className="text-xs font-bold text-[#ff4d6d] font-mono">
                         {item.unitsSold} {item.unitsSold === 1 ? 'Unit' : 'Units'}
@@ -844,7 +918,6 @@ export default function AdminDashboard({
             )}
           </div>
 
-          {/* Footer Summary */}
           <div className="px-3.5 py-2 border-t border-[#edf2ef] bg-[#fbfcfc] flex items-center justify-between text-[10px] text-neutral-500 font-semibold">
             <span>Total Unique Products: <strong>{topSellingItems.length}</strong></span>
             <span className="text-[#0b3b2c] font-bold">
@@ -852,7 +925,6 @@ export default function AdminDashboard({
               {topSellingItems.reduce((acc, curr) => acc + curr.unitsSold, 0)} Units
             </span>
           </div>
-
         </div>
 
       </div>
