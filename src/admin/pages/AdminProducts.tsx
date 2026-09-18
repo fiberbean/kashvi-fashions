@@ -19,7 +19,11 @@ import {
   X,
   Sparkles,
   RefreshCw,
-  Scale
+  Scale,
+  Check,
+  ChevronDown,
+  Boxes,
+  HelpCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -52,7 +56,7 @@ interface ProductRecord {
   weight_unit?: string;
   stock_quantity: number;
   low_stock_threshold?: number;
-  images: string[];
+  images: any;
   variants?: any;
   description?: string;
   active: boolean;
@@ -62,6 +66,39 @@ interface ProductRecord {
 interface AdminProductsProps {
   currentUser: AdminStaffUser | null;
 }
+
+// Visual Color Swatch mapping for clean UI display
+const COLOR_HEX_MAP: Record<string, string> = {
+  'black': '#171717',
+  'white': '#ffffff',
+  'red': '#dc2626',
+  'baby pink': '#fbcfe8',
+  'pink': '#ec4899',
+  'rani pink': '#db2777',
+  'maroon': '#831843',
+  'beige': '#f5f5dc',
+  'dark green': '#14532d',
+  'green': '#16a34a',
+  'grey': '#737373',
+  'mustard yellow': '#eab308',
+  'musturd yellow': '#eab308',
+  'yellow': '#facc15',
+  'navy blue': '#1e3a8a',
+  'peach': '#ffedd5',
+  'sky blue': '#38bdf8',
+  'blue': '#2563eb',
+  'turquoise': '#06b6d4',
+  'violet': '#7c3aed',
+  'purple': '#9333ea',
+  'orange': '#ea580c',
+  'gold': '#d97706',
+  'silver': '#94a3b8'
+};
+
+const getColorHex = (colorName: string): string => {
+  const clean = colorName.trim().toLowerCase();
+  return COLOR_HEX_MAP[clean] || '#0b3b2c';
+};
 
 export default function AdminProducts({ currentUser }: AdminProductsProps) {
   const [loading, setLoading] = useState(true);
@@ -80,6 +117,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
   // Modal & Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sizeFilterTab, setSizeFilterTab] = useState<'all' | 'bangles' | 'apparel' | 'cups'>('all');
 
   // Form Fields
   const [name, setName] = useState('');
@@ -113,11 +151,14 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const { data: prodData } = await supabase
+      const { data: prodData, error } = await supabase
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
-      if (prodData) setProducts(prodData);
+
+      if (prodData) {
+        setProducts(prodData);
+      }
 
       const [catsRes, subCatsRes, colsRes, sizesRes, fabsRes, unitsRes] = await Promise.all([
         supabase.from('categories').select('*').eq('active', true).order('name'),
@@ -151,6 +192,36 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     if (!parentCat) return subCategories;
     return subCategories.filter((s) => s.category_id === parentCat.id || s.category_name === category);
   }, [category, categories, subCategories]);
+
+  // Organize sizes by smart sub-types (Bangles: 2.2, 2.4 / Apparel: S, M, L / Lingerie: 32B)
+  const categorizedSizes = useMemo(() => {
+    const bangles: SizeRecord[] = [];
+    const apparel: SizeRecord[] = [];
+    const cups: SizeRecord[] = [];
+    const others: SizeRecord[] = [];
+
+    sizes.forEach((s) => {
+      const n = s.name.trim();
+      if (/^\d+(\.\d+)?$/.test(n) || n.includes('.')) {
+        bangles.push(s);
+      } else if (['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Free Size'].includes(n.toUpperCase())) {
+        apparel.push(s);
+      } else if (/\d+[A-Za-z]/.test(n)) {
+        cups.push(s);
+      } else {
+        others.push(s);
+      }
+    });
+
+    return { bangles, apparel, cups, others };
+  }, [sizes]);
+
+  const displayedSizes = useMemo(() => {
+    if (sizeFilterTab === 'bangles') return categorizedSizes.bangles;
+    if (sizeFilterTab === 'apparel') return categorizedSizes.apparel;
+    if (sizeFilterTab === 'cups') return categorizedSizes.cups;
+    return sizes;
+  }, [sizeFilterTab, categorizedSizes, sizes]);
 
   const toggleColor = (colName: string) => {
     setSelectedColors((prev) =>
@@ -194,6 +265,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     setSelectedSizes([]);
     setImagesList([]);
     setImageInput('');
+    setSizeFilterTab('all');
   };
 
   const handleCreateProduct = async (e: React.FormEvent) => {
@@ -205,7 +277,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
 
     setSaving(true);
     try {
-      const productId = `PROD_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+      const productId = `KF${Math.floor(1000 + Math.random() * 9000)}`;
 
       const newProductPayload = {
         id: productId,
@@ -292,6 +364,57 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
     }
   };
 
+  // Safe Image Extractor for Postgres text/jsonb array
+  const extractFirstImage = (imgData: any): string | null => {
+    if (!imgData) return null;
+    if (Array.isArray(imgData) && imgData.length > 0) return imgData[0];
+    if (typeof imgData === 'string') {
+      try {
+        const parsed = JSON.parse(imgData);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
+        if (imgData.startsWith('http')) return imgData;
+      } catch {
+        if (imgData.startsWith('http')) return imgData;
+      }
+    }
+    return null;
+  };
+
+  // Safe Variants Extractor for Table Display
+  const getVariantsDisplay = (p: ProductRecord) => {
+    const list: { type: 'color' | 'size' | 'fabric'; value: string }[] = [];
+
+    // Check direct columns
+    if (p.colour) {
+      p.colour.split(',').forEach((c) => {
+        if (c.trim()) list.push({ type: 'color', value: c.trim() });
+      });
+    }
+    if (p.size) {
+      p.size.split(',').forEach((s) => {
+        if (s.trim()) list.push({ type: 'size', value: s.trim() });
+      });
+    }
+    if (p.fabric) {
+      list.push({ type: 'fabric', value: p.fabric.trim() });
+    }
+
+    // Check JSON variants if empty
+    if (list.length === 0 && p.variants && typeof p.variants === 'object') {
+      if (Array.isArray(p.variants.colors)) {
+        p.variants.colors.forEach((c: string) => list.push({ type: 'color', value: c }));
+      }
+      if (Array.isArray(p.variants.sizes)) {
+        p.variants.sizes.forEach((s: string) => list.push({ type: 'size', value: s }));
+      }
+      if (p.variants.fabric) {
+        list.push({ type: 'fabric', value: p.variants.fabric });
+      }
+    }
+
+    return list;
+  };
+
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -307,26 +430,26 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
   return (
     <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
       
-      {/* 1. Header with Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-[#e2eae6] shadow-xs">
+      {/* 1. Header with Status & Stats */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4.5 rounded-2xl border border-[#e2eae6] shadow-[0_2px_12px_rgba(11,59,44,0.02)]">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#e4efe9] text-[#0b3b2c] text-[9.5px] font-bold uppercase tracking-wider mb-1 border border-[#dce6e1]">
-            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Live Store Inventory
+            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Product Vault
           </div>
           <h1 className="text-xl font-serif font-bold text-[#0b3b2c] leading-none">
-            Product Catalog & Dynamic Variants Vault
+            Product Catalog & Dynamic Variants Matrix
           </h1>
-          <p className="text-[11px] text-[#4d6960] mt-1">
-            Dynamic attributes mapped automatically from your Masters module.
+          <p className="text-[11px] text-[#4d6960] mt-1 font-medium">
+            Manage colours, sizes, fabrics, pricing and live customer inventory.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={loadAllData}
-            className="p-2 rounded-xl border border-[#dce6e1] text-[#0b3b2c] hover:bg-[#f0f4f2] transition-colors"
-            title="Refresh Catalog"
+            className="p-2 rounded-xl border border-[#dce6e1] text-[#0b3b2c] hover:bg-[#f0f4f2] transition-colors cursor-pointer"
+            title="Refresh Catalog Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -338,34 +461,34 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 resetForm();
                 setIsModalOpen(true);
               }}
-              className="px-4 py-2 rounded-full bg-[#0b3b2c] hover:bg-[#06231a] text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-[#0b3b2c]/20 cursor-pointer active:scale-95 transition-all"
+              className="px-4.5 py-2.5 rounded-full bg-[#0b3b2c] hover:bg-[#06231a] text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-[#0b3b2c]/20 cursor-pointer active:scale-95 transition-all"
             >
               <Plus className="w-4 h-4 text-[#e5c07b]" />
-              <span>Create Product</span>
+              <span>+ Create Product</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* 2. Filters & Search Bar */}
-      <div className="bg-white p-3 rounded-2xl border border-[#e2eae6] shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* 2. Filter & Quick Search Bar */}
+      <div className="bg-white p-3.5 rounded-2xl border border-[#e2eae6] shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative w-full sm:w-96">
+          <Search className="w-4 h-4 text-[#809c93] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by Product Name or ID..."
+            placeholder="Search by Product Name, Code (e.g. KF0019) or Category..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-[#dce6e1] text-xs font-medium text-[#0c2b22] bg-[#f8faf9] outline-none focus:border-[#0b3b2c] focus:bg-white transition-colors"
+            className="w-full pl-9.5 pr-3.5 py-2 rounded-xl border border-[#dce6e1] text-xs font-medium text-[#0c2b22] bg-[#f8faf9] outline-none focus:border-[#0b3b2c] focus:bg-white transition-all placeholder:text-neutral-400"
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-[11px] text-neutral-500 font-semibold">Category:</span>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <span className="text-[11px] text-[#4d6960] font-bold">Category:</span>
           <select
             value={selectedCategoryFilter}
             onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-xl border border-[#dce6e1] text-xs font-bold text-[#0b3b2c] bg-[#f8faf9] outline-none cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl border border-[#dce6e1] text-xs font-bold text-[#0b3b2c] bg-[#f8faf9] outline-none cursor-pointer focus:border-[#0b3b2c]"
           >
             <option value="all">All Categories ({products.length})</option>
             {categories.map((c) => (
@@ -377,91 +500,143 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
         </div>
       </div>
 
-      {/* 3. Products Grid / Table */}
+      {/* 3. Product Catalog Table with Enhanced Variants Display */}
       <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-sans">
             <thead className="bg-[#fbfcfc] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
               <tr>
-                <th className="py-3 px-4">Product</th>
-                <th className="py-3 px-4">Category / Sub-Category</th>
-                <th className="py-3 px-4">Variants Configured</th>
-                <th className="py-3 px-4">Selling Price</th>
-                <th className="py-3 px-4">Stock Status</th>
-                <th className="py-3 px-4">Store Visibility</th>
-                <th className="py-3 px-4 text-right">Actions</th>
+                <th className="py-3.5 px-4 w-[340px]">Product Description</th>
+                <th className="py-3.5 px-4">Category / Group</th>
+                <th className="py-3.5 px-4">Configured Variants</th>
+                <th className="py-3.5 px-4">Selling Price</th>
+                <th className="py-3.5 px-4">Stock Vault</th>
+                <th className="py-3.5 px-4">Visibility</th>
+                <th className="py-3.5 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#edf2ef]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-neutral-400 font-medium">
-                    Loading Product Vault...
+                  <td colSpan={7} className="py-14 text-center text-neutral-400 font-medium">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#0b3b2c]" />
+                    <span>Loading Product Matrix...</span>
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-neutral-400 font-medium">
-                    No products found. Click "+ Create Product" to add your first item.
+                  <td colSpan={7} className="py-14 text-center text-neutral-400 font-medium">
+                    <Boxes className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
+                    <span>No products found matching criteria.</span>
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((p) => {
-                  const firstImg = Array.isArray(p.images) && p.images[0] ? p.images[0] : null;
+                  const firstImg = extractFirstImage(p.images);
                   const isLowStock = Number(p.stock_quantity) <= Number(p.low_stock_threshold || 3);
+                  const variants = getVariantsDisplay(p);
 
                   return (
                     <tr key={p.id} className="hover:bg-[#f8faf9] transition-colors group">
-                      <td className="py-3 px-4">
+                      
+                      {/* Product details & thumbnail */}
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           {firstImg ? (
                             <img
                               src={firstImg}
                               alt={p.name}
-                              className="w-10 h-12 object-cover object-top rounded-lg border border-[#e2eae6] shrink-0 bg-white"
+                              onError={(e) => {
+                                // Fallback on broken image link
+                                (e.target as HTMLImageElement).style.display = 'none';
+                                (e.target as HTMLImageElement).nextElementSibling?.removeAttribute('style');
+                              }}
+                              className="w-11 h-13 object-cover object-top rounded-xl border border-[#dce6e1] shrink-0 bg-neutral-50 shadow-2xs"
                             />
-                          ) : (
-                            <div className="w-10 h-12 rounded-lg bg-[#f0f4f2] text-[#0b3b2c] flex items-center justify-center shrink-0">
-                              <Package className="w-5 h-5" />
-                            </div>
-                          )}
-                          <div className="min-w-0">
-                            <h4 className="font-bold text-xs text-[#0c2b22] group-hover:text-[#ff4d6d] truncate leading-tight">
+                          ) : null}
+
+                          <div
+                            style={{ display: firstImg ? 'none' : 'flex' }}
+                            className="w-11 h-13 rounded-xl bg-gradient-to-br from-[#0b3b2c]/10 to-[#e5c07b]/20 text-[#0b3b2c] flex items-center justify-center shrink-0 border border-[#dce6e1]"
+                          >
+                            <Package className="w-5 h-5 text-[#0b3b2c]/70" />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-bold text-xs text-[#0c2b22] group-hover:text-[#ff4d6d] line-clamp-1 leading-snug">
                               {p.name}
                             </h4>
-                            <span className="text-[10px] font-mono text-neutral-400 block mt-0.5">
-                              {p.id}
-                            </span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-mono font-bold text-[#809c93]">
+                                {p.id}
+                              </span>
+                              {p.brand && (
+                                <span className="text-[9.5px] font-semibold text-neutral-400">
+                                  • {p.brand}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
 
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-[#0b3b2c] text-xs block">{p.category}</span>
-                        <span className="text-[10.5px] text-neutral-500">{p.sub_category || 'General'}</span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {p.colour && (
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-100">
-                              {p.colour}
-                            </span>
-                          )}
-                          {p.size && (
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
-                              {p.size}
-                            </span>
-                          )}
-                          {p.fabric && (
-                            <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-100">
-                              {p.fabric}
-                            </span>
-                          )}
+                      {/* Category & Subcategory */}
+                      <td className="py-3.5 px-4">
+                        <div className="font-bold text-[#0b3b2c] text-xs">{p.category || 'Jewellery'}</div>
+                        <div className="text-[10px] text-neutral-400 font-medium mt-0.5">
+                          {p.sub_category || 'General Collection'}
                         </div>
                       </td>
 
-                      <td className="py-3 px-4">
+                      {/* Variants Display with Smart Badges */}
+                      <td className="py-3.5 px-4">
+                        {variants.length === 0 ? (
+                          <span className="text-[11px] text-neutral-400 italic">Standard Single SKU</span>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
+                            {variants.map((v, i) => {
+                              if (v.type === 'color') {
+                                const hex = getColorHex(v.value);
+                                return (
+                                  <span
+                                    key={i}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-[#dce6e1] text-[10px] font-bold text-[#0c2b22] shadow-2xs"
+                                  >
+                                    <span
+                                      className="w-2.5 h-2.5 rounded-full border border-black/15 shrink-0"
+                                      style={{ backgroundColor: hex }}
+                                    />
+                                    <span className="capitalize">{v.value}</span>
+                                  </span>
+                                );
+                              }
+
+                              if (v.type === 'size') {
+                                return (
+                                  <span
+                                    key={i}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#f0f4f2] text-[#0b3b2c] text-[10px] font-mono font-extrabold border border-[#dce6e1]"
+                                  >
+                                    {v.value}
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-100"
+                                >
+                                  {v.value}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Selling Price & MRP */}
+                      <td className="py-3.5 px-4">
                         <div className="font-bold text-xs text-[#0b3b2c]">
                           ₹{Number(p.selling_price).toLocaleString('en-IN')}
                         </div>
@@ -472,32 +647,34 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                         )}
                       </td>
 
-                      <td className="py-3 px-4">
-                        <div className="inline-flex items-center gap-1.5">
+                      {/* Stock Quantity Status */}
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-1.5">
                           <span
                             className={`font-bold text-xs ${
                               Number(p.stock_quantity) === 0
-                                ? 'text-rose-600'
+                                ? 'text-rose-600 font-extrabold'
                                 : isLowStock
-                                ? 'text-amber-600'
+                                ? 'text-amber-600 font-bold'
                                 : 'text-[#0b3b2c]'
                             }`}
                           >
-                            {p.stock_quantity} {p.unit || 'pcs'}
+                            {p.stock_quantity} {p.unit || 'Piece'}
                           </span>
                           {isLowStock && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800">
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 uppercase tracking-tight">
                               Low
                             </span>
                           )}
                         </div>
                       </td>
 
-                      <td className="py-3 px-4">
+                      {/* Store Visibility Toggle */}
+                      <td className="py-3.5 px-4">
                         <button
                           type="button"
                           onClick={() => handleToggleActive(p.id, p.active)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
                             p.active
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : 'bg-neutral-100 text-neutral-500 border border-neutral-200'
@@ -508,7 +685,8 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                         </button>
                       </td>
 
-                      <td className="py-3 px-4 text-right">
+                      {/* Action Menu */}
+                      <td className="py-3.5 px-4 text-right">
                         {canDelete && (
                           <button
                             type="button"
@@ -529,45 +707,57 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
         </div>
       </div>
 
-      {/* 4. MODAL: DYNAMIC PRODUCT CREATOR */}
+      {/* ========================================================================= */}
+      {/* 4. MODAL: DYNAMIC PRODUCT CREATOR WITH CATEGORIZED VARIANTS */}
+      {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs overflow-y-auto animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#dce6e1] my-8 overflow-hidden flex flex-col font-sans">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+          <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#dce6e1] my-6 overflow-hidden flex flex-col font-sans">
             
-            <div className="px-6 py-4 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
+            {/* Header */}
+            <div className="px-5 sm:px-6 py-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
               <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-bold text-xs">
+                <div className="w-8 h-8 rounded-xl bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-serif font-black text-xs">
                   KF
                 </div>
-                <h3 className="font-serif font-bold text-sm text-[#0b3b2c]">
-                  Create New Product & Dynamic Variant Matrix
-                </h3>
+                <div>
+                  <h3 className="font-serif font-bold text-sm text-[#0b3b2c]">
+                    Create New Product & Dynamic Variant Matrix
+                  </h3>
+                  <span className="text-[10px] text-neutral-400 block -mt-0.5">
+                    Link with inventory and dynamic masters
+                  </span>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-full text-neutral-400 hover:text-neutral-700 cursor-pointer"
+                className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateProduct} className="p-6 space-y-4 text-xs overflow-y-auto max-h-[80vh]">
+            {/* Scrollable Form */}
+            <form onSubmit={handleCreateProduct} className="p-5 sm:p-6 space-y-4.5 text-xs overflow-y-auto max-h-[78vh]">
               
+              {/* 1. Basic Information */}
               <div className="space-y-3">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
-                  1. Basic Information
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93]">
+                    1. Basic Product Information
+                  </span>
+                </div>
 
                 <div>
                   <label className="font-bold text-neutral-700 block mb-1">Product Title / Name *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Royal Crimson Kanchipuram Pure Silk Saree"
+                    placeholder="e.g. Temple Design Gold-Plated Bangles with Ruby"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none focus:border-[#0b3b2c] focus:bg-white"
+                    className="w-full px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none focus:border-[#0b3b2c] focus:bg-white transition-colors"
                   />
                 </div>
 
@@ -581,7 +771,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                         setCategory(e.target.value);
                         setSubCategory('');
                       }}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none"
+                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0c2b22] outline-none cursor-pointer"
                     >
                       <option value="">-- Select Category --</option>
                       {categories.map((c) => (
@@ -597,7 +787,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     <select
                       value={subCategory}
                       onChange={(e) => setSubCategory(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none disabled:opacity-50"
+                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0c2b22] outline-none cursor-pointer disabled:opacity-50"
                       disabled={!category}
                     >
                       <option value="">-- Select Sub-Category --</option>
@@ -611,77 +801,146 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              <div className="space-y-3 pt-2 border-t border-[#edf2ef]">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
-                  2. Dynamic Variants (From Masters)
-                </span>
+              {/* 2. Dynamic Variants (Colours & Smart Categorized Sizes) */}
+              <div className="space-y-3.5 pt-3 border-t border-[#edf2ef]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93]">
+                    2. Dynamic Variants Matrix
+                  </span>
+                  <span className="text-[10.5px] text-[#0b3b2c] font-bold">
+                    {selectedColors.length} Colors • {selectedSizes.length} Sizes Selected
+                  </span>
+                </div>
 
-                <div>
-                  <label className="font-bold text-neutral-700 block mb-1.5 flex items-center gap-1.5">
-                    <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
-                    <span>Select Available Colours:</span>
+                {/* Colours Palettes with Visual Swatch */}
+                <div className="bg-[#f8faf9] p-3.5 rounded-2xl border border-[#edf2ef] space-y-2">
+                  <label className="font-bold text-neutral-700 text-xs flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
+                      <span>Colours Palette ({colours.length})</span>
+                    </span>
+                    {selectedColors.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedColors([])}
+                        className="text-[10px] text-rose-600 hover:underline cursor-pointer font-bold"
+                      >
+                        Clear Selected
+                      </button>
+                    )}
                   </label>
-                  <div className="flex flex-wrap gap-1.5">
+
+                  <div className="flex flex-wrap gap-1.5 pt-1 max-h-32 overflow-y-auto">
                     {colours.map((c) => {
                       const isSelected = selectedColors.includes(c.name);
+                      const hex = getColorHex(c.name);
                       return (
                         <button
                           key={c.id}
                           type="button"
                           onClick={() => toggleColor(c.name)}
-                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          className={`px-2.5 py-1.2 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border ${
                             isSelected
-                              ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-2xs'
-                              : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-[#f8faf9]'
+                              ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs scale-102'
+                              : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-neutral-100'
                           }`}
                         >
-                          {isSelected && <CheckCircle2 className="w-3 h-3 text-[#e5c07b]" />}
-                          <span>{c.name}</span>
+                          <span
+                            className="w-3 h-3 rounded-full border border-black/20 shrink-0"
+                            style={{ backgroundColor: hex }}
+                          />
+                          <span className="capitalize">{c.name}</span>
+                          {isSelected && <Check className="w-3 h-3 text-[#e5c07b]" />}
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                <div>
-                  <label className="font-bold text-neutral-700 block mb-1.5 flex items-center gap-1.5">
-                    <Ruler className="w-3.5 h-3.5 text-blue-500" />
-                    <span>Select Available Sizes:</span>
-                  </label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {sizes.map((s) => {
+                {/* Smart Categorized Sizes (Bangles vs Apparel vs Cups) */}
+                <div className="bg-[#f8faf9] p-3.5 rounded-2xl border border-[#edf2ef] space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="font-bold text-neutral-700 text-xs flex items-center gap-1.5">
+                      <Ruler className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Sizes Group</span>
+                    </label>
+
+                    {/* Sub-Filter Tabs for Sizes */}
+                    <div className="flex items-center gap-1 p-0.5 bg-white rounded-lg border border-[#dce6e1]">
+                      <button
+                        type="button"
+                        onClick={() => setSizeFilterTab('all')}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          sizeFilterTab === 'all' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
+                        }`}
+                      >
+                        All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSizeFilterTab('bangles')}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          sizeFilterTab === 'bangles' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
+                        }`}
+                      >
+                        Bangles ({categorizedSizes.bangles.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSizeFilterTab('apparel')}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          sizeFilterTab === 'apparel' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
+                        }`}
+                      >
+                        Clothing ({categorizedSizes.apparel.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSizeFilterTab('cups')}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          sizeFilterTab === 'cups' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
+                        }`}
+                      >
+                        Lingerie
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1 max-h-32 overflow-y-auto">
+                    {displayedSizes.map((s) => {
                       const isSelected = selectedSizes.includes(s.name);
                       return (
                         <button
                           key={s.id}
                           type="button"
                           onClick={() => toggleSize(s.name)}
-                          className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
+                          className={`min-w-[42px] px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1 border ${
                             isSelected
-                              ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-2xs'
-                              : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-[#f8faf9]'
+                              ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs'
+                              : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-neutral-100'
                           }`}
                         >
-                          {isSelected && <CheckCircle2 className="w-3 h-3 text-[#e5c07b]" />}
                           <span>{s.name}</span>
+                          {isSelected && <Check className="w-2.5 h-2.5 text-[#e5c07b]" />}
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
+                {/* Fabric & Unit of Measurement */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="font-bold text-neutral-700 block mb-1 flex items-center gap-1">
                       <Scissors className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Fabric Type</span>
+                      <span>Fabric Specification</span>
                     </label>
                     <select
                       value={fabric}
                       onChange={(e) => setFabric(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none"
+                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none cursor-pointer"
                     >
-                      <option value="">-- Choose Fabric --</option>
+                      <option value="">-- Choose Fabric (Optional) --</option>
                       {fabrics.map((f) => (
                         <option key={f.id} value={f.name}>
                           {f.name}
@@ -698,7 +957,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     <select
                       value={unit}
                       onChange={(e) => setUnit(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none"
+                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none cursor-pointer"
                     >
                       {units.map((u) => (
                         <option key={u.id} value={u.name}>
@@ -710,7 +969,8 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              <div className="space-y-3 pt-2 border-t border-[#edf2ef]">
+              {/* 3. Pricing & Stock Inventory */}
+              <div className="space-y-3 pt-3 border-t border-[#edf2ef]">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
                   3. Pricing & Stock Inventory
                 </span>
@@ -721,7 +981,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     <input
                       type="number"
                       required
-                      placeholder="e.g. 2499"
+                      placeholder="e.g. 600"
                       value={sellingPrice}
                       onChange={(e) => setSellingPrice(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-bold text-[#0b3b2c] outline-none"
@@ -732,7 +992,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     <label className="font-bold text-neutral-700 block mb-1">MRP Price (₹)</label>
                     <input
                       type="number"
-                      placeholder="e.g. 4999"
+                      placeholder="e.g. 899"
                       value={mrp}
                       onChange={(e) => setMrp(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-medium outline-none"
@@ -743,7 +1003,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                     <label className="font-bold text-neutral-700 block mb-1">Cost Price (₹)</label>
                     <input
                       type="number"
-                      placeholder="e.g. 1500"
+                      placeholder="e.g. 350"
                       value={costPrice}
                       onChange={(e) => setCostPrice(e.target.value === '' ? '' : Number(e.target.value))}
                       className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
@@ -800,7 +1060,8 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 </div>
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-[#edf2ef]">
+              {/* 4. Product Images Array */}
+              <div className="space-y-2 pt-3 border-t border-[#edf2ef]">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
                   4. Product Images
                 </span>
@@ -808,7 +1069,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 <div className="flex gap-2">
                   <input
                     type="url"
-                    placeholder="Enter Image URL (e.g. https://.../saree.jpg)"
+                    placeholder="Paste direct Image URL (e.g. https://.../bangles.jpg)"
                     value={imageInput}
                     onChange={(e) => setImageInput(e.target.value)}
                     className="flex-1 px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
@@ -816,7 +1077,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                   <button
                     type="button"
                     onClick={handleAddImage}
-                    className="px-3.5 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold cursor-pointer"
                   >
                     + Add URL
                   </button>
@@ -825,7 +1086,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 {imagesList.length > 0 && (
                   <div className="flex flex-wrap gap-2 pt-1">
                     {imagesList.map((img, idx) => (
-                      <div key={idx} className="relative group w-14 h-16 rounded-lg overflow-hidden border border-[#dce6e1]">
+                      <div key={idx} className="relative group w-14 h-16 rounded-xl overflow-hidden border border-[#dce6e1]">
                         <img src={img} alt="Product" className="w-full h-full object-cover" />
                         <button
                           type="button"
@@ -840,22 +1101,24 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 )}
               </div>
 
+              {/* 5. Description */}
               <div className="pt-2 border-t border-[#edf2ef]">
                 <label className="font-bold text-neutral-700 block mb-1">Product Description / Highlights</label>
                 <textarea
-                  rows={3}
-                  placeholder="Describe the weave, borders, zari quality and care instructions..."
+                  rows={2}
+                  placeholder="Details regarding stones, base metal, polish and maintenance..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs outline-none"
                 />
               </div>
 
+              {/* Actions */}
               <div className="flex justify-end gap-2.5 pt-3 border-t border-[#edf2ef]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-full border border-[#dce6e1] text-neutral-600 hover:bg-[#f0f4f2] font-semibold cursor-pointer"
+                  className="px-4.5 py-2 rounded-full border border-[#dce6e1] text-neutral-600 hover:bg-[#f0f4f2] font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
