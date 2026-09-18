@@ -14,16 +14,14 @@ import {
   XCircle,
   Trash2,
   Edit2,
-  Eye,
-  AlertTriangle,
   X,
   Sparkles,
   RefreshCw,
   Scale,
   Check,
-  ChevronDown,
+  Zap,
   Boxes,
-  HelpCircle
+  Eye
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -63,42 +61,18 @@ interface ProductRecord {
   created_at?: string;
 }
 
+interface VariantRowItem {
+  id: string;
+  colour: string;
+  size: string;
+  selling_price: number;
+  mrp: number;
+  stock: number;
+}
+
 interface AdminProductsProps {
   currentUser: AdminStaffUser | null;
 }
-
-// Visual Color Swatch mapping for clean UI display
-const COLOR_HEX_MAP: Record<string, string> = {
-  'black': '#171717',
-  'white': '#ffffff',
-  'red': '#dc2626',
-  'baby pink': '#fbcfe8',
-  'pink': '#ec4899',
-  'rani pink': '#db2777',
-  'maroon': '#831843',
-  'beige': '#f5f5dc',
-  'dark green': '#14532d',
-  'green': '#16a34a',
-  'grey': '#737373',
-  'mustard yellow': '#eab308',
-  'musturd yellow': '#eab308',
-  'yellow': '#facc15',
-  'navy blue': '#1e3a8a',
-  'peach': '#ffedd5',
-  'sky blue': '#38bdf8',
-  'blue': '#2563eb',
-  'turquoise': '#06b6d4',
-  'violet': '#7c3aed',
-  'purple': '#9333ea',
-  'orange': '#ea580c',
-  'gold': '#d97706',
-  'silver': '#94a3b8'
-};
-
-const getColorHex = (colorName: string): string => {
-  const clean = colorName.trim().toLowerCase();
-  return COLOR_HEX_MAP[clean] || '#0b3b2c';
-};
 
 export default function AdminProducts({ currentUser }: AdminProductsProps) {
   const [loading, setLoading] = useState(true);
@@ -106,7 +80,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
 
-  // Masters Data for Dynamic Dropdowns
+  // Masters
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
   const [colours, setColours] = useState<ColourRecord[]>([]);
@@ -114,59 +88,56 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
   const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
 
-  // Modal & Form States
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [sizeFilterTab, setSizeFilterTab] = useState<'all' | 'bangles' | 'apparel' | 'cups'>('all');
 
   // Form Fields
-  const [name, setName] = useState('');
+  const [productCode, setProductCode] = useState('');
+  const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
   const [subCategory, setSubCategory] = useState('');
-  const [fabric, setFabric] = useState('');
-  const [unit, setUnit] = useState('Piece');
-  const [brand, setBrand] = useState('Kashvi');
-  const [mrp, setMrp] = useState<number | ''>('');
+  const [brand, setBrand] = useState('Kashvi Fashions');
   const [sellingPrice, setSellingPrice] = useState<number | ''>('');
-  const [costPrice, setCostPrice] = useState<number | ''>('');
-  const [gst, setGst] = useState<number | ''>(0);
-  const [weight, setWeight] = useState<number | ''>(500);
-  const [weightUnit, setWeightUnit] = useState('grams');
+  const [mrp, setMrp] = useState<number | ''>('');
+  const [unit, setUnit] = useState('Piece');
+  const [fabric, setFabric] = useState('');
   const [stockQuantity, setStockQuantity] = useState<number | ''>(10);
-  const [lowStockThreshold, setLowStockThreshold] = useState<number | ''>(3);
   const [description, setDescription] = useState('');
 
-  // Multi-variant Selection
-  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  // Multi-Select Selections
+  const [selectedColours, setSelectedColours] = useState<string[]>([]);
   const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [selectedFabrics, setSelectedFabrics] = useState<string[]>([]);
 
-  // Image URLs
-  const [imageInput, setImageInput] = useState('');
+  // Generated Variant Matrix Rows
+  const [variantRows, setVariantRows] = useState<VariantRowItem[]>([]);
+
+  // Image Upload/URL States
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const [imagesList, setImagesList] = useState<string[]>([]);
 
   const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const canDelete = currentUser?.role === 'admin';
 
-  // Load Products and Masters Data
-  const loadAllData = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
-      const { data: prodData, error } = await supabase
+      const { data: prodData } = await supabase
         .from('products')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (prodData) {
-        setProducts(prodData);
-      }
+      if (prodData) setProducts(prodData);
 
       const [catsRes, subCatsRes, colsRes, sizesRes, fabsRes, unitsRes] = await Promise.all([
-        supabase.from('categories').select('*').eq('active', true).order('name'),
-        supabase.from('sub_categories').select('*').eq('active', true).order('name'),
-        supabase.from('colours').select('*').eq('active', true).order('name'),
-        supabase.from('sizes').select('*').eq('active', true).order('name'),
+        supabase.from('categories').select('*').order('name'),
+        supabase.from('sub_categories').select('*').order('name'),
+        supabase.from('colours').select('*').order('name'),
+        supabase.from('sizes').select('*').order('name'),
         supabase.from('fabrics').select('*').order('name'),
-        supabase.from('units').select('*').eq('active', true).order('name')
+        supabase.from('units').select('*').order('name')
       ]);
 
       if (catsRes.data) setCategories(catsRes.data);
@@ -176,243 +147,200 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       if (fabsRes.data) setFabrics(fabsRes.data);
       if (unitsRes.data) setUnits(unitsRes.data);
     } catch (err) {
-      console.error('Error fetching catalog data:', err);
+      console.error('Error loading products master:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAllData();
+    loadData();
   }, []);
 
   const availableSubCategories = useMemo(() => {
-    if (!category) return [];
-    const parentCat = categories.find((c) => c.name === category);
-    if (!parentCat) return subCategories;
-    return subCategories.filter((s) => s.category_id === parentCat.id || s.category_name === category);
+    if (!category) return subCategories;
+    const parent = categories.find((c) => c.name === category);
+    if (!parent) return subCategories;
+    return subCategories.filter((s) => s.category_id === parent.id || s.category_name === category);
   }, [category, categories, subCategories]);
 
-  // Organize sizes by smart sub-types (Bangles: 2.2, 2.4 / Apparel: S, M, L / Lingerie: 32B)
-  const categorizedSizes = useMemo(() => {
-    const bangles: SizeRecord[] = [];
-    const apparel: SizeRecord[] = [];
-    const cups: SizeRecord[] = [];
-    const others: SizeRecord[] = [];
+  // Multi-select toggles
+  const toggleSelection = (item: string, list: string[], setList: (v: string[]) => void) => {
+    setList(list.includes(item) ? list.filter((x) => x !== item) : [...list, item]);
+  };
 
-    sizes.forEach((s) => {
-      const n = s.name.trim();
-      if (/^\d+(\.\d+)?$/.test(n) || n.includes('.')) {
-        bangles.push(s);
-      } else if (['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'Free Size'].includes(n.toUpperCase())) {
-        apparel.push(s);
-      } else if (/\d+[A-Za-z]/.test(n)) {
-        cups.push(s);
-      } else {
-        others.push(s);
-      }
+  // Generate Variants Function (Reference Screenshot Logic)
+  const handleGenerateVariants = () => {
+    if (selectedColours.length === 0 && selectedSizes.length === 0) {
+      alert('Select at least one Colour or Size above to generate variant rows.');
+      return;
+    }
+
+    const defaultSP = Number(sellingPrice) || 0;
+    const defaultMrp = Number(mrp) || defaultSP;
+    const defaultStock = 5;
+
+    const cols = selectedColours.length > 0 ? selectedColours : ['Standard'];
+    const szs = selectedSizes.length > 0 ? selectedSizes : ['Free Size'];
+
+    const newRows: VariantRowItem[] = [];
+
+    cols.forEach((c) => {
+      szs.forEach((s) => {
+        newRows.push({
+          id: `${c}_${s}`,
+          colour: c,
+          size: s,
+          selling_price: defaultSP,
+          mrp: defaultMrp,
+          stock: defaultStock
+        });
+      });
     });
 
-    return { bangles, apparel, cups, others };
-  }, [sizes]);
+    setVariantRows(newRows);
+  };
 
-  const displayedSizes = useMemo(() => {
-    if (sizeFilterTab === 'bangles') return categorizedSizes.bangles;
-    if (sizeFilterTab === 'apparel') return categorizedSizes.apparel;
-    if (sizeFilterTab === 'cups') return categorizedSizes.cups;
-    return sizes;
-  }, [sizeFilterTab, categorizedSizes, sizes]);
-
-  const toggleColor = (colName: string) => {
-    setSelectedColors((prev) =>
-      prev.includes(colName) ? prev.filter((c) => c !== colName) : [...prev, colName]
+  const handleUpdateVariantRow = (id: string, field: keyof VariantRowItem, val: any) => {
+    setVariantRows((prev) =>
+      prev.map((row) => (row.id === id ? { ...row, [field]: val } : row))
     );
-  };
-
-  const toggleSize = (szName: string) => {
-    setSelectedSizes((prev) =>
-      prev.includes(szName) ? prev.filter((s) => s !== szName) : [...prev, szName]
-    );
-  };
-
-  const handleAddImage = () => {
-    if (!imageInput.trim()) return;
-    setImagesList((prev) => [...prev, imageInput.trim()]);
-    setImageInput('');
-  };
-
-  const handleRemoveImage = (index: number) => {
-    setImagesList((prev) => prev.filter((_, i) => i !== index));
   };
 
   const resetForm = () => {
-    setName('');
+    setIsEditMode(false);
+    setProductCode(`KF${Math.floor(1000 + Math.random() * 9000)}`);
+    setProductName('');
     setCategory('');
     setSubCategory('');
-    setFabric('');
-    setUnit('Piece');
-    setBrand('Kashvi');
-    setMrp('');
+    setBrand('Kashvi Fashions');
     setSellingPrice('');
-    setCostPrice('');
-    setGst(0);
-    setWeight(500);
-    setWeightUnit('grams');
+    setMrp('');
+    setUnit('Piece');
+    setFabric('');
     setStockQuantity(10);
-    setLowStockThreshold(3);
     setDescription('');
-    setSelectedColors([]);
+    setSelectedColours([]);
     setSelectedSizes([]);
+    setSelectedFabrics([]);
+    setVariantRows([]);
     setImagesList([]);
-    setImageInput('');
-    setSizeFilterTab('all');
+    setImageUrlInput('');
   };
 
-  const handleCreateProduct = async (e: React.FormEvent) => {
+  // Open Edit Product Modal with Pre-filled Data
+  const handleOpenEditProduct = (prod: ProductRecord) => {
+    setIsEditMode(true);
+    setProductCode(prod.id);
+    setProductName(prod.name || '');
+    setCategory(prod.category || '');
+    setSubCategory(prod.sub_category || '');
+    setBrand(prod.brand || 'Kashvi Fashions');
+    setSellingPrice(prod.selling_price || '');
+    setMrp(prod.mrp || '');
+    setUnit(prod.unit || 'Piece');
+    setFabric(prod.fabric || '');
+    setStockQuantity(prod.stock_quantity ?? 10);
+    setDescription(prod.description || '');
+
+    // Parse colours & sizes
+    const colArr = prod.colour ? prod.colour.split(',').map((c) => c.trim()) : [];
+    const szArr = prod.size ? prod.size.split(',').map((s) => s.trim()) : [];
+    const fabArr = prod.fabric ? prod.fabric.split(',').map((f) => f.trim()) : [];
+
+    setSelectedColours(colArr);
+    setSelectedSizes(szArr);
+    setSelectedFabrics(fabArr);
+
+    // Parse images
+    if (Array.isArray(prod.images)) {
+      setImagesList(prod.images);
+    } else if (typeof prod.images === 'string') {
+      try {
+        const parsed = JSON.parse(prod.images);
+        setImagesList(Array.isArray(parsed) ? parsed : [prod.images]);
+      } catch {
+        setImagesList(prod.images ? [prod.images] : []);
+      }
+    } else {
+      setImagesList([]);
+    }
+
+    // Parse saved variants matrix breakdown
+    if (prod.variants && Array.isArray(prod.variants.matrix)) {
+      setVariantRows(prod.variants.matrix);
+    } else {
+      setVariantRows([]);
+    }
+
+    setIsModalOpen(true);
+  };
+
+  // Save or Update Product
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !category || sellingPrice === '') {
-      alert('Please fill in Product Name, Category, and Selling Price.');
+    if (!productName.trim() || !category || sellingPrice === '') {
+      alert('Product Name, Category mariyu Selling Price compulsory ga fill cheyandi.');
       return;
     }
 
     setSaving(true);
     try {
-      const productId = `KF${Math.floor(1000 + Math.random() * 9000)}`;
-
-      const newProductPayload = {
-        id: productId,
-        name: name.trim(),
+      const payload = {
+        id: productCode.trim(),
+        name: productName.trim(),
         category,
         sub_category: subCategory || null,
-        colour: selectedColors.join(', ') || null,
+        colour: selectedColours.join(', ') || null,
         size: selectedSizes.join(', ') || null,
-        fabric: fabric || null,
+        fabric: selectedFabrics.join(', ') || fabric || null,
         unit: unit || 'Piece',
-        brand: brand || 'Kashvi',
-        mrp: Number(mrp) || Number(sellingPrice),
+        brand: brand || 'Kashvi Fashions',
         selling_price: Number(sellingPrice),
-        cost_price: Number(costPrice) || 0,
-        gst: Number(gst) || 0,
-        weight: Number(weight) || 0,
-        weight_unit: weightUnit,
+        mrp: Number(mrp) || Number(sellingPrice),
         stock_quantity: Number(stockQuantity) || 0,
-        low_stock_threshold: Number(lowStockThreshold) || 3,
-        images: imagesList.length > 0 ? imagesList : ['https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&w=600&q=80'],
-        variants: {
-          colors: selectedColors,
-          sizes: selectedSizes,
-          fabric: fabric || null
-        },
+        images: imagesList,
         description: description.trim(),
-        active: true,
-        created_at: new Date().toISOString()
+        variants: {
+          colours: selectedColours,
+          sizes: selectedSizes,
+          fabrics: selectedFabrics,
+          matrix: variantRows
+        },
+        active: true
       };
 
-      const { data, error } = await supabase
-        .from('products')
-        .insert([newProductPayload])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setProducts((prev) => [data, ...prev]);
-        resetForm();
-        setIsModalOpen(false);
+      if (isEditMode) {
+        const { error } = await supabase.from('products').update(payload).eq('id', productCode);
+        if (error) throw error;
+        setProducts((prev) => prev.map((p) => (p.id === productCode ? { ...p, ...payload } : p)));
+      } else {
+        const { data, error } = await supabase.from('products').insert([payload]).select().single();
+        if (error) throw error;
+        if (data) setProducts((prev) => [data, ...prev]);
       }
+
+      setIsModalOpen(false);
+      resetForm();
     } catch (err: any) {
-      console.error('Error creating product:', err);
-      alert('Failed to create product: ' + err.message);
+      console.error('Save failed:', err);
+      alert('Product save cheyatamlo error: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleToggleActive = async (productId: string, currentActive: boolean) => {
-    if (!canEdit) return;
-    try {
-      const { error } = await supabase
-        .from('products')
-        .update({ active: !currentActive })
-        .eq('id', productId);
-
-      if (!error) {
-        setProducts((prev) =>
-          prev.map((p) => (p.id === productId ? { ...p, active: !currentActive } : p))
-        );
-      }
-    } catch (e) {
-      console.error('Failed to toggle status:', e);
-    }
-  };
-
-  const handleDeleteProduct = async (productId: string) => {
-    if (!canDelete) {
-      alert('Only Admin can delete products.');
-      return;
-    }
-    if (!confirm('Permanently delete this product from database?')) return;
+  const handleDeleteProduct = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canDelete) return;
+    if (!confirm(`Permanently delete ${id}?`)) return;
 
     try {
-      const { error } = await supabase.from('products').delete().eq('id', productId);
-      if (!error) {
-        setProducts((prev) => prev.filter((p) => p.id !== productId));
-      }
-    } catch (e) {
-      console.error('Failed to delete:', e);
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (!error) setProducts((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error('Delete error:', err);
     }
-  };
-
-  // Safe Image Extractor for Postgres text/jsonb array
-  const extractFirstImage = (imgData: any): string | null => {
-    if (!imgData) return null;
-    if (Array.isArray(imgData) && imgData.length > 0) return imgData[0];
-    if (typeof imgData === 'string') {
-      try {
-        const parsed = JSON.parse(imgData);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed[0];
-        if (imgData.startsWith('http')) return imgData;
-      } catch {
-        if (imgData.startsWith('http')) return imgData;
-      }
-    }
-    return null;
-  };
-
-  // Safe Variants Extractor for Table Display
-  const getVariantsDisplay = (p: ProductRecord) => {
-    const list: { type: 'color' | 'size' | 'fabric'; value: string }[] = [];
-
-    // Check direct columns
-    if (p.colour) {
-      p.colour.split(',').forEach((c) => {
-        if (c.trim()) list.push({ type: 'color', value: c.trim() });
-      });
-    }
-    if (p.size) {
-      p.size.split(',').forEach((s) => {
-        if (s.trim()) list.push({ type: 'size', value: s.trim() });
-      });
-    }
-    if (p.fabric) {
-      list.push({ type: 'fabric', value: p.fabric.trim() });
-    }
-
-    // Check JSON variants if empty
-    if (list.length === 0 && p.variants && typeof p.variants === 'object') {
-      if (Array.isArray(p.variants.colors)) {
-        p.variants.colors.forEach((c: string) => list.push({ type: 'color', value: c }));
-      }
-      if (Array.isArray(p.variants.sizes)) {
-        p.variants.sizes.forEach((s: string) => list.push({ type: 'size', value: s }));
-      }
-      if (p.variants.fabric) {
-        list.push({ type: 'fabric', value: p.variants.fabric });
-      }
-    }
-
-    return list;
   };
 
   const filteredProducts = products.filter((p) => {
@@ -421,35 +349,33 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    const matchesCategory =
-      selectedCategoryFilter === 'all' || p.category === selectedCategoryFilter;
-
-    return matchesSearch && matchesCategory;
+    const matchesCat = selectedCategoryFilter === 'all' || p.category === selectedCategoryFilter;
+    return matchesSearch && matchesCat;
   });
 
   return (
     <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
       
-      {/* 1. Header with Status & Stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4.5 rounded-2xl border border-[#e2eae6] shadow-[0_2px_12px_rgba(11,59,44,0.02)]">
+      {/* 1. Header Bar: Replaced Title with "Product Master" */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4.5 rounded-2xl border border-[#e2eae6] shadow-xs">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#e4efe9] text-[#0b3b2c] text-[9.5px] font-bold uppercase tracking-wider mb-1 border border-[#dce6e1]">
-            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Product Vault
+            <Sparkles className="w-2.5 h-2.5 text-[#c6933a]" /> Kashvi Master Catalog
           </div>
           <h1 className="text-xl font-serif font-bold text-[#0b3b2c] leading-none">
-            Product Catalog & Dynamic Variants Matrix
+            Product Master
           </h1>
           <p className="text-[11px] text-[#4d6960] mt-1 font-medium">
-            Manage colours, sizes, fabrics, pricing and live customer inventory.
+            Manage product descriptions, variants, pricing and real-time inventory matrix.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={loadAllData}
+            onClick={loadData}
             className="p-2 rounded-xl border border-[#dce6e1] text-[#0b3b2c] hover:bg-[#f0f4f2] transition-colors cursor-pointer"
-            title="Refresh Catalog Data"
+            title="Reload Data"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -470,16 +396,16 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
         </div>
       </div>
 
-      {/* 2. Filter & Quick Search Bar */}
+      {/* 2. Filter & Search Bar */}
       <div className="bg-white p-3.5 rounded-2xl border border-[#e2eae6] shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="relative w-full sm:w-96">
-          <Search className="w-4 h-4 text-[#809c93] absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#809c93] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search by Product Name, Code (e.g. KF0019) or Category..."
+            placeholder="Search by Product Name, Code (e.g. KF0004)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9.5 pr-3.5 py-2 rounded-xl border border-[#dce6e1] text-xs font-medium text-[#0c2b22] bg-[#f8faf9] outline-none focus:border-[#0b3b2c] focus:bg-white transition-all placeholder:text-neutral-400"
+            className="w-full pl-10 pr-3.5 py-2 rounded-xl border border-[#dce6e1] text-xs font-medium text-[#0c2b22] bg-[#f8faf9] outline-none focus:border-[#0b3b2c] focus:bg-white transition-all"
           />
         </div>
 
@@ -488,7 +414,7 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
           <select
             value={selectedCategoryFilter}
             onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-            className="px-3.5 py-1.5 rounded-xl border border-[#dce6e1] text-xs font-bold text-[#0b3b2c] bg-[#f8faf9] outline-none cursor-pointer focus:border-[#0b3b2c]"
+            className="px-3.5 py-2 rounded-xl border border-[#dce6e1] text-xs font-bold text-[#0b3b2c] bg-[#f8faf9] outline-none cursor-pointer"
           >
             <option value="all">All Categories ({products.length})</option>
             {categories.map((c) => (
@@ -500,13 +426,13 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
         </div>
       </div>
 
-      {/* 3. Product Catalog Table with Enhanced Variants Display */}
+      {/* 3. Product Master Table - Clickable Row for Edit */}
       <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs font-sans">
             <thead className="bg-[#fbfcfc] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
               <tr>
-                <th className="py-3.5 px-4 w-[340px]">Product Description</th>
+                <th className="py-3.5 px-4">Product Description</th>
                 <th className="py-3.5 px-4">Category / Group</th>
                 <th className="py-3.5 px-4">Configured Variants</th>
                 <th className="py-3.5 px-4">Selling Price</th>
@@ -518,125 +444,78 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
             <tbody className="divide-y divide-[#edf2ef]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-14 text-center text-neutral-400 font-medium">
-                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-[#0b3b2c]" />
-                    <span>Loading Product Matrix...</span>
+                  <td colSpan={7} className="py-12 text-center text-neutral-400 font-medium">
+                    Loading Product Master...
                   </td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-14 text-center text-neutral-400 font-medium">
-                    <Boxes className="w-8 h-8 mx-auto mb-2 text-neutral-300" />
-                    <span>No products found matching criteria.</span>
+                  <td colSpan={7} className="py-12 text-center text-neutral-400 font-medium">
+                    No products found.
                   </td>
                 </tr>
               ) : (
                 filteredProducts.map((p) => {
-                  const firstImg = extractFirstImage(p.images);
-                  const isLowStock = Number(p.stock_quantity) <= Number(p.low_stock_threshold || 3);
-                  const variants = getVariantsDisplay(p);
+                  const firstImg = Array.isArray(p.images) ? p.images[0] : null;
 
                   return (
-                    <tr key={p.id} className="hover:bg-[#f8faf9] transition-colors group">
-                      
-                      {/* Product details & thumbnail */}
-                      <td className="py-3.5 px-4">
+                    <tr
+                      key={p.id}
+                      onClick={() => handleOpenEditProduct(p)}
+                      className="hover:bg-[#f4f7f5] transition-colors cursor-pointer group"
+                      title="Click to Edit Product"
+                    >
+                      <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
                           {firstImg ? (
                             <img
                               src={firstImg}
                               alt={p.name}
+                              className="w-11 h-13 object-cover object-top rounded-xl border border-[#dce6e1] bg-white shrink-0 shadow-2xs"
                               onError={(e) => {
-                                // Fallback on broken image link
-                                (e.target as HTMLImageElement).style.display = 'none';
-                                (e.target as HTMLImageElement).nextElementSibling?.removeAttribute('style');
+                                (e.target as HTMLElement).style.display = 'none';
                               }}
-                              className="w-11 h-13 object-cover object-top rounded-xl border border-[#dce6e1] shrink-0 bg-neutral-50 shadow-2xs"
                             />
-                          ) : null}
-
-                          <div
-                            style={{ display: firstImg ? 'none' : 'flex' }}
-                            className="w-11 h-13 rounded-xl bg-gradient-to-br from-[#0b3b2c]/10 to-[#e5c07b]/20 text-[#0b3b2c] flex items-center justify-center shrink-0 border border-[#dce6e1]"
-                          >
-                            <Package className="w-5 h-5 text-[#0b3b2c]/70" />
-                          </div>
-
-                          <div className="min-w-0 flex-1">
-                            <h4 className="font-bold text-xs text-[#0c2b22] group-hover:text-[#ff4d6d] line-clamp-1 leading-snug">
+                          ) : (
+                            <div className="w-11 h-13 rounded-xl bg-[#f0f4f2] text-[#0b3b2c] flex items-center justify-center shrink-0 border border-[#dce6e1]">
+                              <Package className="w-5 h-5 text-[#0b3b2c]" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-xs text-[#0c2b22] group-hover:text-[#ff4d6d] line-clamp-1">
                               {p.name}
                             </h4>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] font-mono font-bold text-[#809c93]">
-                                {p.id}
-                              </span>
-                              {p.brand && (
-                                <span className="text-[9.5px] font-semibold text-neutral-400">
-                                  • {p.brand}
-                                </span>
-                              )}
-                            </div>
+                            <span className="text-[10px] font-mono text-neutral-400 block mt-0.5">
+                              {p.id} {p.brand ? `• ${p.brand}` : ''}
+                            </span>
                           </div>
                         </div>
                       </td>
 
-                      {/* Category & Subcategory */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-[#0b3b2c] text-xs">{p.category || 'Jewellery'}</div>
-                        <div className="text-[10px] text-neutral-400 font-medium mt-0.5">
-                          {p.sub_category || 'General Collection'}
+                      <td className="py-3 px-4">
+                        <span className="font-bold text-[#0b3b2c] text-xs block">{p.category}</span>
+                        <span className="text-[10px] text-neutral-500">{p.sub_category || 'General'}</span>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <div className="flex flex-wrap gap-1 max-w-xs">
+                          {p.colour && (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200">
+                              {p.colour}
+                            </span>
+                          )}
+                          {p.size && (
+                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-mono font-bold border border-blue-200">
+                              {p.size}
+                            </span>
+                          )}
+                          {!p.colour && !p.size && (
+                            <span className="text-neutral-400 italic text-[10px]">Standard Single SKU</span>
+                          )}
                         </div>
                       </td>
 
-                      {/* Variants Display with Smart Badges */}
-                      <td className="py-3.5 px-4">
-                        {variants.length === 0 ? (
-                          <span className="text-[11px] text-neutral-400 italic">Standard Single SKU</span>
-                        ) : (
-                          <div className="flex flex-wrap items-center gap-1.5 max-w-xs">
-                            {variants.map((v, i) => {
-                              if (v.type === 'color') {
-                                const hex = getColorHex(v.value);
-                                return (
-                                  <span
-                                    key={i}
-                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-[#dce6e1] text-[10px] font-bold text-[#0c2b22] shadow-2xs"
-                                  >
-                                    <span
-                                      className="w-2.5 h-2.5 rounded-full border border-black/15 shrink-0"
-                                      style={{ backgroundColor: hex }}
-                                    />
-                                    <span className="capitalize">{v.value}</span>
-                                  </span>
-                                );
-                              }
-
-                              if (v.type === 'size') {
-                                return (
-                                  <span
-                                    key={i}
-                                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#f0f4f2] text-[#0b3b2c] text-[10px] font-mono font-extrabold border border-[#dce6e1]"
-                                  >
-                                    {v.value}
-                                  </span>
-                                );
-                              }
-
-                              return (
-                                <span
-                                  key={i}
-                                  className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 text-[10px] font-semibold border border-emerald-100"
-                                >
-                                  {v.value}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Selling Price & MRP */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4">
                         <div className="font-bold text-xs text-[#0b3b2c]">
                           ₹{Number(p.selling_price).toLocaleString('en-IN')}
                         </div>
@@ -647,56 +526,49 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                         )}
                       </td>
 
-                      {/* Stock Quantity Status */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className={`font-bold text-xs ${
-                              Number(p.stock_quantity) === 0
-                                ? 'text-rose-600 font-extrabold'
-                                : isLowStock
-                                ? 'text-amber-600 font-bold'
-                                : 'text-[#0b3b2c]'
-                            }`}
-                          >
-                            {p.stock_quantity} {p.unit || 'Piece'}
-                          </span>
-                          {isLowStock && (
-                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-100 text-amber-800 uppercase tracking-tight">
-                              Low
-                            </span>
-                          )}
-                        </div>
+                      <td className="py-3 px-4">
+                        <span className="font-bold text-xs text-[#0b3b2c]">
+                          {p.stock_quantity} {p.unit || 'Piece'}
+                        </span>
                       </td>
 
-                      {/* Store Visibility Toggle */}
-                      <td className="py-3.5 px-4">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleActive(p.id, p.active)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all cursor-pointer ${
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                             p.active
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-neutral-100 text-neutral-500 border border-neutral-200'
+                              : 'bg-neutral-100 text-neutral-500'
                           }`}
                         >
-                          {p.active ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                          <CheckCircle2 className="w-3 h-3" />
                           <span>{p.active ? 'Active' : 'Hidden'}</span>
-                        </button>
+                        </span>
                       </td>
 
-                      {/* Action Menu */}
-                      <td className="py-3.5 px-4 text-right">
-                        {canDelete && (
+                      <td className="py-3 px-4 text-right">
+                        <div className="inline-flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => handleDeleteProduct(p.id)}
-                            className="p-1 rounded-md text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            title="Delete Product"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditProduct(p);
+                            }}
+                            className="p-1.5 rounded-md hover:bg-neutral-200 text-neutral-500 hover:text-[#0b3b2c]"
+                            title="Edit Product"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                        )}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteProduct(p.id, e)}
+                              className="p-1.5 rounded-md hover:bg-rose-100 text-neutral-400 hover:text-rose-600"
+                              title="Delete Product"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -708,27 +580,28 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
       </div>
 
       {/* ========================================================================= */}
-      {/* 4. MODAL: DYNAMIC PRODUCT CREATOR WITH CATEGORIZED VARIANTS */}
+      {/* 4. MODAL: PRODUCT MASTER REFERENCE STYLE FORM */}
       {/* ========================================================================= */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
-          <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-[#dce6e1] my-6 overflow-hidden flex flex-col font-sans">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-150">
+          <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-[#dce6e1] my-4 overflow-hidden flex flex-col font-sans max-h-[92vh]">
             
-            {/* Header */}
-            <div className="px-5 sm:px-6 py-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
-              <div className="flex items-center gap-2">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
+              <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-serif font-black text-xs">
                   KF
                 </div>
                 <div>
                   <h3 className="font-serif font-bold text-sm text-[#0b3b2c]">
-                    Create New Product & Dynamic Variant Matrix
+                    {isEditMode ? 'Edit Product Master' : 'Add New Product'}
                   </h3>
                   <span className="text-[10px] text-neutral-400 block -mt-0.5">
-                    Link with inventory and dynamic masters
+                    Internal Store OS • Dynamic Variants & Inventory Configuration
                   </span>
                 </div>
               </div>
+
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
@@ -738,348 +611,318 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
               </button>
             </div>
 
-            {/* Scrollable Form */}
-            <form onSubmit={handleCreateProduct} className="p-5 sm:p-6 space-y-4.5 text-xs overflow-y-auto max-h-[78vh]">
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSaveProduct} className="p-6 space-y-4 text-xs overflow-y-auto flex-1">
               
-              {/* 1. Basic Information */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93]">
-                    1. Basic Product Information
-                  </span>
-                </div>
-
-                <div>
-                  <label className="font-bold text-neutral-700 block mb-1">Product Title / Name *</label>
+              {/* Row 1: Product Code & Product Name */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="md:col-span-4">
+                  <label className="font-bold text-neutral-700 block mb-1">PRODUCT CODE</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Temple Design Gold-Plated Bangles with Ruby"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none focus:border-[#0b3b2c] focus:bg-white transition-colors"
+                    value={productCode}
+                    onChange={(e) => setProductCode(e.target.value)}
+                    disabled={isEditMode}
+                    className="w-full px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-mono font-bold text-[#0b3b2c] outline-none disabled:opacity-60"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Category *</label>
-                    <select
-                      required
-                      value={category}
-                      onChange={(e) => {
-                        setCategory(e.target.value);
-                        setSubCategory('');
-                      }}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0c2b22] outline-none cursor-pointer"
-                    >
-                      <option value="">-- Select Category --</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={c.name}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Sub-Category</label>
-                    <select
-                      value={subCategory}
-                      onChange={(e) => setSubCategory(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0c2b22] outline-none cursor-pointer disabled:opacity-50"
-                      disabled={!category}
-                    >
-                      <option value="">-- Select Sub-Category --</option>
-                      {availableSubCategories.map((s) => (
-                        <option key={s.id} value={s.name}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="md:col-span-8">
+                  <label className="font-bold text-neutral-700 block mb-1">PRODUCT NAME *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Pure Banarasi Kanjeevaram Saree / Temple Bangles"
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none focus:border-[#0b3b2c] focus:bg-white"
+                  />
                 </div>
               </div>
 
-              {/* 2. Dynamic Variants (Colours & Smart Categorized Sizes) */}
-              <div className="space-y-3.5 pt-3 border-t border-[#edf2ef]">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93]">
-                    2. Dynamic Variants Matrix
-                  </span>
-                  <span className="text-[10.5px] text-[#0b3b2c] font-bold">
-                    {selectedColors.length} Colors • {selectedSizes.length} Sizes Selected
-                  </span>
+              {/* Row 2: Category, Sub-Category, Brand */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold text-neutral-700 block mb-1">CATEGORY *</label>
+                  <select
+                    required
+                    value={category}
+                    onChange={(e) => {
+                      setCategory(e.target.value);
+                      setSubCategory('');
+                    }}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0c2b22] outline-none cursor-pointer"
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name}>{c.name}</option>
+                    ))}
+                  </select>
                 </div>
 
-                {/* Colours Palettes with Visual Swatch */}
-                <div className="bg-[#f8faf9] p-3.5 rounded-2xl border border-[#edf2ef] space-y-2">
-                  <label className="font-bold text-neutral-700 text-xs flex items-center justify-between">
-                    <span className="flex items-center gap-1.5">
-                      <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
-                      <span>Colours Palette ({colours.length})</span>
+                <div>
+                  <label className="font-bold text-neutral-700 block mb-1">SUB-CATEGORY</label>
+                  <select
+                    value={subCategory}
+                    onChange={(e) => setSubCategory(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0c2b22] outline-none cursor-pointer"
+                  >
+                    <option value="">Select Sub-Category</option>
+                    {availableSubCategories.map((s) => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold text-neutral-700 block mb-1">BRAND</label>
+                  <input
+                    type="text"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Row 3: Selling Price, MRP, Unit */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold text-neutral-700 block mb-1">SELLING PRICE (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    placeholder="2499"
+                    value={sellingPrice}
+                    onChange={(e) => setSellingPrice(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0b3b2c] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-neutral-700 block mb-1">MRP (₹)</label>
+                  <input
+                    type="number"
+                    placeholder="4999"
+                    value={mrp}
+                    onChange={(e) => setMrp(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-medium outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-bold text-neutral-700 block mb-1">UNIT</label>
+                  <select
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold text-[#0c2b22] outline-none cursor-pointer"
+                  >
+                    {units.map((u) => (
+                      <option key={u.id} value={u.name}>
+                        {u.name} {u.short_name ? `(${u.short_name})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 4: Multi-Select Masters: Colours, Sizes, Fabrics */}
+              <div className="space-y-3 pt-2 border-t border-[#edf2ef]">
+                <span className="text-[10.5px] font-bold uppercase tracking-wider text-[#0b3b2c] block">
+                  Select Attributes For Variant Generation
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  
+                  {/* COLOUR (MULTI-SELECT) */}
+                  <div className="p-3 bg-[#f8faf9] rounded-2xl border border-[#edf2ef] space-y-2">
+                    <span className="font-bold text-neutral-700 block text-[11px]">
+                      COLOUR (MULTI-SELECT)
                     </span>
-                    {selectedColors.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedColors([])}
-                        className="text-[10px] text-rose-600 hover:underline cursor-pointer font-bold"
-                      >
-                        Clear Selected
-                      </button>
-                    )}
-                  </label>
-
-                  <div className="flex flex-wrap gap-1.5 pt-1 max-h-32 overflow-y-auto">
-                    {colours.map((c) => {
-                      const isSelected = selectedColors.includes(c.name);
-                      const hex = getColorHex(c.name);
-                      return (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => toggleColor(c.name)}
-                          className={`px-2.5 py-1.2 rounded-full text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                            isSelected
-                              ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs scale-102'
-                              : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-neutral-100'
-                          }`}
-                        >
-                          <span
-                            className="w-3 h-3 rounded-full border border-black/20 shrink-0"
-                            style={{ backgroundColor: hex }}
-                          />
-                          <span className="capitalize">{c.name}</span>
-                          {isSelected && <Check className="w-3 h-3 text-[#e5c07b]" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Smart Categorized Sizes (Bangles vs Apparel vs Cups) */}
-                <div className="bg-[#f8faf9] p-3.5 rounded-2xl border border-[#edf2ef] space-y-2.5">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <label className="font-bold text-neutral-700 text-xs flex items-center gap-1.5">
-                      <Ruler className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Sizes Group</span>
-                    </label>
-
-                    {/* Sub-Filter Tabs for Sizes */}
-                    <div className="flex items-center gap-1 p-0.5 bg-white rounded-lg border border-[#dce6e1]">
-                      <button
-                        type="button"
-                        onClick={() => setSizeFilterTab('all')}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          sizeFilterTab === 'all' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
-                        }`}
-                      >
-                        All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSizeFilterTab('bangles')}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          sizeFilterTab === 'bangles' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
-                        }`}
-                      >
-                        Bangles ({categorizedSizes.bangles.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSizeFilterTab('apparel')}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          sizeFilterTab === 'apparel' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
-                        }`}
-                      >
-                        Clothing ({categorizedSizes.apparel.length})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSizeFilterTab('cups')}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          sizeFilterTab === 'cups' ? 'bg-[#0b3b2c] text-white' : 'text-neutral-500'
-                        }`}
-                      >
-                        Lingerie
-                      </button>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {colours.map((c) => {
+                        const isSel = selectedColours.includes(c.name);
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => toggleSelection(c.name, selectedColours, setSelectedColours)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border cursor-pointer ${
+                              isSel
+                                ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-2xs'
+                                : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-neutral-100'
+                            }`}
+                          >
+                            {c.name}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 pt-1 max-h-32 overflow-y-auto">
-                    {displayedSizes.map((s) => {
-                      const isSelected = selectedSizes.includes(s.name);
-                      return (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => toggleSize(s.name)}
-                          className={`min-w-[42px] px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1 border ${
-                            isSelected
-                              ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs'
-                              : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-neutral-100'
-                          }`}
-                        >
-                          <span>{s.name}</span>
-                          {isSelected && <Check className="w-2.5 h-2.5 text-[#e5c07b]" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Fabric & Unit of Measurement */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1 flex items-center gap-1">
-                      <Scissors className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Fabric Specification</span>
-                    </label>
-                    <select
-                      value={fabric}
-                      onChange={(e) => setFabric(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none cursor-pointer"
-                    >
-                      <option value="">-- Choose Fabric (Optional) --</option>
-                      {fabrics.map((f) => (
-                        <option key={f.id} value={f.name}>
-                          {f.name}
-                        </option>
-                      ))}
-                    </select>
+                  {/* SIZE (MULTI-SELECT) */}
+                  <div className="p-3 bg-[#f8faf9] rounded-2xl border border-[#edf2ef] space-y-2">
+                    <span className="font-bold text-neutral-700 block text-[11px]">
+                      SIZE (MULTI-SELECT)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {sizes.map((s) => {
+                        const isSel = selectedSizes.includes(s.name);
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold transition-all border cursor-pointer ${
+                              isSel
+                                ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-2xs'
+                                : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-neutral-100'
+                            }`}
+                          >
+                            {s.name}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1 flex items-center gap-1">
-                      <Scale className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Unit of Measurement</span>
-                    </label>
-                    <select
-                      value={unit}
-                      onChange={(e) => setUnit(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold text-[#0c2b22] outline-none cursor-pointer"
-                    >
-                      {units.map((u) => (
-                        <option key={u.id} value={u.name}>
-                          {u.name} {u.short_name ? `(${u.short_name})` : ''}
-                        </option>
-                      ))}
-                    </select>
+                  {/* FABRIC / MATERIAL (MULTI-SELECT) */}
+                  <div className="p-3 bg-[#f8faf9] rounded-2xl border border-[#edf2ef] space-y-2">
+                    <span className="font-bold text-neutral-700 block text-[11px]">
+                      FABRIC / MATERIAL (MULTI-SELECT)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {fabrics.length === 0 ? (
+                        <span className="text-neutral-400 italic text-[10px]">None in Masters.</span>
+                      ) : (
+                        fabrics.map((f) => {
+                          const isSel = selectedFabrics.includes(f.name);
+                          return (
+                            <button
+                              key={f.id}
+                              type="button"
+                              onClick={() => toggleSelection(f.name, selectedFabrics, setSelectedFabrics)}
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border cursor-pointer ${
+                                isSel
+                                  ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]'
+                                  : 'bg-white text-neutral-700 border-[#dce6e1] hover:bg-neutral-100'
+                              }`}
+                            >
+                              {f.name}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
                   </div>
+
                 </div>
               </div>
 
-              {/* 3. Pricing & Stock Inventory */}
-              <div className="space-y-3 pt-3 border-t border-[#edf2ef]">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
-                  3. Pricing & Stock Inventory
-                </span>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Selling Price (₹) *</label>
-                    <input
-                      type="number"
-                      required
-                      placeholder="e.g. 600"
-                      value={sellingPrice}
-                      onChange={(e) => setSellingPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-bold text-[#0b3b2c] outline-none"
-                    />
+              {/* Row 5: Variant Matrix Breakdown (Price & Stock per Variant) */}
+              <div className="p-4 bg-white rounded-2xl border border-[#dce6e1] shadow-2xs space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-xs text-[#0b3b2c]">
+                    <Zap className="w-3.5 h-3.5 text-[#ff4d6d]" />
+                    <span>Variant Matrix Breakdown (Price & Stock per Variant)</span>
                   </div>
 
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">MRP Price (₹)</label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 899"
-                      value={mrp}
-                      onChange={(e) => setMrp(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-medium outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Cost Price (₹)</label>
-                    <input
-                      type="number"
-                      placeholder="e.g. 350"
-                      value={costPrice}
-                      onChange={(e) => setCostPrice(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateVariants}
+                    className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#ff4d6d] to-[#e03a5a] text-white font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
+                  >
+                    <Zap className="w-3.5 h-3.5 fill-current" />
+                    <span>Generate Variants</span>
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Stock Quantity *</label>
-                    <input
-                      type="number"
-                      required
-                      placeholder="10"
-                      value={stockQuantity}
-                      onChange={(e) => setStockQuantity(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-bold outline-none"
-                    />
+                {variantRows.length === 0 ? (
+                  <div className="py-6 text-center text-neutral-400 bg-[#f8faf9] rounded-xl border border-dashed border-[#dce6e1]">
+                    Select Colour & Size above, then click <strong>"⚡ Generate Variants"</strong> to create rows.
                   </div>
-
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Low Stock Alert</label>
-                    <input
-                      type="number"
-                      placeholder="3"
-                      value={lowStockThreshold}
-                      onChange={(e) => setLowStockThreshold(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
-                    />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#f8faf9] text-neutral-500 uppercase text-[9px] font-bold tracking-wider">
+                        <tr>
+                          <th className="py-2 px-3">Variant Combination</th>
+                          <th className="py-2 px-3">Colour</th>
+                          <th className="py-2 px-3">Size</th>
+                          <th className="py-2 px-3 w-32">Selling Price (₹)</th>
+                          <th className="py-2 px-3 w-32">MRP (₹)</th>
+                          <th className="py-2 px-3 w-28">Stock</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#edf2ef]">
+                        {variantRows.map((row) => (
+                          <tr key={row.id} className="hover:bg-[#fcfaf4]">
+                            <td className="py-2 px-3 font-bold text-[#0c2b22]">{row.id}</td>
+                            <td className="py-2 px-3 font-semibold text-neutral-700">{row.colour}</td>
+                            <td className="py-2 px-3 font-mono font-bold text-[#0b3b2c]">{row.size}</td>
+                            <td className="py-2 px-3">
+                              <input
+                                type="number"
+                                value={row.selling_price}
+                                onChange={(e) =>
+                                  handleUpdateVariantRow(row.id, 'selling_price', Number(e.target.value))
+                                }
+                                className="w-full px-2 py-1 rounded-lg border border-[#dce6e1] bg-white font-bold text-[#0b3b2c] outline-none"
+                              />
+                            </td>
+                            <td className="py-2 px-3">
+                              <input
+                                type="number"
+                                value={row.mrp}
+                                onChange={(e) =>
+                                  handleUpdateVariantRow(row.id, 'mrp', Number(e.target.value))
+                                }
+                                className="w-full px-2 py-1 rounded-lg border border-[#dce6e1] bg-white outline-none"
+                              />
+                            </td>
+                            <td className="py-2 px-3">
+                              <input
+                                type="number"
+                                value={row.stock}
+                                onChange={(e) =>
+                                  handleUpdateVariantRow(row.id, 'stock', Number(e.target.value))
+                                }
+                                className="w-full px-2 py-1 rounded-lg border border-[#dce6e1] bg-white font-bold outline-none"
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Weight</label>
-                    <input
-                      type="number"
-                      placeholder="500"
-                      value={weight}
-                      onChange={(e) => setWeight(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="font-bold text-neutral-700 block mb-1">Weight Unit</label>
-                    <select
-                      value={weightUnit}
-                      onChange={(e) => setWeightUnit(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
-                    >
-                      <option value="grams">Grams</option>
-                      <option value="kg">Kilograms (KG)</option>
-                    </select>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* 4. Product Images Array */}
-              <div className="space-y-2 pt-3 border-t border-[#edf2ef]">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#809c93] block">
-                  4. Product Images
+              {/* Row 6: Product Images (Upload & Assign) */}
+              <div className="space-y-2 pt-2 border-t border-[#edf2ef]">
+                <span className="font-bold text-neutral-700 block text-[11px] uppercase">
+                  Product Dress Images (Upload & Assign)
                 </span>
 
                 <div className="flex gap-2">
                   <input
                     type="url"
-                    placeholder="Paste direct Image URL (e.g. https://.../bangles.jpg)"
-                    value={imageInput}
-                    onChange={(e) => setImageInput(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                    placeholder="Direct HTTPS image URL (e.g. https://.../image.jpg)"
+                    value={imageUrlInput}
+                    onChange={(e) => setImageUrlInput(e.target.value)}
+                    className="flex-1 px-3.5 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs outline-none"
                   />
                   <button
                     type="button"
-                    onClick={handleAddImage}
+                    onClick={() => {
+                      if (!imageUrlInput.trim()) return;
+                      setImagesList((prev) => [...prev, imageUrlInput.trim()]);
+                      setImageUrlInput('');
+                    }}
                     className="px-4 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold cursor-pointer"
                   >
-                    + Add URL
+                    + Add Image
                   </button>
                 </div>
 
@@ -1090,8 +933,8 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                         <img src={img} alt="Product" className="w-full h-full object-cover" />
                         <button
                           type="button"
-                          onClick={() => handleRemoveImage(idx)}
-                          className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setImagesList((prev) => prev.filter((_, i) => i !== idx))}
+                          className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-rose-600 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1101,33 +944,33 @@ export default function AdminProducts({ currentUser }: AdminProductsProps) {
                 )}
               </div>
 
-              {/* 5. Description */}
+              {/* Row 7: Description */}
               <div className="pt-2 border-t border-[#edf2ef]">
-                <label className="font-bold text-neutral-700 block mb-1">Product Description / Highlights</label>
+                <label className="font-bold text-neutral-700 block mb-1">DESCRIPTION & PRODUCT DETAILS</label>
                 <textarea
-                  rows={2}
-                  placeholder="Details regarding stones, base metal, polish and maintenance..."
+                  rows={3}
+                  placeholder="Fabric care, weave type, wash instructions..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs outline-none"
                 />
               </div>
 
-              {/* Actions */}
-              <div className="flex justify-end gap-2.5 pt-3 border-t border-[#edf2ef]">
+              {/* Form Buttons */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-[#edf2ef]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4.5 py-2 rounded-full border border-[#dce6e1] text-neutral-600 hover:bg-[#f0f4f2] font-semibold cursor-pointer"
+                  className="px-5 py-2 rounded-full border border-[#dce6e1] text-neutral-600 hover:bg-[#f0f4f2] font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-6 py-2 rounded-full bg-[#0b3b2c] hover:bg-[#06231a] text-white font-bold shadow-md shadow-[#0b3b2c]/20 cursor-pointer disabled:opacity-50"
+                  className="px-7 py-2 rounded-full bg-[#0b3b2c] hover:bg-[#06231a] text-white font-bold shadow-md shadow-[#0b3b2c]/20 cursor-pointer disabled:opacity-50"
                 >
-                  {saving ? 'Publishing to Vault...' : 'Save & Publish Product'}
+                  {saving ? 'Saving...' : isEditMode ? 'Update Product' : 'Save Product'}
                 </button>
               </div>
 
