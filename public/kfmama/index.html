@@ -3,284 +3,232 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Kashvi Imperial OS — Super Admin</title>
-  
+  <title>Kashvi Neural Hub — Imperial OS</title>
   <link rel="stylesheet" href="css/theme.css">
 </head>
 <body>
 
-  <div class="admin-wrapper">
-    <!-- Imperial Frosted Sidebar -->
-    <aside class="admin-sidebar">
-      <div class="sidebar-brand">
-        <img src="assets/logo.png" alt="Logo" class="brand-logo-img" onerror="this.src='https://placehold.co/100x100/0b3b2c/f5d796?text=KF'">
-        <div class="brand-text-wrap">
-          <span class="brand-text-title">KASHVI</span>
-          <span class="brand-text-sub">IMPERIAL OS</span>
+  <div class="app-container">
+    <!-- 1. Futuristic Floating Sidebar -->
+    <aside class="glass-sidebar">
+      <div class="brand-portal">
+        <div class="brand-avatar">
+          <span style="font-family:var(--font-display); font-size:1.1rem; color:var(--accent-gold);">KF</span>
+        </div>
+        <div>
+          <div class="brand-title">KASHVI</div>
+          <div class="brand-version">NEURAL HUB v3.0</div>
         </div>
       </div>
 
-      <div class="sidebar-content">
-        <div class="sidebar-group-title">ECOMMERCE CORE</div>
-        <ul class="sidebar-nav">
-          <li class="nav-item active" data-tab="tab-dashboard">
-            <a href="#">
-              <div class="nav-item-left"><span>📊</span><span>Analytics</span></div>
-            </a>
-          </li>
-          <li class="nav-item" data-tab="tab-products">
-            <a href="#">
-              <div class="nav-item-left"><span>👗</span><span>Catalog & Vault</span></div>
-            </a>
-          </li>
-          <li class="nav-item" data-tab="tab-categories">
-            <a href="#">
-              <div class="nav-item-left"><span>🏷️</span><span>Masters & Arches</span></div>
-            </a>
-          </li>
-          <li class="nav-item" data-tab="tab-orders">
-            <a href="#">
-              <div class="nav-item-left"><span>📦</span><span>Order Pipeline</span></div>
-              <span class="sidebar-count-badge" id="sidebar-order-badge">0</span>
-            </a>
-          </li>
-          <li class="nav-item" data-tab="tab-cms">
-            <a href="#">
-              <div class="nav-item-left"><span>🖼️</span><span>Banner Studio</span></div>
-            </a>
-          </li>
-          <li class="nav-item" data-tab="tab-pincodes">
-            <a href="#">
-              <div class="nav-item-left"><span>📍</span><span>Pincodes DB</span></div>
-            </a>
-          </li>
-        </ul>
-
-        <div class="sidebar-group-title" style="margin-top: 14px;">CONFIGURATION</div>
-        <ul class="sidebar-nav">
-          <li class="nav-item" data-tab="tab-delivery-rates">
-            <a href="#">
-              <div class="nav-item-left"><span>🚚</span><span>Delivery Rates</span></div>
-            </a>
-          </li>
-          <li class="nav-item" data-tab="tab-payment-gateways">
-            <a href="#">
-              <div class="nav-item-left"><span>💳</span><span>Gateways</span></div>
-            </a>
-          </li>
-          <li class="nav-item" data-tab="tab-settings">
-            <a href="#">
-              <div class="nav-item-left"><span>⚙️</span><span>Store Settings</span></div>
-            </a>
-          </li>
-        </ul>
-      </div>
-
-      <div class="sidebar-footer">
-        <div class="super-admin-card">
-          <div class="super-admin-avatar" id="avatar-initial">A</div>
-          <div class="super-admin-info">
-            <span class="super-admin-name" id="display-admin-name">Abhilash</span>
-            <span class="super-admin-role">Super Admin</span>
+      <div style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:20px;">
+        <div>
+          <div class="nav-section-title">CORE SPACES</div>
+          <div class="nav-cluster">
+            <button type="button" class="nav-link-btn active" data-tab="tab-analytics">
+              <div class="nav-link-left">
+                <span>⚡</span>
+                <span>Live Analytics</span>
+              </div>
+            </button>
+            <button type="button" class="nav-link-btn" data-tab="tab-vault">
+              <div class="nav-link-left">
+                <span>💎</span>
+                <span>Inventory & Vault</span>
+              </div>
+            </button>
+            <button type="button" class="nav-link-btn" data-tab="tab-arches">
+              <div class="nav-link-left">
+                <span>🏛️</span>
+                <span>Arch Masters</span>
+              </div>
+            </button>
+            <button type="button" class="nav-link-btn" data-tab="tab-pipeline">
+              <div class="nav-link-left">
+                <span>🚀</span>
+                <span>Order Flow</span>
+              </div>
+              <span id="badge-orders" style="font-family:var(--font-tech); font-size:0.7rem; font-weight:800; background:var(--accent-rose); padding:2px 8px; border-radius:12px;">0</span>
+            </button>
           </div>
         </div>
-        <button type="button" class="btn-sidebar-logout" id="btn-sidebar-logout">
-          🔒 Lock Workspace
-        </button>
+
+        <div>
+          <div class="nav-section-title">STORE PROTOCOLS</div>
+          <div class="nav-cluster">
+            <button type="button" class="nav-link-btn" data-tab="tab-matrix">
+              <div class="nav-link-left">
+                <span>🛰️</span>
+                <span>Delivery Matrix</span>
+              </div>
+            </button>
+            <button type="button" class="nav-link-btn" data-tab="tab-config">
+              <div class="nav-link-left">
+                <span>⚙️</span>
+                <span>Settings</span>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Profile Pill -->
+      <div style="padding:14px; background:rgba(255,255,255,0.02); border:1px solid var(--border-glass); border-radius:18px; display:flex; align-items:center; justify-content:space-between;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div style="width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,#e5c07b,#b38728); color:#030a08; font-weight:800; display:flex; align-items:center; justify-content:center; font-family:var(--font-tech);">A</div>
+          <div>
+            <div style="font-size:0.82rem; font-weight:700;">Super Admin</div>
+            <div style="font-size:0.65rem; color:var(--accent-emerald);">● Online</div>
+          </div>
+        </div>
+        <button type="button" id="btn-lock" style="background:transparent; border:none; color:var(--text-muted); cursor:pointer; font-size:1rem;" title="Lock">🔒</button>
       </div>
     </aside>
 
-    <!-- Main Content Area -->
-    <div class="admin-main">
-      <header class="admin-header">
-        <div class="header-search">
-          <input type="text" placeholder="Search orders, products, SKUs...">
+    <!-- 2. Work Surface Area -->
+    <main class="work-surface">
+      <header class="surface-header">
+        <div class="omni-search">
+          <span class="omni-search-icon">🔍</span>
+          <input type="text" placeholder="Omni Search (Orders, SKUs, Customers)...">
         </div>
-        
-        <div style="display:flex; align-items:center; gap:20px;">
-          <div id="btn-notif-bell" style="cursor:pointer; font-size:1.2rem;">🔔</div>
-          <button type="button" class="btn-secondary" id="btn-header-lock" style="padding:6px 14px; font-size:0.75rem;">
-            Logout
-          </button>
+
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div style="padding:8px 16px; border-radius:14px; background:rgba(255,255,255,0.03); border:1px solid var(--border-glass); font-family:var(--font-tech); font-size:0.82rem; color:var(--accent-gold);">
+            ✨ Live Sync Active
+          </div>
         </div>
       </header>
 
-      <main class="content-body">
-        
-        <!-- 1. DASHBOARD TAB -->
-        <section id="tab-dashboard" class="tab-view active">
-          <div class="section-header-row">
-            <h2 class="section-title">Store Performance Pulse</h2>
-          </div>
-
-          <div class="kpi-grid">
-            <div class="kpi-card">
-              <div class="kpi-top"><span class="kpi-title">Today's Sales</span><div class="kpi-icon-wrap">💵</div></div>
-              <div class="kpi-value" id="kpi-today-sales">₹ 0</div>
-              <div class="kpi-footer"><span>Live Pulse</span></div>
+      <div class="workspace-scroll">
+        <!-- VIEW 1: LIVE ANALYTICS BENTO -->
+        <section id="tab-analytics" class="tab-content active">
+          <div class="bento-grid">
+            <div class="futuristic-card bento-cell-4">
+              <span class="card-title-sub">REAL-TIME INFLOW</span>
+              <div class="card-numeric-highlight" id="kpi-today">₹ 0</div>
+              <div style="font-size:0.75rem; color:var(--accent-emerald); font-family:var(--font-tech);">▲ Live Transaction Ledger</div>
             </div>
 
-            <div class="kpi-card">
-              <div class="kpi-top"><span class="kpi-title">Revenue (MTD)</span><div class="kpi-icon-wrap">📈</div></div>
-              <div class="kpi-value" id="kpi-revenue-mtd">₹ 0</div>
-              <div class="kpi-footer"><span>Current Month</span></div>
+            <div class="futuristic-card bento-cell-4">
+              <span class="card-title-sub">ORDERS DISPATCHED</span>
+              <div class="card-numeric-highlight" id="kpi-orders">0</div>
+              <div style="font-size:0.75rem; color:var(--text-secondary); font-family:var(--font-tech);">Today's Volume</div>
             </div>
 
-            <div class="kpi-card">
-              <div class="kpi-top"><span class="kpi-title">Total Orders</span><div class="kpi-icon-wrap">📦</div></div>
-              <div class="kpi-value" id="kpi-total-orders">0</div>
-              <div class="kpi-footer"><span>Today's Volume</span></div>
+            <div class="futuristic-card bento-cell-4">
+              <span class="card-title-sub">AVG BASKET SIZE</span>
+              <div class="card-numeric-highlight" id="kpi-aov">₹ 0</div>
+              <div style="font-size:0.75rem; color:var(--accent-gold); font-family:var(--font-tech);">Cart Average</div>
             </div>
 
-            <div class="kpi-card">
-              <div class="kpi-top"><span class="kpi-title">Avg Order Value</span><div class="kpi-icon-wrap">🏷️</div></div>
-              <div class="kpi-value" id="kpi-aov">₹ 0</div>
-              <div class="kpi-footer"><span>Basket Average</span></div>
+            <div class="futuristic-card bento-cell-12">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+                <span class="card-title-sub">LIVE ORDER CONSOLE</span>
+                <span style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);">Auto-refreshing</span>
+              </div>
+              <div id="live-orders-stream" style="display:flex; flex-direction:column; gap:10px;">
+                <div style="text-align:center; padding:32px; color:var(--text-muted); font-size:0.85rem;">Listening for incoming customer orders...</div>
+              </div>
             </div>
-          </div>
-
-          <div style="background:#fff; border:1px solid var(--border-subtle); border-radius:20px; padding:24px;">
-            <h3 style="font-family:var(--font-serif); color:var(--brand-emerald-dark); margin-bottom:16px;">Recent Orders</h3>
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Order ID</th>
-                  <th>Customer</th>
-                  <th>Total</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="recent-orders-body">
-                <tr><td colspan="4" style="text-align:center;">Loading live pipeline...</td></tr>
-              </tbody>
-            </table>
           </div>
         </section>
 
-        <!-- 2. MASTERS TAB -->
-        <section id="tab-categories" class="tab-view" style="display:none;">
-          <div class="section-header-row">
+        <!-- VIEW 2: ARCH MASTERS -->
+        <section id="tab-arches" class="tab-content" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
             <div>
-              <h2 class="section-title">Store Masters & Dropdown Attributes</h2>
-              <p style="font-size:0.8rem; color:var(--text-secondary);">Manage categories, royal arch sub-menus, fabrics, and variants.</p>
+              <h2 style="font-family:var(--font-display); font-size:1.6rem; color:var(--accent-gold);">Arch Masters Hub</h2>
+              <p style="font-size:0.8rem; color:var(--text-secondary);">Manage storefront collections, sub-categories, and image vaults.</p>
             </div>
           </div>
 
-          <div class="masters-hub-grid">
-            <div class="master-hub-card" data-master="category">
-              <div class="hub-card-top"><span class="hub-card-title">Categories</span><span class="hub-card-icon">📁</span></div>
-              <div class="hub-card-footer"><span class="hub-count-badge" id="count-category">0 Items</span><span class="hub-card-action-text">Manage &rarr;</span></div>
+          <div class="arch-manage-grid">
+            <div class="arch-node-card" data-master="category">
+              <div>
+                <h3 style="font-size:1.05rem; font-weight:700;">Categories</h3>
+                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-category">0 Units</p>
+              </div>
+              <span style="font-size:1.5rem;">📁</span>
             </div>
-            <div class="master-hub-card" data-master="subcategory">
-              <div class="hub-card-top"><span class="hub-card-title">Sub-Categories</span><span class="hub-card-icon">📂</span></div>
-              <div class="hub-card-footer"><span class="hub-count-badge" id="count-subcategory">0 Items</span><span class="hub-card-action-text">Manage &rarr;</span></div>
+
+            <div class="arch-node-card" data-master="subcategory">
+              <div>
+                <h3 style="font-size:1.05rem; font-weight:700;">Sub-Categories</h3>
+                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-subcategory">0 Units</p>
+              </div>
+              <span style="font-size:1.5rem;">🏛️</span>
             </div>
-            <div class="master-hub-card" data-master="brand">
-              <div class="hub-card-top"><span class="hub-card-title">Brands</span><span class="hub-card-icon">🏷️</span></div>
-              <div class="hub-card-footer"><span class="hub-count-badge" id="count-brand">0 Items</span><span class="hub-card-action-text">Manage &rarr;</span></div>
+
+            <div class="arch-node-card" data-master="brand">
+              <div>
+                <h3 style="font-size:1.05rem; font-weight:700;">Brands</h3>
+                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-brand">0 Units</p>
+              </div>
+              <span style="font-size:1.5rem;">🏷️</span>
             </div>
-            <div class="master-hub-card" data-master="colour">
-              <div class="hub-card-top"><span class="hub-card-title">Colours</span><span class="hub-card-icon">🎨</span></div>
-              <div class="hub-card-footer"><span class="hub-count-badge" id="count-colour">0 Items</span><span class="hub-card-action-text">Manage &rarr;</span></div>
-            </div>
-            <div class="master-hub-card" data-master="size">
-              <div class="hub-card-top"><span class="hub-card-title">Sizes</span><span class="hub-card-icon">📏</span></div>
-              <div class="hub-card-footer"><span class="hub-count-badge" id="count-size">0 Items</span><span class="hub-card-action-text">Manage &rarr;</span></div>
-            </div>
-            <div class="master-hub-card" data-master="fabric">
-              <div class="hub-card-top"><span class="hub-card-title">Fabrics</span><span class="hub-card-icon">🧵</span></div>
-              <div class="hub-card-footer"><span class="hub-count-badge" id="count-fabric">0 Items</span><span class="hub-card-action-text">Manage &rarr;</span></div>
+
+            <div class="arch-node-card" data-master="colour">
+              <div>
+                <h3 style="font-size:1.05rem; font-weight:700;">Colours</h3>
+                <p style="font-size:0.75rem; color:var(--text-muted); font-family:var(--font-tech);" id="count-colour">0 Units</p>
+              </div>
+              <span style="font-size:1.5rem;">🎨</span>
             </div>
           </div>
         </section>
 
-        <!-- 3. INVENTORY TAB -->
-        <section id="tab-products" class="tab-view" style="display:none;">
-          <div class="section-header-row">
-            <h2 class="section-title">Product Inventory & Vault</h2>
-            <button class="btn-primary" id="btn-open-add-product">+ Add Product</button>
+        <!-- VIEW 3: INVENTORY -->
+        <section id="tab-vault" class="tab-content" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+            <h2 style="font-family:var(--font-display); font-size:1.6rem; color:var(--accent-gold);">Product Vault & Inventory</h2>
+            <button type="button" class="glow-btn-primary">+ Add New Item</button>
           </div>
-          <div style="background:#fff; border:1px solid var(--border-subtle); border-radius:20px; overflow:hidden;">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Image</th>
-                  <th>Name</th>
-                  <th>Category</th>
-                  <th>Price</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="products-table-body">
-                <tr><td colspan="5" style="text-align:center;">Loading products...</td></tr>
-              </tbody>
-            </table>
+          <div class="futuristic-card">
+            <div id="vault-items-container" style="text-align:center; padding:40px; color:var(--text-muted);">
+              Loading product matrix...
+            </div>
           </div>
         </section>
-
-      </main>
-    </div>
+      </div>
+    </main>
   </div>
 
-  <!-- Master Slider Drawer -->
-  <div class="master-drawer-overlay" id="master-drawer">
-    <div class="master-drawer-panel">
-      <div class="master-drawer-header">
-        <h3 id="master-drawer-title">Manage Attributes</h3>
-        <button class="btn-secondary" id="btn-close-master-drawer" style="padding:4px 10px;">&times;</button>
+  <!-- Neural Slide-in Drawer -->
+  <div class="future-drawer-overlay" id="future-drawer">
+    <div class="future-drawer">
+      <div style="padding:24px 30px; border-bottom:1px solid var(--border-glass); display:flex; justify-content:space-between; align-items:center;">
+        <h3 id="future-drawer-title" style="font-family:var(--font-display); color:var(--accent-gold);">Manage Master</h3>
+        <button type="button" id="btn-close-drawer" style="background:none; border:none; color:var(--text-muted); font-size:1.4rem; cursor:pointer;">&times;</button>
       </div>
-      <form id="master-drawer-form" class="quick-add-bar">
-        <div id="drawer-parent-row" style="display:none;">
-          <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase;">Parent Category *</label>
-          <select id="drawer-parent-select" class="form-select" style="margin-top:4px;"></select>
-        </div>
-        <div class="quick-add-row">
-          <input type="text" id="drawer-item-name" class="form-input" placeholder="Item Name" required>
-          <button type="submit" class="btn-primary" id="btn-drawer-submit">+ Add</button>
-          <button type="button" class="btn-secondary" id="btn-cancel-edit" style="display:none;">Cancel</button>
-        </div>
-
-        <div id="drawer-image-section" style="display:none; flex-direction:column; gap:8px;">
-          <label style="font-size:0.75rem; font-weight:700; text-transform:uppercase;">Arch Cover Image</label>
-          <div style="display:flex; gap:12px; align-items:center;">
-            <div id="drawer-img-preview" class="drawer-img-thumb-empty"><span>🖼️</span></div>
-            <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
-              <input type="file" id="drawer-img-file" accept="image/*" class="form-input" style="font-size:0.74rem;">
-              <input type="url" id="drawer-img-url" class="form-input" placeholder="Or Image URL (https://...)">
-            </div>
-          </div>
-        </div>
-      </form>
-      <div class="master-items-list-body" id="master-items-list"></div>
+      <div id="future-drawer-body" style="padding:30px; flex:1; overflow-y:auto;">
+        <!-- Dynamic Attributes Content -->
+      </div>
     </div>
   </div>
 
   <script type="module">
-    import { initDashboard } from './js/modules/dashboard.js';
-    import { initProductsModule } from './js/modules/products.js';
-    import { initCategoriesModule } from './js/modules/categories.js';
+    import { supabase } from './js/supabase.js';
 
-    document.addEventListener('DOMContentLoaded', () => {
-      initDashboard();
-      initProductsModule();
-      initCategoriesModule();
+    // Tab Router
+    document.querySelectorAll('.nav-link-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.tab;
+        if (!target) return;
 
-      // Navigation Logic
-      const navItems = document.querySelectorAll('.sidebar-nav .nav-item');
-      navItems.forEach(item => {
-        item.addEventListener('click', (e) => {
-          e.preventDefault();
-          const targetTab = item.dataset.tab;
-          if (!targetTab) return;
+        document.querySelectorAll('.nav-link-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
 
-          navItems.forEach(n => n.classList.remove('active'));
-          item.classList.add('active');
-
-          document.querySelectorAll('.tab-view').forEach(view => view.style.display = 'none');
-          const el = document.getElementById(targetTab);
-          if (el) el.style.display = 'block';
-        });
+        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+        const activeTab = document.getElementById(target);
+        if (activeTab) activeTab.style.display = 'block';
       });
+    });
+
+    // Drawer Closer
+    const drawer = document.getElementById('future-drawer');
+    document.getElementById('btn-close-drawer')?.addEventListener('click', () => {
+      drawer.classList.remove('active');
     });
   </script>
 </body>
