@@ -5,11 +5,8 @@ import {
   Palette,
   Ruler,
   Scissors,
-  Scale,
   Plus,
   Trash2,
-  CheckCircle2,
-  XCircle,
   X,
   Sparkles,
   Building2,
@@ -42,12 +39,9 @@ interface TaggedImage {
 }
 
 export default function AdminMasters({ currentUser }: AdminMastersProps) {
-  // 6 Main Master Tabs requested by user
-  const [activeTab, setActiveTab] = useState<'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics'>('product');
-
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Data States matched to database tables
+  // Database Master States
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
   const [colours, setColours] = useState<ColourRecord[]>([]);
@@ -60,10 +54,13 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
   const canEdit = currentUser?.role === 'admin' || currentUser?.role === 'manager';
   const canDelete = currentUser?.role === 'admin';
 
-  // Modals state
+  // Active Popup Modal Controller
+  // Options: 'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics' | null
   const [activeModal, setActiveModal] = useState<string | null>(null);
 
-  // Form Inputs for Masters
+  // -------------------------------------------------------------
+  // Form Inputs for Small Masters
+  // -------------------------------------------------------------
   const [catName, setCatName] = useState('');
   const [catDept, setCatDept] = useState('fashions');
 
@@ -73,7 +70,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
   const [variantNameInput, setVariantNameInput] = useState('');
 
   // -------------------------------------------------------------
-  // Product Master Form States
+  // Product Master Modal Form States
   // -------------------------------------------------------------
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
   const [productCode, setProductCode] = useState<string>('');
@@ -104,7 +101,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
         supabase.from('sizes').select('*').order('name'),
         supabase.from('fabrics').select('*').order('name'),
         supabase.from('units').select('*').order('name'),
-        supabase.from('products').select('*').order('created_at', { ascending: false }).limit(50)
+        supabase.from('products').select('*').order('created_at', { ascending: false }).limit(20)
       ]);
 
       if (catRes.data) setCategories(catRes.data);
@@ -130,6 +127,8 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
 
   // Automated Product Code Generator (KFXXXX vs KJXXXX)
   useEffect(() => {
+    if (activeModal !== 'product') return;
+
     const generateProductCode = async () => {
       setCodeLoading(true);
       const prefix = department === 'fashions' ? 'KF' : 'KJ';
@@ -161,7 +160,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
     };
 
     generateProductCode();
-  }, [department]);
+  }, [department, activeModal]);
 
   const makeId = (prefix: string) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
@@ -253,7 +252,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
     }
   };
 
-  // Product Master Variant Multi-Select Helper
+  // Product Master Multi-Selection Helper
   const toggleSelection = (item: string, list: string[], setList: (val: string[]) => void) => {
     if (list.includes(item)) {
       setList(list.filter((i) => i !== item));
@@ -262,7 +261,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
     }
   };
 
-  // Product Master Image Helpers
+  // Image Upload Handlers
   const handleAddImage = () => {
     if (!imageUrlInput.trim()) return;
     const tag = selectedColorForUpload || (selectedColors[0] || 'Default');
@@ -279,7 +278,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
     setImages(images.filter((img) => img.id !== id));
   };
 
-  // Save Product Master Submit
+  // Save Product Master Record
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmittingProduct(true);
@@ -315,11 +314,6 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
       const { data, error } = await supabase.from('products').insert([productPayload]).select().single();
       if (error) throw error;
 
-      setProductStatus({
-        type: 'success',
-        text: `Product ${productCode} - ${name} added successfully!`
-      });
-
       if (data) setProductsList((prev) => [data, ...prev]);
 
       setName('');
@@ -331,7 +325,8 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
       setSelectedFabrics([]);
       setOpeningStock(0);
       setImages([]);
-      setDepartment((prev) => (prev === 'fashions' ? 'fashions' : 'jewellery'));
+      setActiveModal(null);
+      alert(`Product ${productCode} saved successfully!`);
     } catch (err: any) {
       setProductStatus({
         type: 'error',
@@ -349,7 +344,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
   return (
     <div className="space-y-4 animate-in fade-in duration-200 select-none font-sans pb-12">
       
-      {/* 1. Master Vaults Header */}
+      {/* 1. Header Bar with Direct Master Modal Launchers */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-[#e2eae6] shadow-xs">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#e4efe9] text-[#0b3b2c] text-[9.5px] font-bold uppercase tracking-wider mb-1 border border-[#dce6e1]">
@@ -359,99 +354,271 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
             Store Masters Hub
           </h1>
           <p className="text-[11px] text-[#4d6960] mt-1">
-            Centralized controls for Product, Categories, Colours, Sizes & Fabric matrices.
+            Click any button below to open its dedicated creation popup modal.
           </p>
         </div>
 
-        {/* 6 Master Pillars Sub-Navigation */}
-        <div className="flex flex-wrap items-center gap-1 p-1 bg-[#f0f4f2] rounded-full self-start sm:self-center border border-[#dce6e1]">
+        {/* 6 Popup Modal Buttons */}
+        <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-[#f0f4f2] rounded-2xl self-start sm:self-center border border-[#dce6e1]">
           <button
             type="button"
-            onClick={() => setActiveTab('product')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'product' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960] hover:text-[#0b3b2c]'
-            }`}
+            onClick={() => setActiveModal('product')}
+            className="px-3 py-1.5 rounded-xl bg-[#0b3b2c] text-white text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs hover:bg-[#082a20]"
           >
-            <Package className="w-3.5 h-3.5" />
-            <span>Product</span>
+            <Package className="w-3.5 h-3.5 text-[#e5c07b]" />
+            <span>+ Product</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('category')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'category' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960] hover:text-[#0b3b2c]'
-            }`}
+            onClick={() => setActiveModal('category')}
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
           >
             <Tag className="w-3.5 h-3.5" />
-            <span>Category</span>
+            <span>+ Category</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('subcategory')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'subcategory' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960] hover:text-[#0b3b2c]'
-            }`}
+            onClick={() => setActiveModal('subcategory')}
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Sub-Category</span>
+            <span>+ Sub-Category</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('colours')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'colours' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960] hover:text-[#0b3b2c]'
-            }`}
+            onClick={() => setActiveModal('colours')}
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
           >
             <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
-            <span>Colours</span>
+            <span>+ Colours</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('sizes')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'sizes' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960] hover:text-[#0b3b2c]'
-            }`}
+            onClick={() => setActiveModal('sizes')}
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
           >
             <Ruler className="w-3.5 h-3.5 text-blue-500" />
-            <span>Size</span>
+            <span>+ Size</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab('fabrics')}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'fabrics' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960] hover:text-[#0b3b2c]'
-            }`}
+            onClick={() => setActiveModal('fabrics')}
+            className="px-3 py-1.5 rounded-xl bg-white border border-[#dce6e1] text-[#0b3b2c] text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 hover:bg-[#e4efe9]"
           >
             <Scissors className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Fabric</span>
+            <span>+ Fabric</span>
           </button>
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 1. PRODUCT MASTER TAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'product' && (
-        <div className="space-y-4">
-          {productStatus && (
-            <div className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${
-              productStatus.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'
-            }`}>
-              <AlertCircle className="w-4 h-4" />
-              <span>{productStatus.text}</span>
+      {/* 2. Unified Master Overview Dashboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        
+        {/* Categories Table */}
+        <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
+          <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
+            <div className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-[#0b3b2c]" />
+              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
+                Categories ({categories.length})
+              </h3>
             </div>
-          )}
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setActiveModal('category')}
+                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add
+              </button>
+            )}
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            <table className="w-full text-left text-xs font-sans">
+              <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                <tr>
+                  <th className="py-2 px-4">Name</th>
+                  <th className="py-2 px-4">Dept</th>
+                  <th className="py-2 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#edf2ef]">
+                {categories.map((cat) => (
+                  <tr key={cat.id} className="hover:bg-[#f4f7f5]">
+                    <td className="py-2 px-4 font-bold text-[#0c2b22]">{cat.name}</td>
+                    <td className="py-2 px-4 uppercase text-[10px] text-[#0b3b2c]">{cat.department}</td>
+                    <td className="py-2 px-4 text-right">
+                      {canDelete && (
+                        <button onClick={() => handleDeleteItem('categories', cat.id)} className="p-1 text-rose-600">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
-          <form onSubmit={handleSaveProduct} className="space-y-4">
-            {/* Department Switcher & Code */}
-            <div className="bg-white rounded-2xl border border-[#e2eae6] p-4 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <label className="text-xs font-bold text-[#0b3b2c] block mb-2">Select Department *</label>
+        {/* Sub-Categories Table */}
+        <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
+          <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-[#0b3b2c]" />
+              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
+                Sub-Categories ({subCategories.length})
+              </h3>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setActiveModal('subcategory')}
+                className="px-2.5 py-1 rounded-full bg-[#0b3b2c] text-white text-[10px] font-bold flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3 text-[#e5c07b]" /> Add
+              </button>
+            )}
+          </div>
+          <div className="max-h-60 overflow-y-auto">
+            <table className="w-full text-left text-xs font-sans">
+              <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                <tr>
+                  <th className="py-2 px-4">Sub-Category</th>
+                  <th className="py-2 px-4">Parent Category</th>
+                  <th className="py-2 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#edf2ef]">
+                {subCategories.map((sub) => (
+                  <tr key={sub.id} className="hover:bg-[#f4f7f5]">
+                    <td className="py-2 px-4 font-bold text-[#0c2b22]">{sub.name}</td>
+                    <td className="py-2 px-4 text-[#0b3b2c] font-semibold">{sub.category_name}</td>
+                    <td className="py-2 px-4 text-right">
+                      {canDelete && (
+                        <button onClick={() => handleDeleteItem('sub_categories', sub.id)} className="p-1 text-rose-600">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Variants Summary Card (Colours, Sizes, Fabrics) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between border-b pb-2.5">
+            <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
+              Variant Masters Vaults (Colours, Sizes, Fabrics)
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Colours Pill Box */}
+            <div className="p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
+                  <Palette className="w-3 h-3 text-[#ff4d6d]" /> Colours ({colours.length})
+                </span>
+                <button onClick={() => setActiveModal('colours')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
+                {colours.map((c) => (
+                  <span key={c.id} className="px-2 py-0.5 rounded-md bg-white border border-[#dce6e1] text-[10.5px] font-semibold flex items-center gap-1">
+                    {c.name}
+                    {canDelete && <X onClick={() => handleDeleteItem('colours', c.id)} className="w-2.5 h-2.5 text-rose-500 cursor-pointer" />}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Sizes Pill Box */}
+            <div className="p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
+                  <Ruler className="w-3 h-3 text-blue-500" /> Sizes ({sizes.length})
+                </span>
+                <button onClick={() => setActiveModal('sizes')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
+                {sizes.map((s) => (
+                  <span key={s.id} className="px-2 py-0.5 rounded-md bg-white border border-[#dce6e1] text-[10.5px] font-semibold flex items-center gap-1">
+                    {s.name}
+                    {canDelete && <X onClick={() => handleDeleteItem('sizes', s.id)} className="w-2.5 h-2.5 text-rose-500 cursor-pointer" />}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Fabrics Pill Box */}
+            <div className="p-3 rounded-xl border border-[#dce6e1] bg-[#f8faf9]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-[#0b3b2c] flex items-center gap-1">
+                  <Scissors className="w-3 h-3 text-emerald-500" /> Fabrics ({fabrics.length})
+                </span>
+                <button onClick={() => setActiveModal('fabrics')} className="text-[10px] font-bold text-[#0b3b2c] underline cursor-pointer">+ Add</button>
+              </div>
+              <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto">
+                {fabrics.map((f) => (
+                  <span key={f.id} className="px-2 py-0.5 rounded-md bg-white border border-[#dce6e1] text-[10.5px] font-semibold flex items-center gap-1">
+                    {f.name}
+                    {canDelete && <X onClick={() => handleDeleteItem('fabrics', f.id)} className="w-2.5 h-2.5 text-rose-500 cursor-pointer" />}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. POPUP MODALS SECTION */}
+      {/* ========================================================================= */}
+
+      {/* MODAL 1: PRODUCT MASTER POPUP */}
+      {activeModal === 'product' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/50 backdrop-blur-2xs animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-[#dce6e1] space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3 sticky top-0 bg-white z-10">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-[#0b3b2c]" />
+                <div>
+                  <h2 className="text-base font-bold text-[#0b3b2c]">Product Master Creator</h2>
+                  <span className="text-[10px] text-[#4d6960]">Create retail catalog item with code & live masters</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="bg-[#f0f4f2] px-3 py-1 rounded-xl border border-[#dce6e1] text-right">
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#4d6960] block">Assigned Code</span>
+                  <span className="font-mono text-sm font-bold text-[#0b3b2c]">
+                    {codeLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : productCode}
+                  </span>
+                </div>
+                <button onClick={() => setActiveModal(null)} className="p-1 rounded-full hover:bg-neutral-100 cursor-pointer">
+                  <X className="w-5 h-5 text-neutral-400" />
+                </button>
+              </div>
+            </div>
+
+            {productStatus && (
+              <div className="p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800 text-xs font-bold">
+                {productStatus.text}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProduct} className="space-y-4">
+              {/* Department Selection */}
+              <div>
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1.5">Department *</label>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -476,460 +643,231 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                 </div>
               </div>
 
-              <div className="flex flex-col justify-center bg-[#f8faf9] p-3 rounded-xl border border-[#dce6e1]">
-                <span className="text-[9.5px] font-bold uppercase tracking-wider text-[#4d6960]">Assigned Product Code</span>
-                <span className="font-mono text-lg font-bold text-[#0b3b2c]">
-                  {codeLoading ? <Loader2 className="w-4 h-4 animate-spin text-[#0b3b2c]" /> : productCode}
-                </span>
+              {/* 2-Column: Product Name & Description */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Product Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. Pure Banarasi Silk Saree"
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Product Description</label>
+                  <textarea
+                    rows={2}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Weaving specs, fabric blend, stone quality..."
+                    className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none resize-none"
+                  />
+                </div>
               </div>
-            </div>
 
-            {/* 2-Column Side-by-Side: Name & Description */}
-            <div className="bg-white rounded-2xl border border-[#e2eae6] p-4 shadow-xs grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Product Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Banarasi Kanjeevaram Saree"
-                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold outline-none"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Product Description</label>
-                <textarea
-                  rows={2}
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Fabric weave details, design specs, care instructions..."
-                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs outline-none resize-none"
-                />
-              </div>
-            </div>
+              {/* Categories & Opening Stock */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category (Live Masters) *</label>
+                  <select
+                    required
+                    value={selectedCategory}
+                    onChange={(e) => {
+                      setSelectedCategory(e.target.value);
+                      setSelectedSubCategory('');
+                    }}
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
+                  >
+                    <option value="">-- Select Category --</option>
+                    {categories
+                      .filter((c) => !c.department || c.department.toLowerCase() === department.toLowerCase())
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                  </select>
+                </div>
 
-            {/* Categories & Opening Stock */}
-            <div className="bg-white rounded-2xl border border-[#e2eae6] p-4 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category (Live Masters) *</label>
-                <select
-                  required
-                  value={selectedCategory}
-                  onChange={(e) => {
-                    setSelectedCategory(e.target.value);
-                    setSelectedSubCategory('');
-                  }}
-                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold outline-none"
-                >
-                  <option value="">-- Select Category --</option>
-                  {categories
-                    .filter((c) => !c.department || c.department.toLowerCase() === department.toLowerCase())
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
+                <div>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Sub-Category (Dynamic)</label>
+                  <select
+                    value={selectedSubCategory}
+                    onChange={(e) => setSelectedSubCategory(e.target.value)}
+                    disabled={!selectedCategory}
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none disabled:opacity-50"
+                  >
+                    <option value="">-- Select Sub-Category --</option>
+                    {filteredSubCategories.map((sc) => (
+                      <option key={sc.id} value={sc.id}>{sc.name}</option>
                     ))}
-                </select>
-              </div>
+                  </select>
+                </div>
 
-              <div>
-                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Sub-Category (Dynamic)</label>
-                <select
-                  value={selectedSubCategory}
-                  onChange={(e) => setSelectedSubCategory(e.target.value)}
-                  disabled={!selectedCategory}
-                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold outline-none disabled:opacity-50"
-                >
-                  <option value="">-- Select Sub-Category --</option>
-                  {filteredSubCategories.map((sc) => (
-                    <option key={sc.id} value={sc.id}>{sc.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Opening Stock Quantity</label>
-                <input
-                  type="number"
-                  min="0"
-                  value={openingStock}
-                  onChange={(e) => setOpeningStock(Number(e.target.value))}
-                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-bold outline-none"
-                />
-              </div>
-            </div>
-
-            {/* Variants Multi-Selection */}
-            <div className="bg-white rounded-2xl border border-[#e2eae6] p-4 shadow-xs space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#0b3b2c] flex items-center gap-1.5 border-b border-[#edf2ef] pb-2">
-                <Layers className="w-4 h-4 text-[#0b3b2c]" /> Select Variants (Linked to Master Tables)
-              </h3>
-
-              {/* Colours */}
-              <div>
-                <span className="text-[11px] font-bold text-neutral-600 block mb-1.5">Colours:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {colours.map((c) => {
-                    const active = selectedColors.includes(c.name);
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => toggleSelection(c.name, selectedColors, setSelectedColors)}
-                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
-                          active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-[#f8faf9] text-neutral-600 border-[#dce6e1]'
-                        }`}
-                      >
-                        {active && <Check className="w-3 h-3 text-[#e5c07b]" />}
-                        <span>{c.name}</span>
-                      </button>
-                    );
-                  })}
+                <div>
+                  <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Opening Stock Quantity</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={openingStock}
+                    onChange={(e) => setOpeningStock(Number(e.target.value))}
+                    className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-bold outline-none"
+                  />
                 </div>
               </div>
 
-              {/* Sizes */}
-              <div>
-                <span className="text-[11px] font-bold text-neutral-600 block mb-1.5">Sizes:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {sizes.map((s) => {
-                    const active = selectedSizes.includes(s.name);
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
-                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
-                          active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-[#f8faf9] text-neutral-600 border-[#dce6e1]'
-                        }`}
-                      >
-                        {active && <Check className="w-3 h-3 text-[#e5c07b]" />}
-                        <span>{s.name}</span>
-                      </button>
-                    );
-                  })}
+              {/* Multi-Select Variant Pills */}
+              <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-2.5">
+                <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">
+                  Select Variants (From Live Masters)
+                </span>
+
+                {/* Colours */}
+                <div>
+                  <span className="text-[10px] font-bold text-neutral-600 block mb-1">Colours:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {colours.map((c) => {
+                      const active = selectedColors.includes(c.name);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleSelection(c.name, selectedColors, setSelectedColors)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                            active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
+                          }`}
+                        >
+                          {active && <Check className="w-2.5 h-2.5 text-[#e5c07b]" />}
+                          <span>{c.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Sizes */}
+                <div>
+                  <span className="text-[10px] font-bold text-neutral-600 block mb-1">Sizes:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {sizes.map((s) => {
+                      const active = selectedSizes.includes(s.name);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                            active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
+                          }`}
+                        >
+                          {active && <Check className="w-2.5 h-2.5 text-[#e5c07b]" />}
+                          <span>{s.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Fabrics */}
+                <div>
+                  <span className="text-[10px] font-bold text-neutral-600 block mb-1">Fabrics:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {fabrics.map((f) => {
+                      const active = selectedFabrics.includes(f.name);
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => toggleSelection(f.name, selectedFabrics, setSelectedFabrics)}
+                          className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                            active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
+                          }`}
+                        >
+                          {active && <Check className="w-2.5 h-2.5 text-[#e5c07b]" />}
+                          <span>{f.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              {/* Fabrics */}
-              <div>
-                <span className="text-[11px] font-bold text-neutral-600 block mb-1.5">Fabrics:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {fabrics.map((f) => {
-                    const active = selectedFabrics.includes(f.name);
-                    return (
-                      <button
-                        key={f.id}
-                        type="button"
-                        onClick={() => toggleSelection(f.name, selectedFabrics, setSelectedFabrics)}
-                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 border cursor-pointer ${
-                          active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-[#f8faf9] text-neutral-600 border-[#dce6e1]'
-                        }`}
-                      >
-                        {active && <Check className="w-3 h-3 text-[#e5c07b]" />}
-                        <span>{f.name}</span>
-                      </button>
-                    );
-                  })}
+              {/* Tagged Images Section */}
+              <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-2">
+                <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">
+                  Product Media & Colour Mapping
+                </span>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    placeholder="Paste Image URL..."
+                    value={imageUrlInput}
+                    onChange={(e) => setImageUrlInput(e.target.value)}
+                    className="flex-1 px-3 py-2 rounded-xl border border-[#dce6e1] bg-white outline-none"
+                  />
+                  <select
+                    value={selectedColorForUpload}
+                    onChange={(e) => setSelectedColorForUpload(e.target.value)}
+                    className="sm:w-44 px-3 py-2 rounded-xl border border-[#dce6e1] bg-white font-semibold outline-none"
+                  >
+                    <option value="">Tag To Colour</option>
+                    {selectedColors.length > 0 ? (
+                      selectedColors.map((c) => <option key={c} value={c}>{c}</option>)
+                    ) : (
+                      colours.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)
+                    )}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleAddImage}
+                    className="px-3 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-[#e5c07b]" /> Add
+                  </button>
                 </div>
-              </div>
-            </div>
 
-            {/* Images & Colour Tagging */}
-            <div className="bg-white rounded-2xl border border-[#e2eae6] p-4 shadow-xs space-y-3">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#0b3b2c] flex items-center gap-1.5 border-b border-[#edf2ef] pb-2">
-                <Palette className="w-4 h-4 text-[#0b3b2c]" /> Product Media & Color Tagging
-              </h3>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  placeholder="Paste Image URL..."
-                  value={imageUrlInput}
-                  onChange={(e) => setImageUrlInput(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs outline-none"
-                />
-                <select
-                  value={selectedColorForUpload}
-                  onChange={(e) => setSelectedColorForUpload(e.target.value)}
-                  className="sm:w-48 px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] text-xs font-semibold outline-none"
-                >
-                  <option value="">Tag To Colour</option>
-                  {selectedColors.length > 0 ? (
-                    selectedColors.map((c) => <option key={c} value={c}>{c}</option>)
-                  ) : (
-                    colours.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)
-                  )}
-                </select>
+                {images.length > 0 && (
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2">
+                    {images.map((img) => (
+                      <div key={img.id} className="relative rounded-xl border border-[#dce6e1] bg-white overflow-hidden">
+                        <img src={img.url} alt={img.color_tag} className="w-full h-16 object-cover" />
+                        <div className="p-1 flex items-center justify-between text-[9px] font-bold">
+                          <span className="truncate text-[#0b3b2c]">{img.color_tag}</span>
+                          <Trash2 onClick={() => handleRemoveImage(img.id)} className="w-3 h-3 text-rose-500 cursor-pointer" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex justify-end gap-2 pt-2 border-t">
                 <button
                   type="button"
-                  onClick={handleAddImage}
-                  className="px-4 py-2 rounded-xl bg-[#0b3b2c] text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                  onClick={() => setActiveModal(null)}
+                  className="px-4 py-2 rounded-xl text-neutral-500 hover:bg-neutral-100 cursor-pointer font-bold"
                 >
-                  <Upload className="w-3.5 h-3.5 text-[#e5c07b]" />
-                  <span>Add Image</span>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingProduct}
+                  className="px-6 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {submittingProduct ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5 text-[#e5c07b]" />}
+                  <span>Save Product Master</span>
                 </button>
               </div>
-
-              {images.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 pt-2">
-                  {images.map((img) => (
-                    <div key={img.id} className="relative rounded-xl border border-[#dce6e1] bg-[#f8faf9] overflow-hidden">
-                      <img src={img.url} alt={img.color_tag} className="w-full h-24 object-cover" />
-                      <div className="p-1.5 flex items-center justify-between bg-white border-t border-[#edf2ef]">
-                        <span className="text-[10px] font-bold text-[#0b3b2c] truncate">{img.color_tag}</span>
-                        <button type="button" onClick={() => handleRemoveImage(img.id)} className="text-rose-500 p-0.5">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                disabled={submittingProduct}
-                className="px-6 py-2.5 rounded-xl bg-[#0b3b2c] hover:bg-[#082a20] text-white font-bold text-xs flex items-center gap-2 shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                {submittingProduct ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-[#e5c07b]" />}
-                <span>Save Product Record</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 2. CATEGORY MASTER TAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'category' && (
-        <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
-          <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
-            <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-[#0b3b2c]" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Main Categories ({categories.length})
-              </h3>
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setActiveModal('category')}
-                className="px-3 py-1 rounded-full bg-[#0b3b2c] text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
-              >
-                <Plus className="w-3 h-3 text-[#e5c07b]" />
-                <span>Add Category</span>
-              </button>
-            )}
-          </div>
-          <table className="w-full text-left text-xs font-sans">
-            <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
-              <tr>
-                <th className="py-2.5 px-4">Name</th>
-                <th className="py-2.5 px-4">Department</th>
-                <th className="py-2.5 px-4">Slug</th>
-                <th className="py-2.5 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#edf2ef]">
-              {categories.map((cat) => (
-                <tr key={cat.id} className="hover:bg-[#f4f7f5] transition-colors">
-                  <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{cat.name}</td>
-                  <td className="py-2.5 px-4">
-                    <span className="px-2 py-0.5 rounded-full bg-[#f0f4f2] text-[#0b3b2c] text-[10px] font-semibold uppercase">
-                      {cat.department || 'fashions'}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4 font-mono text-[11px] text-neutral-400">{cat.slug}</td>
-                  <td className="py-2.5 px-4 text-right">
-                    {canDelete && (
-                      <button onClick={() => handleDeleteItem('categories', cat.id)} className="p-1 text-rose-600 hover:bg-rose-50 rounded">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 3. SUB-CATEGORY MASTER TAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'subcategory' && (
-        <div className="bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
-          <div className="p-3.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[#0b3b2c]" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Sub-Categories ({subCategories.length})
-              </h3>
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setActiveModal('subcategory')}
-                className="px-3 py-1 rounded-full bg-[#0b3b2c] text-white text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
-              >
-                <Plus className="w-3 h-3 text-[#e5c07b]" />
-                <span>Add Sub-Category</span>
-              </button>
-            )}
-          </div>
-          <table className="w-full text-left text-xs font-sans">
-            <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
-              <tr>
-                <th className="py-2.5 px-4">Sub-Category</th>
-                <th className="py-2.5 px-4">Parent Category</th>
-                <th className="py-2.5 px-4 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#edf2ef]">
-              {subCategories.map((sub) => (
-                <tr key={sub.id} className="hover:bg-[#f4f7f5] transition-colors">
-                  <td className="py-2.5 px-4 font-bold text-[#0c2b22]">{sub.name}</td>
-                  <td className="py-2.5 px-4">
-                    <span className="px-2 py-0.5 rounded-md bg-[#e4efe9] text-[#0b3b2c] font-bold text-[10px]">
-                      {sub.category_name || 'Category'}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-4 text-right">
-                    {canDelete && (
-                      <button onClick={() => handleDeleteItem('sub_categories', sub.id)} className="p-1 text-rose-600 hover:bg-rose-50 rounded">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 4. COLOURS MASTER TAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'colours' && (
-        <div className="bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div className="flex items-center gap-2">
-              <Palette className="w-4 h-4 text-[#ff4d6d]" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Colours Master ({colours.length})
-              </h3>
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setActiveModal('colours')}
-                className="px-3.5 py-1.5 rounded-full bg-[#0b3b2c] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-[#e5c07b]" />
-                <span>Add Colour</span>
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {colours.map((col) => (
-              <div key={col.id} className="p-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] flex items-center justify-between gap-1.5">
-                <span className="text-xs font-bold text-[#0c2b22] truncate">{col.name}</span>
-                {canDelete && (
-                  <button onClick={() => handleDeleteItem('colours', col.id)} className="text-rose-500 hover:text-rose-700">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            ))}
+            </form>
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 5. SIZE MASTER TAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'sizes' && (
-        <div className="bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div className="flex items-center gap-2">
-              <Ruler className="w-4 h-4 text-blue-500" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Sizes Master ({sizes.length})
-              </h3>
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setActiveModal('sizes')}
-                className="px-3.5 py-1.5 rounded-full bg-[#0b3b2c] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-[#e5c07b]" />
-                <span>Add Size</span>
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {sizes.map((sz) => (
-              <div key={sz.id} className="p-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] flex items-center justify-between gap-1.5">
-                <span className="text-xs font-bold text-[#0c2b22] truncate">{sz.name}</span>
-                {canDelete && (
-                  <button onClick={() => handleDeleteItem('sizes', sz.id)} className="text-rose-500 hover:text-rose-700">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 6. FABRIC MASTER TAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'fabrics' && (
-        <div className="bg-white rounded-2xl border border-[#e2eae6] p-5 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <div className="flex items-center gap-2">
-              <Scissors className="w-4 h-4 text-emerald-500" />
-              <h3 className="font-bold text-xs uppercase tracking-wider text-[#0b3b2c]">
-                Fabrics Master ({fabrics.length})
-              </h3>
-            </div>
-            {canEdit && (
-              <button
-                type="button"
-                onClick={() => setActiveModal('fabrics')}
-                className="px-3.5 py-1.5 rounded-full bg-[#0b3b2c] text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-[#e5c07b]" />
-                <span>Add Fabric</span>
-              </button>
-            )}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {fabrics.map((fb) => (
-              <div key={fb.id} className="p-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] flex items-center justify-between gap-1.5">
-                <span className="text-xs font-bold text-[#0c2b22] truncate">{fb.name}</span>
-                {canDelete && (
-                  <button onClick={() => handleDeleteItem('fabrics', fb.id)} className="text-rose-500 hover:text-rose-700">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* MODALS */}
-      {/* ========================================================================= */}
-      {/* Category Modal */}
+      {/* MODAL 2: CATEGORY POPUP */}
       {activeModal === 'category' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c]">Add Main Category</h3>
@@ -944,7 +882,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                   placeholder="e.g. Sarees"
                   value={catName}
                   onChange={(e) => setCatName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-semibold"
                 />
               </div>
               <div>
@@ -958,7 +896,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                   <option value="jewellery">Jewellery</option>
                 </select>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t">
                 <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
                 <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save Category</button>
               </div>
@@ -967,9 +905,9 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
         </div>
       )}
 
-      {/* Sub-Category Modal */}
+      {/* MODAL 3: SUB-CATEGORY POPUP */}
       {activeModal === 'subcategory' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c]">Add Sub-Category</h3>
@@ -982,7 +920,7 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                   required
                   value={subCatParentId}
                   onChange={(e) => setSubCatParentId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-semibold"
                 >
                   <option value="">-- Choose Category --</option>
                   {categories.map((c) => (
@@ -998,10 +936,10 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                   placeholder="e.g. Kanchipuram Silk"
                   value={subCatName}
                   onChange={(e) => setSubCatName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none"
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-semibold"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t">
                 <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
                 <button type="submit" className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold">Save Sub-Category</button>
               </div>
@@ -1010,9 +948,9 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
         </div>
       )}
 
-      {/* Dynamic Modal for (Colours / Sizes / Fabrics) */}
+      {/* MODAL 4, 5, 6: (COLOURS / SIZES / FABRICS) DYNAMIC POPUP */}
       {(activeModal === 'colours' || activeModal === 'sizes' || activeModal === 'fabrics') && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl border border-[#dce6e1] space-y-3 text-xs">
             <div className="flex justify-between items-center border-b pb-2">
               <h3 className="font-bold text-[#0b3b2c] uppercase">Add New {activeModal.slice(0, -1)}</h3>
@@ -1036,12 +974,12 @@ export default function AdminMasters({ currentUser }: AdminMastersProps) {
                   className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none font-semibold"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t">
                 <button type="button" onClick={() => setActiveModal(null)} className="px-3 py-1.5 rounded-full text-neutral-500">Cancel</button>
                 <button
                   type="button"
                   onClick={() => handleSaveVariant(activeModal as 'colours' | 'sizes' | 'fabrics')}
-                  className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold"
+                  className="px-4 py-1.5 rounded-full bg-[#0b3b2c] text-white font-bold cursor-pointer"
                 >
                   Save
                 </button>
