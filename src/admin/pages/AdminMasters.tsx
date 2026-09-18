@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   Package,
   Layers,
@@ -14,7 +14,8 @@ import {
   Upload,
   Check,
   Save,
-  Loader2
+  Loader2,
+  Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
@@ -85,7 +86,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
   // -------------------------------------------------------------
   // Product Master Modal Form States
   // -------------------------------------------------------------
-  const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
+  const [brand, setBrand] = useState<'fashions' | 'jewellery'>('fashions');
   const [productCode, setProductCode] = useState<string>('');
   const [codeLoading, setCodeLoading] = useState<boolean>(false);
   const [name, setName] = useState<string>('');
@@ -98,8 +99,9 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [openingStock, setOpeningStock] = useState<number>(0);
   const [images, setImages] = useState<TaggedImage[]>([]);
-  const [imageUrlInput, setImageUrlInput] = useState<string>('');
-  const [selectedColorForUpload, setSelectedColorForUpload] = useState<string>('');
+  const [uploadingImage, setUploadingImage] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [submittingProduct, setSubmittingProduct] = useState<boolean>(false);
   const [productError, setProductError] = useState<string | null>(null);
 
@@ -142,7 +144,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
 
     const generateProductCode = async () => {
       setCodeLoading(true);
-      const prefix = department === 'fashions' ? 'KF' : 'KJ';
+      const prefix = brand === 'fashions' ? 'KF' : 'KJ';
       try {
         const { data, error } = await supabase
           .from('products')
@@ -171,7 +173,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     };
 
     generateProductCode();
-  }, [department, activeModal]);
+  }, [brand, activeModal]);
 
   const makeId = (prefix: string) => `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
@@ -272,21 +274,65 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     }
   };
 
-  // Image Upload Handlers
-  const handleAddImage = () => {
-    if (!imageUrlInput.trim()) return;
-    const tag = selectedColorForUpload || (selectedColors[0] || 'Default');
-    const newImage: TaggedImage = {
-      id: `${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      url: imageUrlInput.trim(),
-      color_tag: tag
-    };
-    setImages([...images, newImage]);
-    setImageUrlInput('');
+  // Direct File Image Upload Handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingImage(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+        const filePath = `products/${fileName}`;
+
+        // Attempt Supabase Storage Upload
+        const { error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(filePath, file);
+
+        let finalUrl = '';
+        if (!uploadError) {
+          const { data: publicData } = supabase.storage
+            .from('product-images')
+            .getPublicUrl(filePath);
+          finalUrl = publicData.publicUrl;
+        } else {
+          // Fallback to local base64 preview if bucket doesn't exist
+          finalUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+        }
+
+        const defaultTag = selectedColors.length > 0 ? selectedColors[0] : (colours[0]?.name || 'General');
+        const newImg: TaggedImage = {
+          id: `${Date.now()}_${i}`,
+          url: finalUrl,
+          color_tag: defaultTag
+        };
+
+        setImages((prev) => [...prev, newImg]);
+      }
+    } catch (err) {
+      console.error('File upload error:', err);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setUploadingImage(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUpdateImageColorTag = (imgId: string, newTag: string) => {
+    setImages((prev) =>
+      prev.map((img) => (img.id === imgId ? { ...img, color_tag: newTag } : img))
+    );
   };
 
   const handleRemoveImage = (id: string) => {
-    setImages(images.filter((img) => img.id !== id));
+    setImages((prev) => prev.filter((img) => img.id !== id));
   };
 
   // Save Product Master Record
@@ -304,7 +350,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
         product_code: productCode,
         name: name.trim(),
         description: description.trim(),
-        department: department,
+        department: brand,
         category_id: selectedCategory || null,
         category_name: selectedCatObj?.name || null,
         sub_category_id: selectedSubCategory || null,
@@ -343,6 +389,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     }
   };
 
+  // Dynamic Sub-Category Filtering
   const filteredSubCategories = subCategories.filter(
     (sub) => sub.category_id === selectedCategory
   );
@@ -365,7 +412,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
         </div>
       </div>
 
-      {/* 2. Overview Tables (Categories, Sub-Categories & Variant Summaries) */}
+      {/* 2. Overview Tables */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         
         {/* Categories Table */}
@@ -392,7 +439,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
               <thead className="bg-[#f8faf9] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
                 <tr>
                   <th className="py-2.5 px-4">Name</th>
-                  <th className="py-2.5 px-4">Dept</th>
+                  <th className="py-2.5 px-4">Brand</th>
                   <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
@@ -537,6 +584,8 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
       {activeModal === 'product' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/50 backdrop-blur-2xs animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-[#dce6e1] space-y-4 text-xs">
+            
+            {/* Modal Header with "PRODUCT CODE" Display */}
             <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3 sticky top-0 bg-white z-10">
               <div className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-[#0b3b2c]" />
@@ -546,8 +595,8 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="bg-[#f0f4f2] px-3 py-1 rounded-xl border border-[#dce6e1] text-right">
-                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#4d6960] block">Assigned Code</span>
+                <div className="bg-[#f0f4f2] px-4 py-1.5 rounded-xl border border-[#dce6e1] text-right">
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-[#4d6960] block">PRODUCT CODE</span>
                   <span className="font-mono text-sm font-bold text-[#0b3b2c]">
                     {codeLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : productCode}
                   </span>
@@ -565,29 +614,34 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
             )}
 
             <form onSubmit={handleSaveProduct} className="space-y-4">
-              {/* Department Selection */}
+              
+              {/* Brand Toggle Switch (Fashion vs Jewellery) */}
               <div>
-                <label className="text-xs font-bold text-[#0b3b2c] block mb-1.5">Department *</label>
-                <div className="flex gap-2">
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1.5">Brand *</label>
+                <div className="inline-flex p-1 bg-[#f0f4f2] rounded-2xl border border-[#dce6e1] w-full sm:w-auto">
                   <button
                     type="button"
-                    onClick={() => setDepartment('fashions')}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer ${
-                      department === 'fashions' ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs' : 'bg-[#f8faf9] text-[#4d6960] border-[#dce6e1]'
+                    onClick={() => setBrand('fashions')}
+                    className={`flex-1 sm:flex-initial px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      brand === 'fashions'
+                        ? 'bg-[#0b3b2c] text-white shadow-xs'
+                        : 'text-[#4d6960] hover:text-[#0b3b2c]'
                     }`}
                   >
                     <Building2 className="w-3.5 h-3.5" />
-                    <span>Kashvi Fashions (KF)</span>
+                    <span>Fashion (KF)</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDepartment('jewellery')}
-                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer ${
-                      department === 'jewellery' ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs' : 'bg-[#f8faf9] text-[#4d6960] border-[#dce6e1]'
+                    onClick={() => setBrand('jewellery')}
+                    className={`flex-1 sm:flex-initial px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                      brand === 'jewellery'
+                        ? 'bg-[#0b3b2c] text-white shadow-xs'
+                        : 'text-[#4d6960] hover:text-[#0b3b2c]'
                     }`}
                   >
                     <Tag className="w-3.5 h-3.5" />
-                    <span>Kashvi Jewellery (KJ)</span>
+                    <span>Jewellery (KJ)</span>
                   </button>
                 </div>
               </div>
@@ -617,7 +671,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 </div>
               </div>
 
-              {/* Categories & Opening Stock */}
+              {/* Categories, Sub-Categories & Opening Stock */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category (Live Masters) *</label>
@@ -631,11 +685,9 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                     className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
                   >
                     <option value="">-- Select Category --</option>
-                    {categories
-                      .filter((c) => !c.department || c.department.toLowerCase() === department.toLowerCase())
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -742,48 +794,72 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 </div>
               </div>
 
-              {/* Tagged Images Section */}
-              <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-2">
-                <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">
-                  Product Media & Colour Mapping
-                </span>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    placeholder="Paste Image URL..."
-                    value={imageUrlInput}
-                    onChange={(e) => setImageUrlInput(e.target.value)}
-                    className="flex-1 px-3 py-2 rounded-xl border border-[#dce6e1] bg-white outline-none"
-                  />
-                  <select
-                    value={selectedColorForUpload}
-                    onChange={(e) => setSelectedColorForUpload(e.target.value)}
-                    className="sm:w-44 px-3 py-2 rounded-xl border border-[#dce6e1] bg-white font-semibold outline-none"
-                  >
-                    <option value="">Tag To Colour</option>
-                    {selectedColors.length > 0 ? (
-                      selectedColors.map((c) => <option key={c} value={c}>{c}</option>)
-                    ) : (
-                      colours.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)
-                    )}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleAddImage}
-                    className="px-3 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold flex items-center justify-center gap-1 cursor-pointer"
-                  >
-                    <Upload className="w-3.5 h-3.5 text-[#e5c07b]" /> Add
-                  </button>
+              {/* Direct File Image Upload & Underneath Color Tagging */}
+              <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-3">
+                <div>
+                  <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">
+                    Product Images & Colour Tagging
+                  </span>
+                  <p className="text-[10px] text-[#4d6960] mt-0.5">
+                    Upload product photos directly. Once uploaded, tag each photo to its corresponding variant colour below the image.
+                  </p>
                 </div>
 
+                {/* Upload Action Box */}
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                    id="product-file-input"
+                  />
+                  <label
+                    htmlFor="product-file-input"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-[#dce6e1] hover:border-[#0b3b2c] text-[#0b3b2c] font-bold text-xs shadow-2xs transition-all cursor-pointer"
+                  >
+                    {uploadingImage ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-[#0b3b2c]" />
+                    ) : (
+                      <Upload className="w-4 h-4 text-[#e5c07b]" />
+                    )}
+                    <span>{uploadingImage ? 'Uploading Photos...' : 'Choose Product Images'}</span>
+                  </label>
+                  <span className="text-[11px] text-neutral-400">Supports JPG, PNG, WEBP</span>
+                </div>
+
+                {/* Uploaded Images Grid with Underneath Colour Tagging */}
                 {images.length > 0 && (
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3 pt-2">
                     {images.map((img) => (
-                      <div key={img.id} className="relative rounded-xl border border-[#dce6e1] bg-white overflow-hidden">
-                        <img src={img.url} alt={img.color_tag} className="w-full h-16 object-cover" />
-                        <div className="p-1 flex items-center justify-between text-[9px] font-bold">
-                          <span className="truncate text-[#0b3b2c]">{img.color_tag}</span>
-                          <Trash2 onClick={() => handleRemoveImage(img.id)} className="w-3 h-3 text-rose-500 cursor-pointer" />
+                      <div key={img.id} className="rounded-2xl border border-[#dce6e1] bg-white overflow-hidden shadow-xs flex flex-col justify-between">
+                        <div className="relative group h-28 bg-[#f0f4f2]">
+                          <img src={img.url} alt="Variant" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(img.id)}
+                            className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 text-white hover:bg-rose-600 transition-colors"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        
+                        {/* Underneath Tag to Colour Dropdown */}
+                        <div className="p-2 border-t border-[#edf2ef] bg-[#fbfcfc] space-y-1">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-[#4d6960] block">Tag To Colour:</span>
+                          <select
+                            value={img.color_tag}
+                            onChange={(e) => handleUpdateImageColorTag(img.id, e.target.value)}
+                            className="w-full px-2 py-1 rounded-lg border border-[#dce6e1] bg-white text-[11px] font-bold text-[#0b3b2c] outline-none"
+                          >
+                            {selectedColors.length > 0 ? (
+                              selectedColors.map((c) => <option key={c} value={c}>{c}</option>)
+                            ) : (
+                              colours.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)
+                            )}
+                          </select>
                         </div>
                       </div>
                     ))}
@@ -835,7 +911,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
                 />
               </div>
               <div>
-                <label className="font-bold text-neutral-600 block mb-1">Department</label>
+                <label className="font-bold text-neutral-600 block mb-1">Brand</label>
                 <select
                   value={catDept}
                   onChange={(e) => setCatDept(e.target.value)}
