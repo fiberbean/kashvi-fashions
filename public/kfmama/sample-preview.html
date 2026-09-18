@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kashvi Admin — Design Concepts Preview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Plus+Jakarta+Sans:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 30px 20px;
+    }
+    
+    .header-bar {
+      text-align: center;
+      max-width: 900px;
+      margin: 0 auto 36px;
+    }
+    .header-bar h1 {
+      font-size: 2rem;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .header-bar p {
+      color: #94a3b8;
+      font-size: 0.95rem;
+    }
+
+    .concept-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 28px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .concept-card {
+      border-radius: 20px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 480px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.1);
+      transition: transform 0.25s ease;
+    }
+    .concept-card:hover {
+      transform: translateY(-4px);
+    }
+
+    .tag {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+    }
+
+    /* CONCEPT 1: ATELIER CHAMPAGNE */
+    .c1-theme {
+      background: #faf8f5;
+      color: #1a1a1a;
+      border: 1px solid #e7dfd5;
+    }
+    .c1-theme .tag { background: #f0e6d6; color: #8c6d37; }
+    .c1-title { font-family: 'Cinzel', serif; font-size: 1.4rem; color: #1a1a1a; }
+    .c1-sub { color: #78716c; font-size: 0.8rem; margin-top: 4px; }
+    .c1-ui-box {
+      background: #ffffff;
+      border: 1px solid #e7dfd5;
+      border-radius: 14px;
+      padding: 16px;
+      margin: 16px 0;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+    .c1-btn {
+      background: #1a1a1a;
+      color: #fff;
+      border: 1px solid #d4af37;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    /* CONCEPT 2: CYBERPUNK VELVET */
+    .c2-theme {
+      background: #050b0a;
+      color: #fff;
+      border: 1px solid #00ffaa33;
+      box-shadow: 0 0 30px rgba(0,255,170,0.05);
+    }
+    .c2-theme .tag { background: rgba(0,255,170,0.15); color: #00ffaa; }
+    .c2-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; color: #00ffaa; }
+    .c2-sub { color: #64748b; font-size: 0.8rem; margin-top: 4px; }
+    .c2-ui-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(0,255,170,0.2);
+      border-radius: 14px;
+      padding: 16px;
+      margin: 16px 0;
+      backdrop-filter: blur(10px);
+    }
+    .c2-btn {
+      background: linear-gradient(135deg, #00ffaa 0%, #00b377 100%);
+      color: #050b0a;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 0.8rem;
+      font-weight: 800;
+      box-shadow: 0 0 15px rgba(0,255,170,0.3);
+    }
+
+    /* CONCEPT 3: NORDIC CERAMIC */
+    .c3-theme {
+      background: #f1f5f3;
+      color: #0f2e24;
+      border: 1px solid #dce5e0;
+    }
+    .c3-theme .tag { background: #d7e8e1; color: #0b3b2c; }
+    .c3-title { font-size: 1.35rem; font-weight: 800; color: #0b3b2c; }
+    .c3-sub { color: #527568; font-size: 0.8rem; margin-top: 4px; }
+    .c3-ui-box {
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 16px;
+      margin: 16px 0;
+      box-shadow: 6px 6px 16px rgba(0,0,0,0.04), -6px -6px 16px rgba(255,255,255,0.8);
+      border: 1px solid #e4ece7;
+    }
+    .c3-btn {
+      background: #0b3b2c;
+      color: #fff;
+      border: none;
+      border-radius: 20px;
+      padding: 8px 18px;
+      font-size: 0.8rem;
+      font-weight: 700;
+    }
+
+    /* CONCEPT 4: ROYAL MONOLITH */
+    .c4-theme {
+      background: #061913;
+      color: #fff;
+      border: 1px solid #e5c07b44;
+      box-shadow: 0 0 35px rgba(229,192,123,0.08);
+    }
+    .c4-theme .tag { background: rgba(229,192,123,0.15); color: #e5c07b; }
+    .c4-title { font-family: 'Cinzel', serif; font-size: 1.4rem; color: #e5c07b; }
+    .c4-sub { color: #739487; font-size: 0.8rem; margin-top: 4px; }
+    .c4-ui-box {
+      background: rgba(14, 45, 36, 0.6);
+      border: 1px solid rgba(229,192,123,0.25);
+      border-radius: 14px;
+      padding: 16px;
+      margin: 16px 0;
+    }
+    .c4-btn {
+      background: linear-gradient(135deg, #e5c07b 0%, #b88d3b 100%);
+      color: #061913;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .demo-pill {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header-bar">
+    <h1>Kashvi Admin Visual Concepts</h1>
+    <p>Ee 4 concepts lo meeku ey visual look & feel nachindo select chesi cheppandi.</p>
+  </div>
+
+  <div class="concept-grid">
+
+    <!-- 1. ATELIER CHAMPAGNE -->
+    <div class="concept-card c1-theme">
+      <div>
+        <span class="tag">Concept 1</span>
+        <h2 class="c1-title">Atelier Champagne</h2>
+        <p class="c1-sub">Clean French editorial luxury (White & Soft Gold)</p>
+
+        <div class="c1-ui-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#78716c;">Today's Revenue</span>
+            <span class="demo-pill" style="background:#f5efe6; color:#8c6d37;">LIVE PULSE</span>
+          </div>
+          <div style="font-family:'Cinzel', serif; font-size:1.8rem; font-weight:700; color:#1a1a1a;">₹ 1,42,850</div>
+          <div style="font-size:0.75rem; color:#78716c; margin-top:6px;">+18% from yesterday</div>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="c1-btn">+ New Master</button>
+          <span style="font-size:0.75rem; color:#78716c;">Saree Catalog</span>
+        </div>
+      </div>
+      <div style="font-size:0.75rem; color:#8c6d37; font-weight:700; margin-top:16px;">
+        Vibe: Vogue, Chanel, Luxury Fashion House
+      </div>
+    </div>
+
+    <!-- 2. CYBERPUNK VELVET -->
+    <div class="concept-card c2-theme">
+      <div>
+        <span class="tag">Concept 2</span>
+        <h2 class="c2-title">Cyberpunk Velvet</h2>
+        <p class="c2-sub">Futuristic dark cockpit HUD (Neon Jade & Rose)</p>
+
+        <div class="c2-ui-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#94a3b8; font-family:'Space Grotesk';">Vault Real-time Inflow</span>
+            <span class="demo-pill" style="background:rgba(0,255,170,0.1); color:#00ffaa; border:1px solid rgba(0,255,170,0.3);">NODE ACTIVE</span>
+          </div>
+          <div style="font-family:'Space Grotesk', sans-serif; font-size:1.9rem; font-weight:800; color:#fff;">₹ 1,42,850</div>
+          <div style="font-size:0.75rem; color:#00ffaa; margin-top:6px; font-family:'Space Grotesk';">▲ 99.4% Fulfillment Rate</div>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="c2-btn">DEPLOY ATTRIBUTE</button>
+        </div>
+      </div>
+      <div style="font-size:0.75rem; color:#00ffaa; font-weight:700; margin-top:16px;">
+        Vibe: Sci-Fi Spacecraft OS, Cyberpunk HUD
+      </div>
+    </div>
+
+    <!-- 3. NORDIC CERAMIC -->
+    <div class="concept-card c3-theme">
+      <div>
+        <span class="tag">Concept 3</span>
+        <h2 class="c3-title">Nordic Ceramic</h2>
+        <p class="c3-sub">Soft neumorphic, clean & friendly workflow (Raycast feel)</p>
+
+        <div class="c3-ui-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#527568;">Sales Pipeline</span>
+            <span class="demo-pill" style="background:#e4f2eb; color:#0b3b2c;">Verified</span>
+          </div>
+          <div style="font-size:1.8rem; font-weight:800; color:#0b3b2c;">₹ 1,42,850</div>
+          <div style="font-size:0.75rem; color:#527568; margin-top:6px;">82 orders dispatched today</div>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="c3-btn">+ Add Item</button>
+        </div>
+      </div>
+      <div style="font-size:0.75rem; color:#0b3b2c; font-weight:700; margin-top:16px;">
+        Vibe: Friendly, Linear.app, Easy to handle
+      </div>
+    </div>
+
+    <!-- 4. ROYAL IMPERIAL MONOLITH -->
+    <div class="concept-card c4-theme">
+      <div>
+        <span class="tag">Concept 4</span>
+        <h2 class="c4-title">Royal Monolith</h2>
+        <p class="c4-sub">Dark velvet emerald & brushed gold heritage (Kashvi Vault)</p>
+
+        <div class="c4-ui-box">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <span style="font-size:0.75rem; font-weight:700; text-transform:uppercase; color:#e5c07b;">Temple Vault Orders</span>
+            <span class="demo-pill" style="background:rgba(229,192,123,0.15); color:#e5c07b; border:1px solid #e5c07b66;">CERTIFIED</span>
+          </div>
+          <div style="font-family:'Cinzel', serif; font-size:1.8rem; font-weight:700; color:#e5c07b;">₹ 1,42,850</div>
+          <div style="font-size:0.75rem; color:#85a89b; margin-top:6px;">22K Antique Collections</div>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center;">
+          <button class="c4-btn">MANAGE VAULT</button>
+        </div>
+      </div>
+      <div style="font-size:0.75rem; color:#e5c07b; font-weight:700; margin-top:16px;">
+        Vibe: Heritage Palace, Royal Gold, Majestic
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
