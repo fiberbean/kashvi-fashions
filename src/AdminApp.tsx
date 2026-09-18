@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import AdminNavbar from './components/AdminNavbar';
-import AdminLoginScreen from './components/AdminLoginScreen';
-import StickyOrderAlerts from './components/StickyOrderAlerts';
-import AdminDashboard from './pages/AdminDashboard';
-import { OrderRecord } from './types';
+import AdminNavbar from './admin/components/AdminNavbar';
+import AdminLoginScreen from './admin/components/AdminLoginScreen';
+import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
+import AdminDashboard from './admin/pages/AdminDashboard';
+import { OrderRecord } from './admin/types';
 
 export default function AdminApp() {
   const location = useLocation();
@@ -14,7 +14,7 @@ export default function AdminApp() {
 
   // 10 నిమిషాల ఇన్‌యాక్టివిటీ టైమర్
   const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const logoutSession = () => {
     sessionStorage.removeItem('kfmama_auth_session');
