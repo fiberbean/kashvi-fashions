@@ -17,7 +17,9 @@ import {
   Tag,
   ShieldCheck,
   RotateCcw,
-  Palette
+  Palette,
+  Ruler,
+  Scissors
 } from 'lucide-react';
 import { AdminStaffUser } from '../types';
 import { AdminViewType } from '../../AdminApp';
@@ -167,7 +169,7 @@ export default function AdminNavbar({
               )}
             </div>
 
-            {/* 3. Masters Dropdown */}
+            {/* 3. Masters Dropdown (Configured with Product, Category, Sub-Category, Colours, Size, Fabric) */}
             <div className="relative">
               <button
                 type="button"
@@ -184,38 +186,65 @@ export default function AdminNavbar({
               </button>
 
               {openDropdown === 'masters' && (
-                <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute top-full left-0 mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  {/* Master 1: Product */}
                   <button
                     type="button"
                     onClick={() => handleSelectView('masters')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
+                  >
+                    <Package className="w-3.5 h-3.5 text-[#0b3b2c]" />
+                    <span>Product Master</span>
+                  </button>
+
+                  {/* Master 2: Category */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
+                  >
+                    <Tag className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Category Master</span>
+                  </button>
+
+                  {/* Master 3: Sub-Category */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectView('masters')}
+                    className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <Layers className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>All Masters Overview</span>
+                    <span>Sub-Category Master</span>
                   </button>
+
+                  {/* Master 4: Colours */}
                   <button
                     type="button"
                     onClick={() => handleSelectView('masters')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
-                    <MapPin className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Delivery Pincodes</span>
+                    <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
+                    <span>Colours Master</span>
                   </button>
+
+                  {/* Master 5: Size */}
                   <button
                     type="button"
                     onClick={() => handleSelectView('masters')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
-                    <Truck className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Rate Cards & Shipping</span>
+                    <Ruler className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Size Master</span>
                   </button>
+
+                  {/* Master 6: Fabric */}
                   <button
                     type="button"
                     onClick={() => handleSelectView('masters')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
+                    className="w-full text-left flex items-center gap-2.5 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
-                    <Users className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Customer Directory</span>
+                    <Scissors className="w-3.5 h-3.5 text-emerald-500" />
+                    <span>Fabric Master</span>
                   </button>
                 </div>
               )}
