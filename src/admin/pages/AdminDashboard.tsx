@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   TrendingUp,
   ShoppingBag,
@@ -10,10 +10,11 @@ import {
   MessageCircle,
   Edit2,
   Trash2,
-  MapPin,
-  Clock,
-  Compass,
-  CheckCircle2
+  Download,
+  Calendar,
+  Sparkles,
+  Flame,
+  Award
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { OrderRecord, AbandonedCartUser, AdminStaffUser } from '../types';
@@ -22,6 +23,25 @@ interface AdminDashboardProps {
   currentUser: AdminStaffUser | null;
   onNewOrderNotice: (ord: OrderRecord) => void;
   syncTrigger: number;
+}
+
+type TimeRangeFilter =
+  | 'today'
+  | 'yesterday'
+  | '3days'
+  | '1week'
+  | 'half_month'
+  | 'full_month'
+  | '3months'
+  | 'half_year'
+  | 'year';
+
+interface TopItemMetric {
+  name: string;
+  image?: string;
+  unitsSold: number;
+  totalRevenue: number;
+  ordersCount: number;
 }
 
 export default function AdminDashboard({
@@ -43,6 +63,9 @@ export default function AdminDashboard({
 
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [selectedNewStatus, setSelectedNewStatus] = useState<string>('');
+
+  // Velocity / Top Items Filter State
+  const [itemTimeFilter, setItemTimeFilter] = useState<TimeRangeFilter>('today');
 
   const role = currentUser?.role || 'operations';
   const canEdit = role === 'admin' || role === 'manager';
@@ -75,14 +98,14 @@ export default function AdminDashboard({
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(30);
+        .limit(200);
 
       if (!error && orders) {
         setRecentOrders(orders);
 
-        const today = new Date().toISOString().split('T')[0];
+        const todayStr = new Date().toISOString().split('T')[0];
         const todayOrders = orders.filter(
-          (o) => o.created_at && o.created_at.startsWith(today)
+          (o) => o.created_at && o.created_at.startsWith(todayStr)
         );
 
         const sum = todayOrders.reduce((acc, curr) => acc + (Number(curr.total_amount) || 0), 0);
@@ -190,22 +213,241 @@ export default function AdminDashboard({
     }
   };
 
-  // Helper to extract location details from address
-  const getLocationDetails = (ord: OrderRecord) => {
-    const raw = ord.shipping_address || '';
-    const pincode = ord.pincode || (raw.match(/\b\d{6}\b/) ? raw.match(/\b\d{6}\b/)![0] : '533003');
-    
-    // Attempt to extract city/state
-    const parts = raw.split(',').map((p) => p.trim());
-    let locationText = 'Kakinada, AP';
-    if (parts.length >= 2) {
-      locationText = `${parts[parts.length - 2]}, ${parts[parts.length - 1].replace(pincode, '').replace('-', '').trim()}`;
+  // --- FILTER AND COMPUTE TOP SELLING ITEMS ---
+  const topSellingItems = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+    const filteredOrders = recentOrders.filter((ord) => {
+      if (!ord.created_at) return false;
+      const orderTime = new Date(ord.created_at).getTime();
+
+      switch (itemTimeFilter) {
+        case 'today':
+          return orderTime >= todayStart;
+
+        case 'yesterday': {
+          const yesterdayStart = todayStart - 24 * 60 * 60 * 1000;
+          return orderTime >= yesterdayStart && orderTime < todayStart;
+        }
+
+        case '3days': {
+          const threeDaysAgo = todayStart - 3 * 24 * 60 * 60 * 1000;
+          return orderTime >= threeDaysAgo;
+        }
+
+        case '1week': {
+          const oneWeekAgo = todayStart - 7 * 24 * 60 * 60 * 1000;
+          return orderTime >= oneWeekAgo;
+        }
+
+        case 'half_month': {
+          const fifteenDaysAgo = todayStart - 15 * 24 * 60 * 60 * 1000;
+          return orderTime >= fifteenDaysAgo;
+        }
+
+        case 'full_month': {
+          const thirtyDaysAgo = todayStart - 30 * 24 * 60 * 60 * 1000;
+          return orderTime >= thirtyDaysAgo;
+        }
+
+        case '3months': {
+          const ninetyDaysAgo = todayStart - 90 * 24 * 60 * 60 * 1000;
+          return orderTime >= ninetyDaysAgo;
+        }
+
+        case 'half_year': {
+          const halfYearAgo = todayStart - 180 * 24 * 60 * 60 * 1000;
+          return orderTime >= halfYearAgo;
+        }
+
+        case 'year': {
+          const oneYearAgo = todayStart - 365 * 24 * 60 * 60 * 1000;
+          return orderTime >= oneYearAgo;
+        }
+
+        default:
+          return true;
+      }
+    });
+
+    const itemMap = new Map<string, TopItemMetric>();
+
+    filteredOrders.forEach((ord) => {
+      if (Array.isArray(ord.items) && ord.items.length > 0) {
+        ord.items.forEach((it: any) => {
+          const name = it.name || 'Custom Product';
+          const qty = Number(it.qty) || 1;
+          const price = Number(it.price) || 0;
+          const image = it.image || '';
+
+          if (itemMap.has(name)) {
+            const existing = itemMap.get(name)!;
+            existing.unitsSold += qty;
+            existing.totalRevenue += price * qty;
+            existing.ordersCount += 1;
+            if (!existing.image && image) existing.image = image;
+          } else {
+            itemMap.set(name, {
+              name,
+              image,
+              unitsSold: qty,
+              totalRevenue: price * qty,
+              ordersCount: 1
+            });
+          }
+        });
+      } else {
+        // Fallback for orders without item array
+        const name = 'Handcrafted Heritage Order';
+        const qty = 1;
+        const price = Number(ord.total_amount) || 0;
+
+        if (itemMap.has(name)) {
+          const existing = itemMap.get(name)!;
+          existing.unitsSold += qty;
+          existing.totalRevenue += price;
+          existing.ordersCount += 1;
+        } else {
+          itemMap.set(name, {
+            name,
+            unitsSold: qty,
+            totalRevenue: price,
+            ordersCount: 1
+          });
+        }
+      }
+    });
+
+    return Array.from(itemMap.values()).sort((a, b) => b.unitsSold - a.unitsSold);
+  }, [recentOrders, itemTimeFilter]);
+
+  // --- PDF GENERATOR FUNCTION ---
+  const handleDownloadPDF = () => {
+    const filterLabels: Record<TimeRangeFilter, string> = {
+      today: 'Today',
+      yesterday: 'Yesterday',
+      '3days': 'Last 3 Days',
+      '1week': 'One Week (7 Days)',
+      half_month: 'Half Month (15 Days)',
+      full_month: 'Full Month (30 Days)',
+      '3months': 'Last 3 Months (90 Days)',
+      half_year: 'Half Year (180 Days)',
+      year: 'Full Year (365 Days)'
+    };
+
+    const printableWindow = window.open('', '_blank');
+    if (!printableWindow) {
+      alert('Pop-up blocked! Please allow pop-ups to print or download PDF.');
+      return;
     }
 
-    return {
-      pincode,
-      locationText: locationText.length > 25 ? locationText.slice(0, 25) + '...' : locationText
-    };
+    const rowsHtml = topSellingItems
+      .map(
+        (item, idx) => `
+      <tr style="border-bottom: 1px solid #e5e7eb; font-size: 12px;">
+        <td style="padding: 10px 12px; font-weight: bold; text-align: center; color: #0b3b2c;">#${idx + 1}</td>
+        <td style="padding: 10px 12px; font-weight: 600; color: #111827;">${item.name}</td>
+        <td style="padding: 10px 12px; text-align: center; font-weight: bold; color: #ff4d6d;">${item.unitsSold} Units</td>
+        <td style="padding: 10px 12px; text-align: right; font-weight: bold; color: #0b3b2c;">₹${item.totalRevenue.toLocaleString('en-IN')}</td>
+      </tr>
+    `
+      )
+      .join('');
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Kashvi Command OS - Top Selling Items Report</title>
+          <style>
+            @media print {
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              padding: 30px;
+              color: #1f2937;
+              max-width: 800px;
+              margin: 0 auto;
+            }
+            .header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              border-bottom: 2px solid #0b3b2c;
+              padding-bottom: 15px;
+              margin-bottom: 20px;
+            }
+            .logo {
+              font-family: serif;
+              font-size: 22px;
+              font-weight: 900;
+              color: #0b3b2c;
+            }
+            .sub {
+              font-size: 11px;
+              color: #6b7280;
+              margin-top: 3px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-top: 15px;
+            }
+            th {
+              background-color: #f3f4f6;
+              color: #374151;
+              padding: 10px 12px;
+              font-size: 11px;
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+              border-bottom: 1px solid #d1d5db;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <div class="logo">KASHVI STUDIO & COUTURE</div>
+              <div class="sub">Top Selling Items Demand Report (${filterLabels[itemTimeFilter]})</div>
+            </div>
+            <div style="text-align: right; font-size: 11px; color: #4b5563;">
+              <div><strong>Generated by:</strong> ${currentUser?.full_name || 'Admin'}</div>
+              <div><strong>Date:</strong> ${new Date().toLocaleString('en-IN')}</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 50px; text-align: center;">Rank</th>
+                <th style="text-align: left;">Item Description</th>
+                <th style="text-align: center; width: 120px;">Units Sold</th>
+                <th style="text-align: right; width: 140px;">Gross Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="4" style="text-align:center; padding: 20px; color:#9ca3af;">No items sold during this period.</td></tr>'}
+            </tbody>
+          </table>
+
+          <div style="margin-top: 30px; border-top: 1px solid #e5e7eb; padding-top: 15px; font-size: 10px; color: #9ca3af; text-align: center;">
+            Kashvi Studio Operating System • Confidential Internal Sales Ledger
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+      </html>
+    `;
+
+    printableWindow.document.open();
+    printableWindow.document.write(htmlContent);
+    printableWindow.document.close();
   };
 
   return (
@@ -238,7 +480,7 @@ export default function AdminDashboard({
               Today's Sales
             </span>
             <div className="w-6 h-6 rounded-lg bg-[#e4efe9] text-[#0b3b2c] flex items-center justify-center">
-              <IndianRupee className="w-3 h-3" />
+              <IndianRupee className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="mt-1.5 flex items-baseline justify-between">
@@ -257,7 +499,7 @@ export default function AdminDashboard({
               In Carts
             </span>
             <div className="w-6 h-6 rounded-lg bg-amber-50 text-[#c6933a] flex items-center justify-center">
-              <ShoppingCart className="w-3 h-3" />
+              <ShoppingCart className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="mt-1.5 flex items-baseline justify-between">
@@ -276,7 +518,7 @@ export default function AdminDashboard({
               Avg. Basket (AOV)
             </span>
             <div className="w-6 h-6 rounded-lg bg-[#f0f4f2] text-[#0b3b2c] flex items-center justify-center">
-              <Package className="w-3 h-3" />
+              <Package className="w-3.5 h-3.5" />
             </div>
           </div>
           <div className="mt-1.5 flex items-baseline justify-between">
@@ -290,11 +532,11 @@ export default function AdminDashboard({
         </div>
       </div>
 
-      {/* 2. SIDE-BY-SIDE MAIN WORKSPACE: Live Orders Table (Left 70%) & Live Customer Location Feed (Right 30%) */}
+      {/* 2. SIDE-BY-SIDE MAIN WORKSPACE: Live Orders Table (Left 65%) & Top Selling Items Velocity Leaderboard (Right 35%) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         
-        {/* LEFT 8 COLUMNS: LIVE ORDERS TABLE */}
-        <div className="lg:col-span-8 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
+        {/* LEFT 7-8 COLUMNS: LIVE ORDERS TABLE */}
+        <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
           <div className="px-4 py-2.5 border-b border-[#edf2ef] flex items-center justify-between gap-3">
             <div className="flex items-center gap-1.5 p-0.5 bg-[#f0f4f2] rounded-full">
               <button
@@ -486,66 +728,115 @@ export default function AdminDashboard({
           )}
         </div>
 
-        {/* RIGHT 4 COLUMNS: LIVE LOCATION & ORDER FEED (ఎవరు ఎక్కడి నుంచి ఆర్డర్ చేస్తున్నారు) */}
-        <div className="lg:col-span-4 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden flex flex-col">
-          <div className="px-4 py-3 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
-            <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
+        {/* RIGHT 4-5 COLUMNS: TOP SELLING ITEMS / HIGH DEMAND LEADERBOARD WITH PDF EXPORT */}
+        <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden flex flex-col">
+          
+          {/* Header with Title & PDF Download Button */}
+          <div className="px-3.5 py-2.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
+            <div className="flex items-center gap-1.5">
+              <Flame className="w-4 h-4 text-[#ff4d6d]" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-[#0b3b2c]">
-                Live Geographic Feed
+                Top Selling Items
               </h3>
             </div>
-            <span className="text-[9.5px] font-mono text-neutral-400">
-              Realtime Dispatch
-            </span>
+
+            <button
+              type="button"
+              onClick={handleDownloadPDF}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0b3b2c] hover:bg-[#06231a] text-white text-[10px] font-bold shadow-2xs transition-all cursor-pointer active:scale-95"
+              title="Download Leaderboard PDF"
+            >
+              <Download className="w-3 h-3 text-[#e5c07b]" />
+              <span>PDF Report</span>
+            </button>
           </div>
 
-          <div className="divide-y divide-[#edf2ef] overflow-y-auto max-h-[440px] flex-1">
-            {recentOrders.length === 0 ? (
+          {/* Timeframe Filter Bar */}
+          <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-[#f8faf9] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 text-[10px] text-neutral-500 font-semibold">
+              <Calendar className="w-3 h-3 text-[#c6933a]" />
+              <span>Timeframe:</span>
+            </div>
+
+            <select
+              value={itemTimeFilter}
+              onChange={(e) => setItemTimeFilter(e.target.value as TimeRangeFilter)}
+              className="px-2.5 py-1 rounded-lg border border-[#dce6e1] bg-white text-[10.5px] font-bold text-[#0b3b2c] outline-none cursor-pointer focus:border-[#0b3b2c] shadow-2xs"
+            >
+              <option value="today">Today (Ee Roju)</option>
+              <option value="yesterday">Yesterday (Ninna)</option>
+              <option value="3days">Last 3 Days</option>
+              <option value="1week">One Week (7 Days)</option>
+              <option value="half_month">Half Month (15 Days)</option>
+              <option value="full_month">Full Month (30 Days)</option>
+              <option value="3months">Last 3 Months (Quarter)</option>
+              <option value="half_year">Half Year (6 Months)</option>
+              <option value="year">Full Year (365 Days)</option>
+            </select>
+          </div>
+
+          {/* Top Selling Items List */}
+          <div className="divide-y divide-[#edf2ef] overflow-y-auto max-h-[420px] flex-1">
+            {topSellingItems.length === 0 ? (
               <div className="p-8 text-center text-xs text-neutral-400 space-y-1">
-                <Compass className="w-7 h-7 mx-auto text-neutral-300 animate-spin" />
-                <p>Awaiting new location checkouts...</p>
+                <Package className="w-7 h-7 mx-auto text-neutral-300" />
+                <p>No sales recorded in this timeframe.</p>
+                <span className="text-[10px] text-neutral-400">Try changing the filter above.</span>
               </div>
             ) : (
-              recentOrders.map((ord) => {
-                const geo = getLocationDetails(ord);
+              topSellingItems.map((item, idx) => {
+                const isTop1 = idx === 0;
+                const isTop2 = idx === 1;
+                const isTop3 = idx === 2;
+
                 return (
                   <div
-                    key={'geo_' + ord.id}
-                    onClick={() => setSelectedOrder(ord)}
-                    className="p-3.5 hover:bg-[#f8faf9] transition-colors cursor-pointer group"
+                    key={item.name + idx}
+                    className="p-3 hover:bg-[#f8faf9] transition-colors flex items-center justify-between gap-2.5 group"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-6 h-6 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                          <MapPin className="w-3.5 h-3.5" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-xs text-[#0c2b22] group-hover:text-[#ff4d6d] leading-tight">
-                            {ord.customer_name || 'Direct Shopper'}
-                          </h4>
-                          <span className="text-[10px] text-neutral-400 font-mono">
-                            {ord.id}
-                          </span>
-                        </div>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {/* Rank Badge */}
+                      <div
+                        className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10.5px] shrink-0 ${
+                          isTop1
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs'
+                            : isTop2
+                            ? 'bg-neutral-200 text-neutral-800'
+                            : isTop3
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-neutral-100 text-neutral-500'
+                        }`}
+                      >
+                        {isTop1 ? <Award className="w-3.5 h-3.5 text-amber-600" /> : `#${idx + 1}`}
                       </div>
 
-                      <span className="text-xs font-bold text-[#0b3b2c]">
-                        ₹{Number(ord.total_amount).toLocaleString('en-IN')}
-                      </span>
+                      {/* Item Thumbnail & Details */}
+                      {item.image && (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-8 h-10 object-cover object-top rounded-md border border-neutral-200 shrink-0"
+                        />
+                      )}
+
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-xs text-[#0c2b22] group-hover:text-[#ff4d6d] truncate leading-tight">
+                          {item.name}
+                        </h4>
+                        <div className="text-[9.5px] text-neutral-400 flex items-center gap-1.5 mt-0.5">
+                          <span>{item.ordersCount} checkout{item.ordersCount > 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="mt-2 bg-[#f4f7f5] rounded-xl px-2.5 py-1.5 flex items-center justify-between text-[10.5px]">
-                      <div className="flex items-center gap-1 text-[#0b3b2c] font-semibold truncate">
-                        <Compass className="w-3 h-3 text-[#c6933a] shrink-0" />
-                        <span className="truncate">{geo.locationText}</span>
+                    {/* Sales Metrics */}
+                    <div className="text-right shrink-0">
+                      <div className="text-xs font-bold text-[#ff4d6d] font-mono">
+                        {item.unitsSold} {item.unitsSold === 1 ? 'Unit' : 'Units'}
                       </div>
-                      <span className="font-mono font-bold text-neutral-600 shrink-0">
-                        {geo.pincode}
-                      </span>
+                      <div className="text-[10px] font-bold text-[#0b3b2c]">
+                        ₹{item.totalRevenue.toLocaleString('en-IN')}
+                      </div>
                     </div>
                   </div>
                 );
@@ -553,9 +844,15 @@ export default function AdminDashboard({
             )}
           </div>
 
-          <div className="p-2.5 border-t border-[#edf2ef] bg-[#fbfcfc] text-[10px] text-center text-neutral-400 font-medium">
-            ⚡ Instant sync whenever customer places order
+          {/* Footer Summary */}
+          <div className="px-3.5 py-2 border-t border-[#edf2ef] bg-[#fbfcfc] flex items-center justify-between text-[10px] text-neutral-500 font-semibold">
+            <span>Total Unique Products: <strong>{topSellingItems.length}</strong></span>
+            <span className="text-[#0b3b2c] font-bold">
+              Total Sold:{' '}
+              {topSellingItems.reduce((acc, curr) => acc + curr.unitsSold, 0)} Units
+            </span>
           </div>
+
         </div>
 
       </div>
