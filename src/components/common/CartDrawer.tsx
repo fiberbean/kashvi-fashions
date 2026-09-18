@@ -91,6 +91,7 @@ export default function CartDrawer() {
   const {
     cart,
     isCartOpen,
+    openCart,
     closeCart,
     updateQty,
     removeFromCart,
@@ -124,7 +125,6 @@ export default function CartDrawer() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [isAddressModalOpen, setIsAddressModalOpen] = useState<boolean>(false);
 
-  // ఫామ్ డేటా ఆటో-ఫిల్లింగ్
   const [formData, setFormData] = useState({
     name: customer?.name || user?.user_metadata?.name || '',
     whatsapp_number: customer?.mobile || user?.user_metadata?.whatsapp_number || '',
@@ -148,26 +148,54 @@ export default function CartDrawer() {
     message?: string;
   } | null>(null);
 
-  // కార్ట్‌లో ఏదైనా జ్యువెలరీ ఐటమ్ ఉందో లేదో తనిఖీ చేయడం
   const hasJewelleryItems = cart.some((item) => item?.department === 'jewellery');
 
+  // బలమైన Auth Modal Trigger ఫంక్షన్
   const triggerAuthModal = () => {
-    if (typeof (authContext as any).openAuthModal === 'function') {
-      (authContext as any).openAuthModal();
-    } else if (typeof (authContext as any).setIsAuthOpen === 'function') {
-      (authContext as any).setIsAuthOpen(true);
-    } else if (typeof (authContext as any).setIsAuthModalOpen === 'function') {
-      (authContext as any).setIsAuthModalOpen(true);
-    } else {
-      const userBtn = document.querySelector('[aria-label="User Account"]') as HTMLButtonElement | null;
-      if (userBtn) {
-        userBtn.click();
-      } else {
-        window.dispatchEvent(new CustomEvent('open-auth-modal'));
-      }
+    // 1. మొబైల్ స్క్రీన్‌పై లాగిన్ మోడల్ కనిపించడానికి ముందుగా కార్ట్ డ్రాయర్ క్లోజ్ చేయాలి
+    closeCart();
+
+    // 2. AuthContext లో ఉన్న ప్రతి సంభావ్య మెథడ్‌ను ప్రయత్నించడం
+    const ctx = authContext as any;
+    if (typeof ctx.openAuthModal === 'function') {
+      ctx.openAuthModal();
+      return;
     }
+    if (typeof ctx.setIsAuthOpen === 'function') {
+      ctx.setIsAuthOpen(true);
+      return;
+    }
+    if (typeof ctx.setIsAuthModalOpen === 'function') {
+      ctx.setIsAuthModalOpen(true);
+      return;
+    }
+    if (typeof ctx.setShowAuthModal === 'function') {
+      ctx.setShowAuthModal(true);
+      return;
+    }
+
+    // 3. Custom Event ఫాల్‌బ్యాక్
+    window.dispatchEvent(new CustomEvent('open-auth-modal'));
+
+    // 4. హెడర్ బటన్ ఫాల్‌బ్యాక్
+    setTimeout(() => {
+      const selectors = [
+        '[aria-label="User Account"]',
+        '[aria-label="Account"]',
+        '[aria-label="User Profile"]',
+        'button:has(svg.lucide-user)',
+      ];
+      for (const sel of selectors) {
+        const btn = document.querySelector(sel) as HTMLButtonElement | null;
+        if (btn) {
+          btn.click();
+          break;
+        }
+      }
+    }, 50);
   };
 
+  // యూజర్ లాగిన్ అవ్వగానే ఆటోమేటిక్‌గా అడ్రస్ స్టెప్‌కు తీసుకురావడం
   useEffect(() => {
     if (user || customer) {
       setFormData((prev) => ({
@@ -176,8 +204,13 @@ export default function CartDrawer() {
         whatsapp_number: prev.whatsapp_number || customer?.mobile || user?.user_metadata?.whatsapp_number || '',
         email: prev.email || customer?.email || user?.email || '',
       }));
+
+      // ఒకవేళ కార్ట్ ఓపెన్ అయ్యి యూజర్ లాగిన్ అయితే నేరుగా అడ్రస్ స్టెప్ చూపించాలి
+      if (isCartOpen && activeStep === 'cart' && cart.length > 0) {
+        setActiveStep('address');
+      }
     }
-  }, [user, customer]);
+  }, [user, customer, isCartOpen]);
 
   useEffect(() => {
     const fetchActiveGateway = async () => {
@@ -706,14 +739,13 @@ export default function CartDrawer() {
   const drawerContent = (
     <div
       onClick={handleCloseModal}
-      className="fixed inset-0 z-[9999] flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-300"
+      className="fixed inset-0 z-[999] flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-300"
     >
-      {/* Royal Sliding Side Drawer */}
       <aside
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-md md:max-w-lg bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 border-l border-neutral-200/80 cursor-default"
       >
-        {/* Drawer Header with Royal Accents */}
+        {/* Drawer Header */}
         <div
           className={`px-5 py-4 border-b flex items-center justify-between sticky top-0 z-20 transition-colors ${
             hasJewelleryItems
@@ -851,7 +883,6 @@ export default function CartDrawer() {
                 )}
               </div>
 
-              {/* Order Confirmation Details */}
               {paymentResult.type === 'success' && confirmedOrder && (
                 <div className="space-y-3">
                   <div className="border border-neutral-200 rounded-2xl p-4 bg-neutral-50/50 space-y-3">
@@ -908,7 +939,6 @@ export default function CartDrawer() {
                 </div>
               )}
 
-              {/* Order Result Actions */}
               <div className="space-y-2 pt-2">
                 {paymentResult.type === 'success' ? (
                   <>
@@ -989,7 +1019,6 @@ export default function CartDrawer() {
                             : 'border-neutral-200/80 bg-neutral-50/50 hover:border-[#ff4d6d]/30'
                         }`}
                       >
-                        {/* Mini Arch Container */}
                         <div className="w-16 h-20 rounded-t-[22px] rounded-b-xl overflow-hidden bg-white shrink-0 border border-neutral-200/80 p-0.5 shadow-2xs">
                           <img
                             src={item.image}
@@ -998,7 +1027,6 @@ export default function CartDrawer() {
                           />
                         </div>
 
-                        {/* Product Info */}
                         <div className="flex-1 flex flex-col justify-between min-w-0">
                           <div>
                             <div className="flex items-start justify-between gap-2">
@@ -1039,7 +1067,6 @@ export default function CartDrawer() {
                           </div>
 
                           <div className="flex items-center justify-between pt-2">
-                            {/* Quantity Capsules */}
                             <div className="inline-flex items-center gap-1 bg-white border border-neutral-200 rounded-full px-2 py-0.5 shadow-2xs">
                               <button
                                 type="button"
@@ -1180,7 +1207,7 @@ export default function CartDrawer() {
           )}
         </div>
 
-        {/* Fixed Drawer Bottom Summary & Action */}
+        {/* Bottom Checkout & Action Area */}
         {cart.length > 0 && activeStep !== 'order_result' && (
           <div className="p-5 border-t border-neutral-200/80 bg-white space-y-3 shrink-0 shadow-lg">
             <div className="space-y-1.5 text-xs text-neutral-600">
@@ -1269,7 +1296,7 @@ export default function CartDrawer() {
       {isAddressModalOpen && (
         <div
           onClick={() => setIsAddressModalOpen(false)}
-          className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+          className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
         >
           <div
             onClick={(e) => e.stopPropagation()}
