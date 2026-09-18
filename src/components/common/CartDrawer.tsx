@@ -87,6 +87,46 @@ const COLOR_HEX_MAP: Record<string, string> = {
   grey: '#4b5563',
 };
 
+// KFOD0001, KFOD0002... సీరియల్ నంబర్ జనరేటర్ ఫంక్షన్
+async function generateOrderNumber(): Promise<string> {
+  const PREFIX = 'KFOD';
+  const PADDING = 4;
+
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id')
+      .ilike('id', `${PREFIX}%`)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (!error && data && data.length > 0) {
+      let maxNum = 0;
+      data.forEach((o: any) => {
+        const numPart = parseInt(o.id.replace(PREFIX, '').trim(), 10);
+        if (!isNaN(numPart) && numPart > maxNum) {
+          maxNum = numPart;
+        }
+      });
+
+      if (maxNum > 0) {
+        return `${PREFIX}${String(maxNum + 1).padStart(PADDING, '0')}`;
+      }
+    }
+
+    const { count } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .ilike('id', `${PREFIX}%`);
+
+    const nextCount = (count || 0) + 1;
+    return `${PREFIX}${String(nextCount).padStart(PADDING, '0')}`;
+  } catch (err) {
+    console.error('Order ID generation error:', err);
+    return `${PREFIX}0001`;
+  }
+}
+
 export default function CartDrawer() {
   const {
     cart,
@@ -150,12 +190,8 @@ export default function CartDrawer() {
 
   const hasJewelleryItems = cart.some((item) => item?.department === 'jewellery');
 
-  // బలమైన Auth Modal Trigger ఫంక్షన్
   const triggerAuthModal = () => {
-    // 1. మొబైల్ స్క్రీన్‌పై లాగిన్ మోడల్ కనిపించడానికి ముందుగా కార్ట్ డ్రాయర్ క్లోజ్ చేయాలి
     closeCart();
-
-    // 2. AuthContext లో ఉన్న ప్రతి సంభావ్య మెథడ్‌ను ప్రయత్నించడం
     const ctx = authContext as any;
     if (typeof ctx.openAuthModal === 'function') {
       ctx.openAuthModal();
@@ -174,10 +210,8 @@ export default function CartDrawer() {
       return;
     }
 
-    // 3. Custom Event ఫాల్‌బ్యాక్
     window.dispatchEvent(new CustomEvent('open-auth-modal'));
 
-    // 4. హెడర్ బటన్ ఫాల్‌బ్యాక్
     setTimeout(() => {
       const selectors = [
         '[aria-label="User Account"]',
@@ -195,7 +229,6 @@ export default function CartDrawer() {
     }, 50);
   };
 
-  // యూజర్ లాగిన్ అవ్వగానే ఆటోమేటిక్‌గా అడ్రస్ స్టెప్‌కు తీసుకురావడం
   useEffect(() => {
     if (user || customer) {
       setFormData((prev) => ({
@@ -205,7 +238,6 @@ export default function CartDrawer() {
         email: prev.email || customer?.email || user?.email || '',
       }));
 
-      // ఒకవేళ కార్ట్ ఓపెన్ అయ్యి యూజర్ లాగిన్ అయితే నేరుగా అడ్రస్ స్టెప్ చూపించాలి
       if (isCartOpen && activeStep === 'cart' && cart.length > 0) {
         setActiveStep('address');
       }
@@ -234,15 +266,16 @@ export default function CartDrawer() {
     }
   }, [isCartOpen]);
 
+  // అడ్రస్ లోడ్ అయినప్పుడు మరియు అప్‌డేట్ అయినప్పుడు ఫస్ట్/సెలెక్ట్ అడ్రస్ ను యాక్టివేట్ చేయడం
   useEffect(() => {
     if (savedAddresses.length > 0) {
-      const targetId = selectedAddressId || savedAddresses[0].id;
-      if (!selectedAddressId) setSelectedAddressId(targetId);
-
-      const targetAddr = savedAddresses.find((a) => a.id === targetId) || savedAddresses[0];
-      if (targetAddr?.pincode) {
-        setUserPincode(targetAddr.pincode);
-        fetchShippingByPincode(targetAddr.pincode);
+      const validTarget = savedAddresses.find((a) => a.id === selectedAddressId) || savedAddresses[0];
+      if (validTarget && validTarget.id !== selectedAddressId) {
+        setSelectedAddressId(validTarget.id);
+      }
+      if (validTarget?.pincode) {
+        setUserPincode(validTarget.pincode);
+        fetchShippingByPincode(validTarget.pincode);
       }
     }
   }, [savedAddresses, selectedAddressId, isCartOpen]);
@@ -416,6 +449,7 @@ export default function CartDrawer() {
     setIsAddressModalOpen(true);
   };
 
+  // ✅ 1. రీఫ్రెష్ అవసరం లేకుండా ఇన్‌స్టంట్‌గా అడ్రస్ యాడ్ అవ్వడం & ఆటో-సెలెక్ట్ అవ్వడం
   const handleSaveNewAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.whatsapp_number || !formData.pincode || !formData.door_no) {
@@ -433,20 +467,31 @@ export default function CartDrawer() {
       return;
     }
 
+    const newAddrId = `addr_${Date.now()}`;
     const newAddr: Address = {
-      id: `addr_${Date.now()}`,
+      id: newAddrId,
       ...formData,
       custom_label: formData.address_type === 'Others' ? formData.custom_label.trim() : undefined,
     };
 
     const updated = [newAddr, ...savedAddresses];
+    
+    // స్టేట్ మరియు స్టోరేజ్‌ను తక్షణమే నవీకరించడం
     setSavedAddresses(updated);
-    localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+    try {
+      localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+    } catch (e) {
+      console.warn('Storage save warning:', e);
+    }
 
-    setSelectedAddressId(newAddr.id);
+    // ఆటో-సెలెక్ట్ & డెలివరీ ఛార్జీలను వెంటనే వర్తింపజేయడం
+    setSelectedAddressId(newAddrId);
     setUserPincode(newAddr.pincode);
     await fetchShippingByPincode(newAddr.pincode);
+
+    // మోడల్ క్లోజ్ చేసి, ఖచ్చితంగా address వ్యూ లోనే ఉండేలా చేయడం
     setIsAddressModalOpen(false);
+    setActiveStep('address');
   };
 
   const handlePaymentSuccess = async (
@@ -555,6 +600,7 @@ export default function CartDrawer() {
     setActiveStep('address');
   };
 
+  // ✅ 2. KFOD0001 సిరీస్ నంబర్ తో చెక్‌అవుట్ జరగడం
   const handleInstantCheckout = async () => {
     if (!user) {
       triggerAuthModal();
@@ -567,18 +613,24 @@ export default function CartDrawer() {
     }
 
     const currentAddress = savedAddresses.find((a) => a.id === selectedAddressId);
-    if (!currentAddress) return;
+    if (!currentAddress) {
+      alert('Selected address not found. Please re-select or add a new address.');
+      return;
+    }
 
     setIsCheckingOut(true);
     const cartSnapshot = [...cart];
 
     try {
-      const orderId = `KF_${Date.now()}`;
+      // KFOD0001, KFOD0002... సిరీస్ ఆర్డర్ ఐడీ జనరేషన్
+      const orderId = await generateOrderNumber();
+
       const fullAddressText = `${currentAddress.door_no}, ${
         currentAddress.building_name ? currentAddress.building_name + ', ' : ''
       }${currentAddress.street}, ${currentAddress.area}, ${currentAddress.city}, ${
         currentAddress.state
       } - ${currentAddress.pincode}`;
+      
       const resolvedEmail =
         currentAddress.email?.trim() ||
         user?.email?.trim() ||
