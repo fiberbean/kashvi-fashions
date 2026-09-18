@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { HashRouter as Router, Routes, Route, Link, useSearchParams } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, useSearchParams, useLocation } from 'react-router-dom';
 import {
   Sparkles,
   ShieldCheck,
@@ -26,6 +26,11 @@ import AuthModal from './components/auth/AuthModal';
 import CartDrawer from './components/common/CartDrawer';
 import CompleteProfileModal from './components/auth/CompleteProfileModal';
 import WishlistModal from './components/wishlist/WishlistModal';
+
+// Admin Imports (/kfmama)
+import AdminNavbar from './admin/components/AdminNavbar';
+import AdminDashboard from './admin/pages/AdminDashboard';
+import AdminMasters from './admin/pages/AdminMasters';
 
 // Assets నుండి నేరుగా ఇంపోర్ట్
 import fashionLogo from './assets/fashion-logo.png';
@@ -149,7 +154,7 @@ function HeroBannerSlider({
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        className={`relative w-full aspect-[4/5] xs:aspect-[1/1] sm:aspect-[21/9] md:aspect-[2.4/1] rounded-3xl sm:rounded-[2rem] overflow-hidden shadow-lg border bg-neutral-950 group ${
+        className={`relative w-full aspect-4/5 xs:aspect-1/1 sm:aspect-21/9 md:aspect-[2.4/1] rounded-3xl sm:rounded-[2rem] overflow-hidden shadow-lg border bg-neutral-950 group ${
           isJewellery ? 'border-[#0b3b2c]/20' : 'border-[#ff4d6d]/20'
         }`}
       >
@@ -374,28 +379,54 @@ function HomePageContent() {
   );
 }
 
+function AppContent() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/kfmama');
+
+  return (
+    <div className="relative min-h-screen">
+      <Routes>
+        {/* Customer Storefront Routes */}
+        <Route path="/" element={<HomePageContent />} />
+        <Route path="/category/:slug" element={<CategoryProductListPage />} />
+        <Route path="/product/:id" element={<ProductDetailPage />} />
+
+        {/* /kfmama Admin OS Routes */}
+        <Route
+          path="/kfmama/*"
+          element={
+            <div className="min-h-screen bg-[#f0f4f2] text-[#0c2b22]">
+              <AdminNavbar />
+              <main className="max-w-[1540px] mx-auto p-4 sm:p-8">
+                <Routes>
+                  <Route path="" element={<AdminDashboard />} />
+                  <Route path="masters" element={<AdminMasters />} />
+                </Routes>
+              </main>
+            </div>
+          }
+        />
+      </Routes>
+
+      {/* Mobile Bottom Bar is displayed only on Customer Facing Pages */}
+      {!isAdminRoute && <MobileBottomBar />}
+
+      {/* Modals & Drawers */}
+      <CartDrawer />
+      <WishlistModal />
+      <AuthModal />
+      <CompleteProfileModal />
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <WishlistProvider>
         <CartProvider>
           <Router>
-            <div className="relative min-h-screen">
-              <Routes>
-                <Route path="/" element={<HomePageContent />} />
-                <Route path="/category/:slug" element={<CategoryProductListPage />} />
-                <Route path="/product/:id" element={<ProductDetailPage />} />
-              </Routes>
-
-              {/* Native App-Style Bottom Navigation Bar */}
-              <MobileBottomBar />
-
-              {/* Modals & Drawers */}
-              <CartDrawer />
-              <WishlistModal />
-              <AuthModal />
-              <CompleteProfileModal />
-            </div>
+            <AppContent />
           </Router>
         </CartProvider>
       </WishlistProvider>
