@@ -19,6 +19,31 @@ interface ProductImageStudioModalProps {
   categoryName?: string;
 }
 
+// 3 Pure Blank Studio Backdrops without any pre-existing jewellery
+const STUDIO_BACKDROPS = [
+  {
+    id: 'marble-velvet-clean',
+    name: 'Emerald Velvet & Marble Tray',
+    url: 'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1200&q=85',
+    defaultScale: 95,
+    defaultY: 40
+  },
+  {
+    id: 'neutral-stone-podium',
+    name: 'Raw Travertine & Sunlight',
+    url: 'https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?auto=format&fit=crop&w=1200&q=85',
+    defaultScale: 90,
+    defaultY: 30
+  },
+  {
+    id: 'dark-aesthetic-slate',
+    name: 'Dark Minimalist Podium',
+    url: 'https://images.unsplash.com/photo-1518895949257-7621c3c786d7?auto=format&fit=crop&w=1200&q=85',
+    defaultScale: 90,
+    defaultY: 20
+  }
+];
+
 export default function ProductImageStudioModal({
   onClose,
   onAcceptImage,
@@ -30,9 +55,9 @@ export default function ProductImageStudioModal({
   const [processingStatus, setProcessingStatus] = useState<string>('');
   const [fileSizeInfo, setFileSizeInfo] = useState<{ original: string; optimized: string } | null>(null);
 
-  // Manual placement adjustments if needed
-  const [scaleFactor, setScaleFactor] = useState<number>(100);
-  const [offsetY, setOffsetY] = useState<number>(0);
+  const [activeBackdropIndex, setActiveBackdropIndex] = useState<number>(0);
+  const [scaleFactor, setScaleFactor] = useState<number>(95);
+  const [offsetY, setOffsetY] = useState<number>(40);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -54,19 +79,20 @@ export default function ProductImageStudioModal({
       setCutoutBlob(null);
       setProcessedImage(null);
 
-      await processRealStudioComposite(file, originalSizeStr, 100, 0);
+      await executeSegmentationAndComposite(file, originalSizeStr, 0, 95, 40);
     };
     reader.readAsDataURL(file);
   };
 
-  const processRealStudioComposite = async (
+  const executeSegmentationAndComposite = async (
     fileInput: Blob | string,
     origSizeStr: string,
+    backdropIdx: number,
     scale: number,
     yShift: number
   ) => {
     setIsProcessing(true);
-    setProcessingStatus('AI segmenting jewellery & stones...');
+    setProcessingStatus('AI segmenting item details & gemstones...');
 
     let blobResult = cutoutBlob;
 
@@ -81,18 +107,26 @@ export default function ProductImageStudioModal({
         });
         setCutoutBlob(blobResult);
       } catch (err) {
-        console.warn('Segmentation fallback to local image:', err);
+        console.warn('Segmentation fallback:', err);
       }
     }
 
-    setProcessingStatus('Compositing on real studio tray backdrop...');
-    renderOntoRealBackdrop(blobResult, typeof fileInput === 'string' ? fileInput : URL.createObjectURL(fileInput), origSizeStr, scale, yShift);
+    setProcessingStatus('Aligning natural shadows & surface reflection...');
+    renderComposite(
+      blobResult,
+      typeof fileInput === 'string' ? fileInput : URL.createObjectURL(fileInput),
+      origSizeStr,
+      backdropIdx,
+      scale,
+      yShift
+    );
   };
 
-  const renderOntoRealBackdrop = (
+  const renderComposite = (
     cutout: Blob | null,
     fallbackSrc: string,
     origSizeStr: string,
+    backdropIdx: number,
     scale: number,
     yShift: number
   ) => {
@@ -107,14 +141,14 @@ export default function ProductImageStudioModal({
     canvas.width = size;
     canvas.height = size;
 
-    // Load authentic photoshoot studio backdrop (Velvet drapery, marble tray, warm lighting)
+    const currentBackdrop = STUDIO_BACKDROPS[backdropIdx] || STUDIO_BACKDROPS[0];
+
     const bgImg = new Image();
     bgImg.crossOrigin = 'anonymous';
-    // Clean, high-resolution aesthetic studio flatlay
-    bgImg.src = 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?auto=format&fit=crop&w=1200&q=85';
+    bgImg.src = currentBackdrop.url;
 
     bgImg.onload = () => {
-      // 1. Draw real backdrop
+      // 1. Draw pure empty studio backdrop
       ctx.drawImage(bgImg, 0, 0, size, size);
 
       // 2. Draw Item
@@ -123,8 +157,8 @@ export default function ProductImageStudioModal({
       itemImg.src = cutout ? URL.createObjectURL(cutout) : fallbackSrc;
 
       itemImg.onload = () => {
-        const baseW = size * 0.48 * (scale / 100);
-        const baseH = size * 0.48 * (scale / 100);
+        const baseW = size * 0.44 * (scale / 100);
+        const baseH = size * 0.44 * (scale / 100);
 
         let drawW = itemImg.width;
         let drawH = itemImg.height;
@@ -133,20 +167,20 @@ export default function ProductImageStudioModal({
         drawH = Math.round(drawH * ratio);
 
         const posX = Math.round((size - drawW) / 2);
-        const posY = Math.round((size - drawH) / 2 + 60 + yShift);
+        const posY = Math.round((size - drawH) / 2 + yShift);
 
-        // Natural soft contact shadow on surface
+        // Natural surface contact shadow
         ctx.save();
         const shadowY = posY + drawH - 10;
-        const shadowW = drawW * 0.9;
+        const shadowW = drawW * 0.86;
         const shadowH = drawH * 0.16;
 
         const shadowGrad = ctx.createRadialGradient(
-          size / 2, shadowY + shadowH / 2, 5,
+          size / 2, shadowY + shadowH / 2, 8,
           size / 2, shadowY + shadowH / 2, shadowW / 2
         );
-        shadowGrad.addColorStop(0, 'rgba(10, 8, 5, 0.65)');
-        shadowGrad.addColorStop(0.5, 'rgba(10, 8, 5, 0.28)');
+        shadowGrad.addColorStop(0, 'rgba(12, 10, 8, 0.62)');
+        shadowGrad.addColorStop(0.45, 'rgba(12, 10, 8, 0.25)');
         shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = shadowGrad;
         ctx.beginPath();
@@ -154,7 +188,7 @@ export default function ProductImageStudioModal({
         ctx.fill();
         ctx.restore();
 
-        // Authentic product draw
+        // 100% Real Product Authenticity (no filters applied to jewellery)
         ctx.drawImage(itemImg, posX, posY, drawW, drawH);
 
         // WebP output under 120KB
@@ -173,24 +207,42 @@ export default function ProductImageStudioModal({
     };
 
     bgImg.onerror = () => {
-      // Fallback if network blocked
-      ctx.fillStyle = '#112920';
+      ctx.fillStyle = '#0f241c';
       ctx.fillRect(0, 0, size, size);
       setIsProcessing(false);
     };
   };
 
-  const handleScaleChange = (newScale: number) => {
-    setScaleFactor(newScale);
+  const handleNextBackdrop = () => {
+    const nextIdx = (activeBackdropIndex + 1) % STUDIO_BACKDROPS.length;
+    setActiveBackdropIndex(nextIdx);
+    const targetConfig = STUDIO_BACKDROPS[nextIdx];
+    setScaleFactor(targetConfig.defaultScale);
+    setOffsetY(targetConfig.defaultY);
+
     if ((cutoutBlob || originalImage) && fileSizeInfo) {
-      renderOntoRealBackdrop(cutoutBlob, originalImage || '', fileSizeInfo.original, newScale, offsetY);
+      renderComposite(
+        cutoutBlob,
+        originalImage || '',
+        fileSizeInfo.original,
+        nextIdx,
+        targetConfig.defaultScale,
+        targetConfig.defaultY
+      );
     }
   };
 
-  const handleYShiftChange = (newY: number) => {
-    setOffsetY(newY);
+  const handleScaleChange = (val: number) => {
+    setScaleFactor(val);
     if ((cutoutBlob || originalImage) && fileSizeInfo) {
-      renderOntoRealBackdrop(cutoutBlob, originalImage || '', fileSizeInfo.original, scaleFactor, newY);
+      renderComposite(cutoutBlob, originalImage || '', fileSizeInfo.original, activeBackdropIndex, val, offsetY);
+    }
+  };
+
+  const handleOffsetYChange = (val: number) => {
+    setOffsetY(val);
+    if ((cutoutBlob || originalImage) && fileSizeInfo) {
+      renderComposite(cutoutBlob, originalImage || '', fileSizeInfo.original, activeBackdropIndex, scaleFactor, val);
     }
   };
 
@@ -212,14 +264,14 @@ export default function ProductImageStudioModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-[#0b3b2c]">Real Photoshoot Studio Staging</h2>
+                <h2 className="text-base font-bold text-[#0b3b2c]">Real Studio Staging</h2>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-bold flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-emerald-600" />
-                  <span>Real Photo Backdrop</span>
+                  <span>Clean Blank Podiums</span>
                 </span>
               </div>
               <p className="text-[10px] text-[#4d6960]">
-                Cleanly isolates your jewellery and places it realistically on a studio marble surface with authentic lighting.
+                Clean blank photoshoot backdrops without pre-existing objects or clutter.
               </p>
             </div>
           </div>
@@ -228,7 +280,7 @@ export default function ProductImageStudioModal({
           </button>
         </div>
 
-        {/* 1. Upload Trigger */}
+        {/* 1. Upload */}
         {!originalImage ? (
           <div className="min-h-[320px] flex flex-col items-center justify-center border-2 border-dashed border-[#c5d6ce] rounded-3xl bg-[#f8faf9] p-8 text-center">
             <input
@@ -237,21 +289,21 @@ export default function ProductImageStudioModal({
               accept="image/*"
               onChange={handleSelectFile}
               className="hidden"
-              id="studio-file-input"
+              id="studio-clean-upload"
             />
             <div className="w-16 h-16 rounded-3xl bg-white shadow-xs border border-[#dce6e1] flex items-center justify-center mb-3">
               <Upload className="w-7 h-7 text-[#0b3b2c]" />
             </div>
             <h3 className="font-bold text-sm text-[#0b3b2c]">Select Raw Item Photo</h3>
             <p className="text-[11px] text-[#4d6960] max-w-sm mt-1 mb-4">
-              Upload raw click. AI will segment the product cleanly and place it on a realistic studio marble platter.
+              Upload raw click. The product will be extracted cleanly and placed onto an authentic, empty luxury photoshoot podium.
             </p>
             <label
-              htmlFor="studio-file-input"
+              htmlFor="studio-clean-upload"
               className="px-6 py-2.5 rounded-2xl bg-[#0b3b2c] text-white font-bold text-xs shadow-xs hover:bg-[#124b39] transition-all cursor-pointer flex items-center gap-2"
             >
               <Camera className="w-4 h-4 text-[#e5c07b]" />
-              <span>Choose Photo to Stage</span>
+              <span>Choose Photo</span>
             </label>
           </div>
         ) : (
@@ -281,7 +333,7 @@ export default function ProductImageStudioModal({
                 </div>
               </div>
 
-              {/* Right: Studio Staged Output */}
+              {/* Right: Clean Staging */}
               <div className="rounded-2xl border border-[#0b3b2c]/30 bg-[#f8faf9] overflow-hidden flex flex-col relative">
                 <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-[#e4efe9] flex justify-between items-center">
                   <span className="font-bold text-[11px] text-[#0b3b2c] uppercase tracking-wider flex items-center gap-1.5">
@@ -299,7 +351,7 @@ export default function ProductImageStudioModal({
                     <div className="flex flex-col items-center justify-center gap-2 text-center p-4">
                       <RefreshCw className="w-7 h-7 animate-spin text-[#0b3b2c]" />
                       <span className="text-xs font-bold text-[#0b3b2c]">{processingStatus}</span>
-                      <span className="text-[10px] text-[#4d6960]">Extracting product & staging on marble tray...</span>
+                      <span className="text-[10px] text-[#4d6960]">Compositing cleanly on luxury blank surface...</span>
                     </div>
                   ) : processedImage ? (
                     <img
@@ -313,9 +365,16 @@ export default function ProductImageStudioModal({
 
             </div>
 
-            {/* 3. Positioning Controls */}
+            {/* 3. Controls & Setup Switcher */}
             {!isProcessing && processedImage && (
-              <div className="p-3 bg-[#f8faf9] border border-[#dce6e1] rounded-2xl flex flex-wrap items-center justify-between gap-4">
+              <div className="p-3.5 bg-[#f8faf9] border border-[#dce6e1] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[#0b3b2c]" />
+                  <span className="text-[11px] font-bold text-[#0b3b2c]">
+                    Backdrop: <span className="font-normal text-[#4d6960]">{STUDIO_BACKDROPS[activeBackdropIndex].name}</span>
+                  </span>
+                </div>
+
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-[11px] font-bold text-[#0b3b2c]">Size:</span>
@@ -325,36 +384,31 @@ export default function ProductImageStudioModal({
                       max="130"
                       value={scaleFactor}
                       onChange={(e) => handleScaleChange(Number(e.target.value))}
-                      className="w-24 accent-[#0b3b2c] cursor-pointer"
+                      className="w-20 accent-[#0b3b2c] cursor-pointer"
                     />
-                    <span className="font-mono text-[10px] text-[#0b3b2c]">{scaleFactor}%</span>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-bold text-[#0b3b2c]">Position:</span>
+                    <span className="text-[11px] font-bold text-[#0b3b2c]">Height:</span>
                     <input
                       type="range"
-                      min="-80"
-                      max="80"
+                      min="-40"
+                      max="120"
                       value={offsetY}
-                      onChange={(e) => handleYShiftChange(Number(e.target.value))}
-                      className="w-24 accent-[#0b3b2c] cursor-pointer"
+                      onChange={(e) => handleOffsetYChange(Number(e.target.value))}
+                      className="w-20 accent-[#0b3b2c] cursor-pointer"
                     />
                   </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScaleFactor(100);
-                    setOffsetY(0);
-                    handleScaleChange(100);
-                  }}
-                  className="text-[11px] text-[#0b3b2c] font-bold underline flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset Position</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleNextBackdrop}
+                    className="px-3.5 py-1.5 rounded-xl bg-white border border-[#0b3b2c] text-[#0b3b2c] font-bold text-[11px] shadow-2xs hover:bg-[#0b3b2c] hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Change Backdrop</span>
+                  </button>
+                </div>
               </div>
             )}
 
