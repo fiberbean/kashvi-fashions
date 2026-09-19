@@ -5,8 +5,8 @@ import AdminLoginScreen from './admin/components/AdminLoginScreen';
 import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
 import AdminDashboard from './admin/pages/AdminDashboard';
 import AdminStaff from './admin/pages/AdminStaff';
-import AdminMasters from './admin/pages/AdminMasters';
 import AdminProducts from './admin/pages/AdminProducts';
+import ProductMasterModal from './admin/components/modals/ProductMasterModal';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
 export type AdminViewType = 'dashboard' | 'products' | 'staff';
@@ -146,13 +146,12 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
-      {selectedMasterSection && (
-        <AdminMasters
-          currentUser={currentUser}
-          selectedSection={selectedMasterSection}
-          onClearSection={() => setSelectedMasterSection(null)}
-        />
+      {/* Product Master Modal Popup Render */}
+      {selectedMasterSection === 'product' && (
+        <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
       )}
+
+      {/* మిగతా మోడల్స్ (Category, SubCategory మొదలైనవి) ఇక్కడ యాడ్ చేసుకోవచ్చు */}
 
       <main className="flex-1 w-full max-w-[1540px] mx-auto p-3 sm:p-5">
         {currentView === 'dashboard' && (
