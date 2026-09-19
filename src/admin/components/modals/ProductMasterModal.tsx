@@ -1,495 +1,465 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Package,
+  Building2,
+  Tag,
   Sparkles,
-  Upload,
-  Check,
-  X,
-  RefreshCw,
-  Eye,
-  Camera,
-  Layers,
-  Wand2,
-  Sliders
+  Save,
+  Loader2,
+  X
 } from 'lucide-react';
-import { removeBackground } from '@imgly/background-removal';
+import { supabase } from '../../../lib/supabase';
+import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
+import ProductImageStudioModal from './ProductImageStudioModal';
 
-interface ProductImageStudioModalProps {
+interface ProductMasterModalProps {
   onClose: () => void;
-  onAcceptImage: (processedUrl: string) => void;
-  productTitle?: string;
-  categoryName?: string;
 }
 
-interface StagedSetupConfig {
-  name: string;
-  baseColor: string;
-  accentColor: string;
-  plinthType: 'marble' | 'wood' | 'slate' | 'brass';
-  flowerStyle: 'white-gypsophila' | 'jasmine' | 'rose-petals' | 'none';
-  lightAngle: number;
+interface TaggedImage {
+  id: string;
+  url: string;
+  color_tag: string;
 }
 
-export default function ProductImageStudioModal({
-  onClose,
-  onAcceptImage,
-  productTitle = '',
-  categoryName = ''
-}: ProductImageStudioModalProps) {
-  const [originalImage, setOriginalImage] = useState<string | null>(null);
-  const [cutoutBlob, setCutoutBlob] = useState<Blob | null>(null);
-  const [processedImage, setProcessedImage] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [processingStatus, setProcessingStatus] = useState<string>('');
-  const [fileSizeInfo, setFileSizeInfo] = useState<{ original: string; optimized: string } | null>(null);
-  
-  const [variationSeed, setVariationSeed] = useState<number>(1);
-  const [currentConfig, setCurrentConfig] = useState<StagedSetupConfig | null>(null);
+export default function ProductMasterModal({ onClose }: ProductMasterModalProps) {
+  const [categories, setCategories] = useState<CategoryRecord[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
+  const [colours, setColours] = useState<ColourRecord[]>([]);
+  const [sizes, setSizes] = useState<SizeRecord[]>([]);
+  const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
+  const [units, setUnits] = useState<UnitRecord[]>([]);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [brand, setBrand] = useState<'fashions' | 'jewellery'>('fashions');
+  const [productCode, setProductCode] = useState<string>('');
+  const [codeLoading, setCodeLoading] = useState<boolean>(false);
+  const [name, setName] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>('');
+  const [selectedColors, setSelectedColors] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [selectedFabrics, setSelectedFabrics] = useState<string[]>([]);
+  const [selectedUnit, setSelectedUnit] = useState<string>('');
+  const [openingStock, setOpeningStock] = useState<number>(0);
+  const [images, setImages] = useState<TaggedImage[]>([]);
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  };
+  // Studio Popup State
+  const [showStudioModal, setShowStudioModal] = useState<boolean>(false);
 
-  const handleSelectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    const originalSizeStr = formatSize(file.size);
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const dataUrl = event.target?.result as string;
-      setOriginalImage(dataUrl);
-      setCutoutBlob(null);
-      setProcessedImage(null);
-      
-      await startAiSegmentationAndRender(file, dataUrl, originalSizeStr, 1);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Preset studio themes suited dynamically for jewellery and luxury ethnic wear
-  const studioPalettes: StagedSetupConfig[] = [
-    {
-      name: 'Royal Emerald & Gold-Rimmed Marble',
-      baseColor: '#0c2e22',
-      accentColor: '#174a38',
-      plinthType: 'marble',
-      flowerStyle: 'white-gypsophila',
-      lightAngle: 0.35
-    },
-    {
-      name: 'Heritage Silk Crimson & Brass Plate',
-      baseColor: '#360914',
-      accentColor: '#521323',
-      plinthType: 'brass',
-      flowerStyle: 'jasmine',
-      lightAngle: 0.25
-    },
-    {
-      name: 'Midnight Black Velvet & Italian White Plinth',
-      baseColor: '#0a0a0c',
-      accentColor: '#1a1b20',
-      plinthType: 'marble',
-      flowerStyle: 'white-gypsophila',
-      lightAngle: 0.4
-    },
-    {
-      name: 'Warm Champagne Linen & Raw Travertine',
-      baseColor: '#e8dfd1',
-      accentColor: '#faf6ee',
-      plinthType: 'slate',
-      flowerStyle: 'rose-petals',
-      lightAngle: 0.3
-    }
-  ];
-
-  const startAiSegmentationAndRender = async (
-    fileInput: Blob | string,
-    rawUrl: string,
-    origSizeStr: string,
-    seed: number
-  ) => {
-    setIsProcessing(true);
-    setProcessingStatus('AI item extraction & edge recognition...');
-
-    let blobResult = cutoutBlob;
-
-    if (!blobResult) {
+  useEffect(() => {
+    const fetchMasters = async () => {
       try {
-        blobResult = await removeBackground(fileInput, {
-          progress: (_key: string, current: number, total: number) => {
-            if (total > 0) {
-              setProcessingStatus(`Segmenting Item: ${Math.round((current / total) * 100)}%`);
-            }
-          }
-        });
-        setCutoutBlob(blobResult);
+        const [catRes, subCatRes, colRes, sizeRes, fabRes, unitRes] = await Promise.all([
+          supabase.from('categories').select('*').order('name'),
+          supabase.from('sub_categories').select('*').order('name'),
+          supabase.from('colours').select('*').order('name'),
+          supabase.from('sizes').select('*').order('name'),
+          supabase.from('fabrics').select('*').order('name'),
+          supabase.from('units').select('*').order('name')
+        ]);
+
+        if (catRes.data) setCategories(catRes.data);
+        if (subCatRes.data) setSubCategories(subCatRes.data);
+        if (colRes.data) setColours(colRes.data);
+        if (sizeRes.data) setSizes(sizeRes.data);
+        if (fabRes.data) setFabrics(fabRes.data);
+        if (unitRes.data) {
+          setUnits(unitRes.data);
+          if (unitRes.data.length > 0) setSelectedUnit(unitRes.data[0].id);
+        }
       } catch (err) {
-        console.warn('Segmentation fallback to natural photo:', err);
+        console.error('Error loading masters:', err);
       }
-    }
+    };
+    fetchMasters();
+  }, []);
 
-    // Pick setup based on variation seed
-    const chosenConfig = studioPalettes[(seed - 1) % studioPalettes.length];
-    setCurrentConfig(chosenConfig);
+  useEffect(() => {
+    const generateProductCode = async () => {
+      setCodeLoading(true);
+      const prefix = brand === 'fashions' ? 'KF' : 'KJ';
+      try {
+        const { data } = await supabase
+          .from('products')
+          .select('product_code')
+          .like('product_code', `${prefix}%`)
+          .order('product_code', { ascending: false })
+          .limit(1);
 
-    setProcessingStatus('Staging realistic studio props, lighting & shadows...');
-    renderCommercialStudio(blobResult, rawUrl, chosenConfig, origSizeStr);
-  };
+        if (data && data.length > 0) {
+          const match = data[0].product_code.match(/\d+$/);
+          const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
+          setProductCode(`${prefix}${String(nextNum).padStart(4, '0')}`);
+        } else {
+          setProductCode(`${prefix}0001`);
+        }
+      } catch {
+        setProductCode(`${prefix}0001`);
+      } finally {
+        setCodeLoading(false);
+      }
+    };
+    generateProductCode();
+  }, [brand]);
 
-  const renderCommercialStudio = (
-    cutout: Blob | null,
-    rawFallbackUrl: string,
-    config: StagedSetupConfig,
-    origSizeStr: string
-  ) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      setIsProcessing(false);
-      return;
-    }
-
-    const size = 1200;
-    canvas.width = size;
-    canvas.height = size;
-
-    // 1. Velvet/Fabric Background Base
-    const bgGrad = ctx.createLinearGradient(0, 0, size, size);
-    bgGrad.addColorStop(0, config.baseColor);
-    bgGrad.addColorStop(0.5, config.accentColor);
-    bgGrad.addColorStop(1, '#050706');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, size, size);
-
-    // Natural light drape folds
-    ctx.save();
-    ctx.filter = 'blur(50px)';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.beginPath();
-    ctx.ellipse(size * 0.35, size * 0.25, size * 0.45, size * 0.2, -0.3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // 2. Center Stage Pedestal (Plinth)
-    ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(size * 0.52, size * 0.62, size * 0.44, size * 0.31, -0.04, 0, Math.PI * 2);
-
-    if (config.plinthType === 'marble') {
-      const marbleGrad = ctx.createRadialGradient(
-        size * 0.46, size * 0.52, 40,
-        size * 0.52, size * 0.62, size * 0.44
-      );
-      marbleGrad.addColorStop(0, '#ffffff');
-      marbleGrad.addColorStop(0.55, '#f5f2ea');
-      marbleGrad.addColorStop(0.9, '#e8e0d0');
-      marbleGrad.addColorStop(1, '#d5cab6');
-      ctx.fillStyle = marbleGrad;
-      ctx.fill();
-
-      // Gold Brass Tray Edge
-      ctx.lineWidth = 14;
-      const rimGrad = ctx.createLinearGradient(size * 0.1, size * 0.5, size * 0.9, size * 0.7);
-      rimGrad.addColorStop(0, '#c6933a');
-      rimGrad.addColorStop(0.35, '#ffd700');
-      rimGrad.addColorStop(0.7, '#d4af37');
-      rimGrad.addColorStop(1, '#8b6508');
-      ctx.strokeStyle = rimGrad;
-      ctx.stroke();
-    } else if (config.plinthType === 'brass') {
-      const brassGrad = ctx.createRadialGradient(size * 0.45, size * 0.55, 30, size * 0.5, size * 0.62, size * 0.42);
-      brassGrad.addColorStop(0, '#f9e8a2');
-      brassGrad.addColorStop(0.55, '#d4af37');
-      brassGrad.addColorStop(0.85, '#996515');
-      brassGrad.addColorStop(1, '#5c3a09');
-      ctx.fillStyle = brassGrad;
-      ctx.fill();
+  const toggleSelection = (item: string, list: string[], setList: (val: string[]) => void) => {
+    if (list.includes(item)) {
+      setList(list.filter((i) => i !== item));
     } else {
-      // Warm Travertine
-      ctx.fillStyle = '#eae2d3';
-      ctx.fill();
+      setList([...list, item]);
     }
-    ctx.restore();
+  };
 
-    // 3. Flower & Botanical Accents
-    const drawPetals = (cx: number, cy: number, r: number, alpha: number) => {
-      ctx.save();
-      ctx.filter = 'blur(6px)';
-      ctx.globalAlpha = alpha;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fillStyle = config.flowerStyle === 'rose-petals' ? '#e63946' : '#ffffff';
-      ctx.fill();
-      ctx.restore();
-    };
+  // Called when user clicks "Okay, Add Enhanced Image" in Studio Modal
+  const handleAcceptAiImage = (processedDataUrl: string) => {
+    const defaultTag = selectedColors.length > 0 ? selectedColors[0] : (colours[0]?.name || 'General');
+    setImages((prev) => [
+      ...prev,
+      { id: `${Date.now()}`, url: processedDataUrl, color_tag: defaultTag }
+    ]);
+  };
 
-    if (config.flowerStyle !== 'none') {
-      const flowers = [
-        [size * 0.88, size * 0.18, 24, 0.6],
-        [size * 0.93, size * 0.24, 18, 0.5],
-        [size * 0.82, size * 0.26, 20, 0.4],
-        [size * 0.14, size * 0.82, 28, 0.55],
-        [size * 0.19, size * 0.88, 22, 0.45]
-      ];
-      flowers.forEach(([fx, fy, fr, fa]) => drawPetals(fx, fy, fr, fa));
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setErrorMsg(null);
+
+    try {
+      const catObj = categories.find((c) => String(c.id) === String(selectedCategory));
+      const subCatObj = subCategories.find((sc) => String(sc.id) === String(selectedSubCategory));
+
+      const payload = {
+        id: `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        product_code: productCode,
+        name: name.trim(),
+        description: description.trim(),
+        department: brand,
+        category_id: selectedCategory || null,
+        category_name: catObj?.name || null,
+        sub_category_id: selectedSubCategory || null,
+        sub_category_name: subCatObj?.name || null,
+        unit_id: selectedUnit || null,
+        stock_quantity: Number(openingStock) || 0,
+        variants: { colors: selectedColors, sizes: selectedSizes, fabrics: selectedFabrics },
+        images: images,
+        barcode: productCode,
+        active: true,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from('products').insert([payload]);
+      if (error) throw error;
+
+      alert(`Product ${productCode} saved successfully!`);
+      onClose();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to save product.');
+    } finally {
+      setSubmitting(false);
     }
-
-    // 4. Draw Product Item
-    const targetSrc = cutout ? URL.createObjectURL(cutout) : rawFallbackUrl;
-    const itemImg = new Image();
-    itemImg.crossOrigin = 'anonymous';
-    itemImg.src = targetSrc;
-
-    itemImg.onload = () => {
-      const maxW = size * 0.52;
-      const maxH = size * 0.52;
-      let drawW = itemImg.width;
-      let drawH = itemImg.height;
-      const ratio = Math.min(maxW / drawW, maxH / drawH);
-      drawW = Math.round(drawW * ratio);
-      drawH = Math.round(drawH * ratio);
-
-      const posX = Math.round((size - drawW) / 2);
-      const posY = Math.round((size - drawH) / 2 + 35);
-
-      // Contact Grounding Shadow
-      ctx.save();
-      const shadowY = posY + drawH - 12;
-      const shadowW = drawW * 0.88;
-      const shadowH = drawH * 0.15;
-
-      const shadowGrad = ctx.createRadialGradient(
-        size / 2, shadowY + shadowH / 2, 8,
-        size / 2, shadowY + shadowH / 2, shadowW / 2
-      );
-      shadowGrad.addColorStop(0, 'rgba(12, 10, 6, 0.58)');
-      shadowGrad.addColorStop(0.5, 'rgba(12, 10, 6, 0.25)');
-      shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = shadowGrad;
-      ctx.beginPath();
-      ctx.ellipse(size / 2, shadowY + shadowH / 2, shadowW / 2, shadowH, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      // Soft Specular Reflection on Marble Base
-      if (cutout) {
-        ctx.save();
-        ctx.translate(0, (posY + drawH) * 2 - 12);
-        ctx.scale(1, -1);
-        ctx.globalAlpha = 0.11;
-        ctx.drawImage(itemImg, posX, posY, drawW, drawH);
-        ctx.restore();
-      }
-
-      // Draw item (authenticity locked, 0% alteration)
-      ctx.drawImage(itemImg, posX, posY, drawW, drawH);
-
-      // WebP Low Storage Compression (< 120KB)
-      const webpOutput = canvas.toDataURL('image/webp', 0.86);
-      const approxBytes = Math.round((webpOutput.length * 3) / 4);
-
-      setFileSizeInfo({
-        original: origSizeStr,
-        optimized: formatSize(approxBytes)
-      });
-      setProcessedImage(webpOutput);
-      setIsProcessing(false);
-    };
   };
 
-  // Regenerate with fresh studio setup on click
-  const handleRegenerate = () => {
-    if (!originalImage || !fileSizeInfo) return;
-    const nextSeed = variationSeed + 1;
-    setVariationSeed(nextSeed);
-    startAiSegmentationAndRender(cutoutBlob || originalImage, originalImage, fileSizeInfo.original, nextSeed);
-  };
-
-  const handleConfirmAndUpload = () => {
-    if (!processedImage) return;
-    onAcceptImage(processedImage);
-    onClose();
-  };
+  const selectedCatObj = categories.find((c) => String(c.id) === String(selectedCategory));
+  const filteredSubCats = subCategories.filter((sc) => String(sc.category_id) === String(selectedCategory));
+  const filteredSizes = sizes.filter((sz) => !selectedCategory || !sz.category_id || String(sz.category_id) === String(selectedCategory));
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md select-none font-sans animate-in fade-in">
-      <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-5xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-[#dce6e1] flex flex-col gap-4 text-xs">
-        
-        {/* Header */}
-        <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-bold">
-              <Camera className="w-4 h-4" />
+    <>
+      <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs select-none font-sans animate-in fade-in">
+        <div className="bg-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-[#dce6e1] space-y-4 text-xs">
+          
+          <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3 sticky top-0 bg-white z-10">
+            <div className="flex items-center gap-2">
+              <Package className="w-5 h-5 text-[#0b3b2c]" />
+              <div>
+                <h2 className="text-base font-bold text-[#0b3b2c]">Product Master Creator</h2>
+                <span className="text-[10px] text-[#4d6960]">Create new catalog product</span>
+              </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-[#0b3b2c]">Smart Product Studio Staging</h2>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-bold flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-emerald-600" />
-                  <span>Item Authenticity Locked</span>
+            <div className="flex items-center gap-3">
+              <div className="bg-[#f0f4f2] px-4 py-1.5 rounded-xl border border-[#dce6e1] text-right">
+                <span className="text-[8px] font-bold uppercase tracking-wider text-[#4d6960] block">PRODUCT CODE</span>
+                <span className="font-mono text-sm font-bold text-[#0b3b2c]">
+                  {codeLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : productCode}
                 </span>
               </div>
-              <p className="text-[10px] text-[#4d6960]">
-                Matches studio props and background to item aesthetics. Regenerate if you want a fresh setup.
-              </p>
+              <button onClick={onClose} className="p-1 rounded-full hover:bg-neutral-100 cursor-pointer">
+                <X className="w-5 h-5 text-neutral-400" />
+              </button>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-1 rounded-full hover:bg-neutral-100 cursor-pointer">
-            <X className="w-5 h-5 text-neutral-400" />
-          </button>
-        </div>
 
-        {/* 1. Upload Trigger */}
-        {!originalImage ? (
-          <div className="min-h-[320px] flex flex-col items-center justify-center border-2 border-dashed border-[#c5d6ce] rounded-3xl bg-[#f8faf9] p-8 text-center">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleSelectFile}
-              className="hidden"
-              id="studio-file-input"
-            />
-            <div className="w-16 h-16 rounded-3xl bg-white shadow-xs border border-[#dce6e1] flex items-center justify-center mb-3">
-              <Upload className="w-7 h-7 text-[#0b3b2c]" />
+          {errorMsg && (
+            <div className="p-3 rounded-xl border bg-rose-50 border-rose-200 text-rose-800 font-bold">
+              {errorMsg}
             </div>
-            <h3 className="font-bold text-sm text-[#0b3b2c]">Select Raw Item Photo</h3>
-            <p className="text-[11px] text-[#4d6960] max-w-sm mt-1 mb-4">
-              Upload raw click. Smart studio will isolate the product and arrange suitable photoshoot props, lighting and natural shadows.
-            </p>
-            <label
-              htmlFor="studio-file-input"
-              className="px-6 py-2.5 rounded-2xl bg-[#0b3b2c] text-white font-bold text-xs shadow-xs hover:bg-[#124b39] transition-all cursor-pointer flex items-center gap-2"
-            >
-              <Camera className="w-4 h-4 text-[#e5c07b]" />
-              <span>Choose Photo to Stage</span>
-            </label>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            
-            {/* 2. Side-by-Side Comparison */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
-              {/* Left: Raw Photo */}
-              <div className="rounded-2xl border border-[#dce6e1] bg-[#f8faf9] overflow-hidden flex flex-col">
-                <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-white flex justify-between items-center">
-                  <span className="font-bold text-[11px] text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <Eye className="w-3.5 h-3.5" /> 1. Raw Captured Photo
-                  </span>
-                  {fileSizeInfo?.original && (
-                    <span className="font-mono text-[10px] text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-md">
-                      Size: {fileSizeInfo.original}
-                    </span>
-                  )}
-                </div>
-                <div className="h-64 sm:h-80 p-4 flex items-center justify-center bg-neutral-50">
-                  <img
-                    src={originalImage}
-                    alt="Raw Upload"
-                    className="max-h-full max-w-full object-contain rounded-lg shadow-2xs"
-                  />
-                </div>
-              </div>
+          )}
 
-              {/* Right: Studio Staged Output */}
-              <div className="rounded-2xl border border-[#0b3b2c]/30 bg-[#f8faf9] overflow-hidden flex flex-col relative">
-                <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-[#e4efe9] flex justify-between items-center">
-                  <span className="font-bold text-[11px] text-[#0b3b2c] uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#c6933a]" /> 2. Commercial Photoshoot Result
-                  </span>
-                  {fileSizeInfo?.optimized && (
-                    <span className="font-mono text-[10px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-md font-bold">
-                      Lightweight WebP: {fileSizeInfo.optimized}
-                    </span>
-                  )}
-                </div>
-
-                <div className="h-64 sm:h-80 p-4 flex items-center justify-center relative bg-white">
-                  {isProcessing ? (
-                    <div className="flex flex-col items-center justify-center gap-2 text-center p-4">
-                      <RefreshCw className="w-7 h-7 animate-spin text-[#0b3b2c]" />
-                      <span className="text-xs font-bold text-[#0b3b2c]">{processingStatus}</span>
-                      <span className="text-[10px] text-[#4d6960]">Arranging props, reflections & studio lighting...</span>
-                    </div>
-                  ) : processedImage ? (
-                    <img
-                      src={processedImage}
-                      alt="Commercial Staged Item"
-                      className="max-h-full max-w-full object-contain rounded-lg shadow-sm"
-                    />
-                  ) : null}
-                </div>
-              </div>
-
-            </div>
-
-            {/* 3. Setup Status & Regenerate Controls */}
-            {currentConfig && !isProcessing && (
-              <div className="p-3.5 bg-[#f8faf9] border border-[#dce6e1] rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#0b3b2c]" />
-                  <span className="text-[11px] font-bold text-[#0b3b2c]">
-                    Active Setup: <span className="text-[#4d6960] font-normal">{currentConfig.name}</span>
-                  </span>
-                </div>
-
+          <form onSubmit={handleSave} className="space-y-4">
+            <div>
+              <label className="text-xs font-bold text-[#0b3b2c] block mb-1.5">Brand *</label>
+              <div className="inline-flex p-1 bg-[#f0f4f2] rounded-2xl border border-[#dce6e1]">
                 <button
                   type="button"
-                  onClick={handleRegenerate}
-                  className="px-4 py-2 rounded-xl bg-white border border-[#0b3b2c] text-[#0b3b2c] font-bold text-xs shadow-2xs hover:bg-[#0b3b2c] hover:text-white transition-all cursor-pointer flex items-center gap-1.5"
+                  onClick={() => setBrand('fashions')}
+                  className={`px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    brand === 'fashions' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960]'
+                  }`}
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Regenerate (New Studio Setup)</span>
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Fashion</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBrand('jewellery')}
+                  className={`px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    brand === 'jewellery' ? 'bg-[#0b3b2c] text-white shadow-xs' : 'text-[#4d6960]'
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Jewellery</span>
                 </button>
               </div>
-            )}
+            </div>
 
-            {/* Bottom Actions */}
-            <div className="flex items-center justify-between pt-2 border-t border-[#edf2ef]">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Pure Banarasi Silk Saree"
+                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Product Description</label>
+                <textarea
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Weaving specs, material blend..."
+                  className="w-full px-3 py-2 rounded-xl border border-[#dce6e1] bg-[#f8faf9] outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div>
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Category *</label>
+                <select
+                  required
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    setSelectedCategory(e.target.value);
+                    setSelectedSubCategory('');
+                    setSelectedSizes([]);
+                  }}
+                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
+                >
+                  <option value="">Select Category</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Sub-Category</label>
+                <select
+                  value={selectedSubCategory}
+                  onChange={(e) => setSelectedSubCategory(e.target.value)}
+                  disabled={!selectedCategory}
+                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none disabled:opacity-50"
+                >
+                  <option value="">Select Sub-Category</option>
+                  {filteredSubCats.map((sc) => (
+                    <option key={sc.id} value={sc.id}>{sc.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Unit *</label>
+                <select
+                  required
+                  value={selectedUnit}
+                  onChange={(e) => setSelectedUnit(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-semibold outline-none"
+                >
+                  <option value="">Select Unit</option>
+                  {units.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-[#0b3b2c] block mb-1">Opening Stock</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={openingStock}
+                  onChange={(e) => setOpeningStock(Number(e.target.value))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-[#dce6e1] bg-[#f8faf9] font-bold outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-2.5">
+              <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">Select Variants</span>
+              
+              <div>
+                <span className="text-[10px] font-bold text-neutral-600 block mb-1">Colours:</span>
+                <div className="flex flex-wrap gap-1">
+                  {colours.map((c) => {
+                    const active = selectedColors.includes(c.name);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => toggleSelection(c.name, selectedColors, setSelectedColors)}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                          active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
+                        }`}
+                      >
+                        {active && <span className="text-[#e5c07b]">✓</span>}
+                        <span>{c.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-neutral-600 block mb-1">Sizes:</span>
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                  {filteredSizes.map((s) => {
+                    const active = selectedSizes.includes(s.name);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                          active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
+                        }`}
+                      >
+                        {active && <span className="text-[#e5c07b]">✓</span>}
+                        <span>{s.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-neutral-600 block mb-1">Fabrics:</span>
+                <div className="flex flex-wrap gap-1">
+                  {fabrics.map((f) => {
+                    const active = selectedFabrics.includes(f.name);
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => toggleSelection(f.name, selectedFabrics, setSelectedFabrics)}
+                        className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center gap-1 border cursor-pointer ${
+                          active ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]' : 'bg-white text-neutral-600 border-[#dce6e1]'
+                        }`}
+                      >
+                        {active && <span className="text-[#e5c07b]">✓</span>}
+                        <span>{f.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* AI STUDIO ENHANCED IMAGE UPLOAD SECTION */}
+            <div className="p-3.5 bg-[#f8faf9] rounded-2xl border border-[#dce6e1] space-y-3">
+              <div>
+                <span className="text-xs font-bold text-[#0b3b2c] block uppercase tracking-wider">
+                  Product Images & AI Studio Enhancements
+                </span>
+                <p className="text-[10px] text-[#4d6960] mt-0.5">
+                  Enhance photos with studio lighting, backdrop replacement and high-clarity lightweight compression.
+                </p>
+              </div>
+
+              {/* Trigger Button that opens the Studio Popup */}
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="text-[11px] font-bold text-[#0b3b2c] underline cursor-pointer"
+                onClick={() => setShowStudioModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0b3b2c] text-white font-bold text-xs shadow-xs hover:bg-[#124b39] transition-all cursor-pointer"
               >
-                Upload Different Photo
+                <Sparkles className="w-4 h-4 text-[#e5c07b]" />
+                <span>Upload & Enhance via AI Studio</span>
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleSelectFile}
-                className="hidden"
-              />
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 rounded-xl text-neutral-500 font-bold hover:bg-neutral-100 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={!processedImage || isProcessing}
-                  onClick={handleConfirmAndUpload}
-                  className="px-6 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold flex items-center gap-1.5 shadow-xs hover:bg-[#124b39] transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="w-4 h-4 text-[#e5c07b]" />
-                  <span>Okay, Upload Staged Image</span>
-                </button>
-              </div>
+              {/* Uploaded Gallery Grid */}
+              {images.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  {images.map((img) => (
+                    <div key={img.id} className="rounded-2xl border border-[#dce6e1] bg-white overflow-hidden shadow-2xs">
+                      <div className="relative h-28 bg-[#fbfcfc]">
+                        <img src={img.url} alt="Variant" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setImages(images.filter((im) => im.id !== img.id))}
+                          className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/60 text-white hover:bg-rose-600 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <div className="p-2 bg-[#fbfcfc] border-t">
+                        <select
+                          value={img.color_tag}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setImages(images.map((im) => im.id === img.id ? { ...im, color_tag: val } : im));
+                          }}
+                          className="w-full px-2 py-1 rounded border text-[11px] font-bold outline-none"
+                        >
+                          {selectedColors.length > 0 ? (
+                            selectedColors.map((c) => <option key={c} value={c}>{c}</option>)
+                          ) : (
+                            colours.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-          </div>
-        )}
-
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl font-bold text-neutral-500 cursor-pointer">Cancel</button>
+              <button type="submit" disabled={submitting} className="px-6 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold flex items-center gap-1.5 cursor-pointer">
+                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5 text-[#e5c07b]" />}
+                <span>Save Product Master</span>
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+
+      {/* AI Studio Image Modal Popup */}
+      {showStudioModal && (
+        <ProductImageStudioModal
+          onClose={() => setShowStudioModal(false)}
+          onAcceptImage={handleAcceptAiImage}
+          productTitle={name}
+          categoryName={selectedCatObj?.name}
+        />
+      )}
+    </>
   );
 }
