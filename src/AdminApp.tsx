@@ -146,13 +146,12 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
-      {/* Product Master Modal Popup Render */}
+      {/* Product Master Modal Popup */}
       {selectedMasterSection === 'product' && (
         <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
       )}
 
-      {/* మిగతా మోడల్స్ (Category, SubCategory మొదలైనవి) ఇక్కడ యాడ్ చేసుకోవచ్చు */}
-
+      {/* Main Container: Passu modal open unnapudu background blur/clean ga undali */}
       <main className="flex-1 w-full max-w-[1540px] mx-auto p-3 sm:p-5">
         {currentView === 'dashboard' && (
           <AdminDashboard
