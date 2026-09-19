@@ -3,13 +3,9 @@ import {
   ExternalLink,
   LogOut,
   LayoutDashboard,
-  Users,
   RefreshCw,
-  ShoppingBag,
   Package,
   Layers,
-  MapPin,
-  Settings,
   ChevronDown,
   Tag,
   Palette,
@@ -33,7 +29,6 @@ interface AdminNavbarProps {
 }
 
 export default function AdminNavbar({
-  unreadCount,
   currentUser,
   isSyncing,
   onManualSync,
@@ -42,7 +37,6 @@ export default function AdminNavbar({
   onViewChange,
   onSelectMaster
 }: AdminNavbarProps) {
-  const isAdmin = currentUser?.role === 'admin';
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +59,6 @@ export default function AdminNavbar({
     setOpenDropdown(null);
   };
 
-  // View ని మార్చకుండా కేవలం Pop-up మాత్రమే ఓపెన్ చేస్తుంది
   const handleMasterClick = (section: MasterSectionType) => {
     if (onSelectMaster) {
       onSelectMaster(section);
@@ -92,6 +85,8 @@ export default function AdminNavbar({
       className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#e2eae6] shadow-[0_2px_12px_rgba(11,59,44,0.03)] select-none font-sans"
     >
       <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-15 flex items-center justify-between gap-3">
+        
+        {/* Left Section: Brand Logo & Navigation (Dashboard and Masters Only) */}
         <div className="flex items-center gap-4 lg:gap-5">
           <button
             type="button"
@@ -111,11 +106,14 @@ export default function AdminNavbar({
             </div>
           </button>
 
-          <div className="hidden md:flex items-center gap-1 text-xs font-semibold text-[#4d6960]">
+          {/* Primary Nav Items: Dashboard & Masters Only */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-[#4d6960]">
+            
+            {/* 1. Dashboard View */}
             <button
               type="button"
               onClick={() => handleSelectView('dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
                 currentView === 'dashboard'
                   ? 'bg-[#0b3b2c] text-white font-bold shadow-xs'
                   : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
@@ -125,48 +123,12 @@ export default function AdminNavbar({
               <span>Dashboard</span>
             </button>
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown('catalog')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                  openDropdown === 'catalog' || currentView === 'products'
-                    ? 'bg-[#f0f4f2] text-[#0b3b2c]'
-                    : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
-                }`}
-              >
-                <Package className="w-3.5 h-3.5" />
-                <span>Catalog</span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === 'catalog' ? 'rotate-180' : ''}`} />
-              </button>
-
-              {openDropdown === 'catalog' && (
-                <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectView('products')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
-                  >
-                    <Package className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Product Catalog & Vault</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('category')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
-                  >
-                    <Tag className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Categories & Sub-Categories</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
+            {/* 2. Masters Dropdown */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => toggleDropdown('masters')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
+                className={`flex items-center gap-1 px-3.5 py-1.5 rounded-full transition-all cursor-pointer ${
                   openDropdown === 'masters'
                     ? 'bg-[#f0f4f2] text-[#0b3b2c]'
                     : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
@@ -231,84 +193,10 @@ export default function AdminNavbar({
               )}
             </div>
 
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown('orders')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all cursor-pointer hover:bg-[#f0f4f2] hover:text-[#0b3b2c]"
-              >
-                <ShoppingBag className="w-3.5 h-3.5" />
-                <span>Orders</span>
-                {unreadCount > 0 && (
-                  <span className="bg-[#ff4d6d] text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
-                    {unreadCount}
-                  </span>
-                )}
-                <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === 'orders' ? 'rotate-180' : ''}`} />
-              </button>
-
-              {openDropdown === 'orders' && (
-                <div className="absolute top-full left-0 mt-1.5 w-48 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectView('dashboard')}
-                    className="w-full text-left flex items-center justify-between px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      <ShoppingBag className="w-3.5 h-3.5 text-neutral-400" />
-                      <span>Live Order Stream</span>
-                    </span>
-                    {unreadCount > 0 && (
-                      <span className="bg-[#ff4d6d] text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
-                        {unreadCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => toggleDropdown('config')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                  openDropdown === 'config' || currentView === 'staff'
-                    ? 'bg-[#f0f4f2] text-[#0b3b2c]'
-                    : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Store Config</span>
-                <ChevronDown className={`w-3 h-3 transition-transform ${openDropdown === 'config' ? 'rotate-180' : ''}`} />
-              </button>
-
-              {openDropdown === 'config' && (
-                <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-2xl shadow-xl border border-[#e2eae6] py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => handleSelectView('staff')}
-                      className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-[#0b3b2c] hover:bg-[#f4f7f5] font-bold cursor-pointer"
-                    >
-                      <Users className="w-3.5 h-3.5 text-[#0b3b2c]" />
-                      <span>Staff & Duty PINs</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('category')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
-                  >
-                    <MapPin className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Pincodes & Shipping</span>
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </div>
 
+        {/* Right Section: Auto Sync, Profile, Store & Logout */}
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -360,6 +248,7 @@ export default function AdminNavbar({
             <span>Lock</span>
           </button>
         </div>
+
       </div>
     </nav>
   );
