@@ -151,24 +151,26 @@ export default function AdminApp() {
         <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
       )}
 
-      {/* Main Container: Passu modal open unnapudu background blur/clean ga undali */}
-      <main className="flex-1 w-full max-w-[1540px] mx-auto p-3 sm:p-5">
-        {currentView === 'dashboard' && (
-          <AdminDashboard
-            currentUser={currentUser}
-            onNewOrderNotice={handleNewOrderAlert}
-            syncTrigger={syncTrigger}
-          />
-        )}
+      {/* Main Container: Passu modal open unnapudu background hide avthundi, close chesthe malli dashboard kanipistundi */}
+      {!selectedMasterSection && (
+        <main className="flex-1 w-full max-w-[1540px] mx-auto p-3 sm:p-5">
+          {currentView === 'dashboard' && (
+            <AdminDashboard
+              currentUser={currentUser}
+              onNewOrderNotice={handleNewOrderAlert}
+              syncTrigger={syncTrigger}
+            />
+          )}
 
-        {currentView === 'products' && (
-          <AdminProducts currentUser={currentUser} />
-        )}
+          {currentView === 'products' && (
+            <AdminProducts currentUser={currentUser} />
+          )}
 
-        {currentView === 'staff' && (
-          <AdminStaff currentUser={currentUser} />
-        )}
-      </main>
+          {currentView === 'staff' && (
+            <AdminStaff currentUser={currentUser} />
+          )}
+        </main>
+      )}
     </div>
   );
 }
