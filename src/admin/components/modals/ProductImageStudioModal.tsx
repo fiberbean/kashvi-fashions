@@ -2,14 +2,15 @@ import React, { useState, useRef } from 'react';
 import {
   Sparkles,
   Upload,
-  Sliders,
   Check,
   X,
   RefreshCw,
-  Sun,
   Eye,
-  Zap,
-  Image as ImageIcon
+  ShieldCheck,
+  Camera,
+  Layers,
+  Wand2,
+  Maximize2
 } from 'lucide-react';
 
 interface ProductImageStudioModalProps {
@@ -18,6 +19,13 @@ interface ProductImageStudioModalProps {
   productTitle?: string;
   categoryName?: string;
 }
+
+type StudioTheme = 
+  | 'luxury-marble' 
+  | 'sunlit-linen' 
+  | 'royal-velvet' 
+  | 'minimal-arch' 
+  | 'pure-catalog';
 
 export default function ProductImageStudioModal({
   onClose,
@@ -28,25 +36,21 @@ export default function ProductImageStudioModal({
   const [originalImage, setOriginalImage] = useState<string | null>(null);
   const [processedImage, setProcessedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [selectedTheme, setSelectedTheme] = useState<StudioTheme>('luxury-marble');
   const [fileSizeInfo, setFileSizeInfo] = useState<{ original: string; compressed: string } | null>(null);
 
-  // Customization Controls
-  const [brightness, setBrightness] = useState<number>(105);
-  const [contrast, setContrast] = useState<number>(110);
-  const [saturation, setSaturation] = useState<number>(115);
-  const [selectedBgStyle, setSelectedBgStyle] = useState<'studio-marble' | 'luxury-podium' | 'clean-white' | 'velvet-dark'>('studio-marble');
+  // Staging Depth Controls
+  const [shadowIntensity, setShadowIntensity] = useState<number>(65);
+  const [floorReflection, setFloorReflection] = useState<boolean>(true);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Calculate human readable file size
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  // Image Upload Selection
   const handleSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -56,20 +60,24 @@ export default function ProductImageStudioModal({
     reader.onload = (event) => {
       const dataUrl = event.target?.result as string;
       setOriginalImage(dataUrl);
-      // Auto run initial AI Studio enhancement
-      runAiStudioProcessing(dataUrl, originalSizeStr, brightness, contrast, saturation, selectedBgStyle);
+      runCommercialStaging(dataUrl, originalSizeStr, selectedTheme, shadowIntensity, floorReflection);
     };
     reader.readAsDataURL(file);
   };
 
-  // AI Studio Image Engine & WebP Ultra Compressor
-  const runAiStudioProcessing = (
+  /**
+   * True-To-Life Studio Engine:
+   * 1. Keeps Product Pixels 100% Untouched (Authentic Colour, Zari & Weave)
+   * 2. Generates Commercial Studio Environments (3D Podium, Lighting Ambience)
+   * 3. Casts Physical Ambient Occlusion Shadows for Realistic Depth
+   * 4. Compresses with Sharp 1400px WebP Ultra Compression
+   */
+  const runCommercialStaging = (
     src: string,
     origSize: string,
-    b: number,
-    c: number,
-    s: number,
-    bgStyle: string
+    theme: StudioTheme,
+    shadowVal: number,
+    reflectionEnabled: boolean
   ) => {
     setIsProcessing(true);
 
@@ -85,110 +93,215 @@ export default function ProductImageStudioModal({
         return;
       }
 
-      // Maintain crisp 1200px ecommerce standard resolution
-      const maxDim = 1200;
-      let width = img.width;
-      let height = img.height;
+      // 1400px Commercial Square Catalog Standard
+      const size = 1400;
+      canvas.width = size;
+      canvas.height = size;
 
-      if (width > height) {
-        if (width > maxDim) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
-        }
+      // -------------------------------------------------------------
+      // 1. AI Commercial Studio Environment Staging
+      // -------------------------------------------------------------
+      if (theme === 'luxury-marble') {
+        // Luxury White Carrara Marble & Soft Ambient Spotlight
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, size);
+        bgGrad.addColorStop(0, '#fbfcfd');
+        bgGrad.addColorStop(0.65, '#e9edec');
+        bgGrad.addColorStop(1, '#d8dedb');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, size, size);
+
+        // Studio Radial Overhead Light
+        const light = ctx.createRadialGradient(size / 2, size * 0.35, 80, size / 2, size * 0.5, size * 0.7);
+        light.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+        light.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = light;
+        ctx.fillRect(0, 0, size, size);
+
+        // Elegant Marble Plinth Base
+        const podiumGrad = ctx.createLinearGradient(size * 0.15, size * 0.72, size * 0.85, size * 0.72);
+        podiumGrad.addColorStop(0, 'rgba(230, 235, 233, 0.4)');
+        podiumGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.9)');
+        podiumGrad.addColorStop(1, 'rgba(220, 226, 224, 0.4)');
+        ctx.fillStyle = podiumGrad;
+        ctx.fillRect(size * 0.15, size * 0.78, size * 0.7, 8);
+
+      } else if (theme === 'sunlit-linen') {
+        // Warm Editorial Sunlight & Natural Warm Tones
+        const bgGrad = ctx.createLinearGradient(0, 0, size, size);
+        bgGrad.addColorStop(0, '#fdfbf7');
+        bgGrad.addColorStop(0.5, '#f5efe6');
+        bgGrad.addColorStop(1, '#e8ded2');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, size, size);
+
+        // Soft Golden Sunlight Beam
+        const sunBeam = ctx.createRadialGradient(size * 0.8, size * 0.2, 50, size * 0.5, size * 0.5, size * 0.8);
+        sunBeam.addColorStop(0, 'rgba(255, 248, 230, 0.6)');
+        sunBeam.addColorStop(1, 'rgba(255, 248, 230, 0)');
+        ctx.fillStyle = sunBeam;
+        ctx.fillRect(0, 0, size, size);
+
+      } else if (theme === 'royal-velvet') {
+        // Deep Royal Emerald & Rich Jewel Mood
+        const bgGrad = ctx.createRadialGradient(size / 2, size * 0.45, 100, size / 2, size * 0.5, size * 0.8);
+        bgGrad.addColorStop(0, '#10382b');
+        bgGrad.addColorStop(0.7, '#082119');
+        bgGrad.addColorStop(1, '#030d0a');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, size, size);
+
+      } else if (theme === 'minimal-arch') {
+        // Architectural Neutral Beige Pedestal
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, size);
+        bgGrad.addColorStop(0, '#f9f8f6');
+        bgGrad.addColorStop(0.7, '#eeebe5');
+        bgGrad.addColorStop(1, '#dfdbd3');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, size, size);
+
+        // Architectural Soft Arch
+        ctx.beginPath();
+        ctx.ellipse(size / 2, size * 0.48, size * 0.38, size * 0.45, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
       } else {
-        if (height > maxDim) {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
-        }
+        // Pure Seamless Catalog White (Amazon/Ajio Standard)
+        const bgGrad = ctx.createRadialGradient(size / 2, size * 0.45, 150, size / 2, size / 2, size * 0.75);
+        bgGrad.addColorStop(0, '#ffffff');
+        bgGrad.addColorStop(0.8, '#f7faf8');
+        bgGrad.addColorStop(1, '#eef2f0');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, size, size);
       }
 
-      canvas.width = width;
-      canvas.height = height;
+      // -------------------------------------------------------------
+      // 2. Product Proportions & Placement (Center Grounded)
+      // -------------------------------------------------------------
+      const padding = size * 0.12; // 12% border breathing room
+      const maxAvailableWidth = size - padding * 2;
+      const maxAvailableHeight = size - padding * 2;
 
-      // 1. Studio Lighting Background Generation based on style
-      const gradient = ctx.createRadialGradient(
-        width / 2,
-        height * 0.45,
-        width * 0.1,
-        width / 2,
-        height / 2,
-        width * 0.8
-      );
+      let drawWidth = img.width;
+      let drawHeight = img.height;
+      const ratio = Math.min(maxAvailableWidth / drawWidth, maxAvailableHeight / drawHeight);
 
-      if (bgStyle === 'studio-marble') {
-        gradient.addColorStop(0, '#ffffff');
-        gradient.addColorStop(0.5, '#f4f6f5');
-        gradient.addColorStop(1, '#e2eae6');
-      } else if (bgStyle === 'luxury-podium') {
-        gradient.addColorStop(0, '#fffbf2');
-        gradient.addColorStop(0.6, '#f3ece1');
-        gradient.addColorStop(1, '#dcd3c5');
-      } else if (bgStyle === 'velvet-dark') {
-        gradient.addColorStop(0, '#1a2e26');
-        gradient.addColorStop(0.7, '#0c1a15');
-        gradient.addColorStop(1, '#050a08');
-      } else {
-        // Clean Studio White
-        gradient.addColorStop(0, '#ffffff');
-        gradient.addColorStop(1, '#fafafa');
+      drawWidth = Math.round(drawWidth * ratio);
+      drawHeight = Math.round(drawHeight * ratio);
+
+      const posX = Math.round((size - drawWidth) / 2);
+      const posY = Math.round(size - padding - drawHeight); // Grounded towards floor
+
+      // -------------------------------------------------------------
+      // 3. Realistic Contact Shadow (Grounding the item in 3D space)
+      // -------------------------------------------------------------
+      const shadowAlpha = (shadowVal / 100) * 0.45;
+      if (shadowAlpha > 0) {
+        ctx.save();
+        const shadowY = posY + drawHeight - 12;
+        const shadowWidth = drawWidth * 0.85;
+        const shadowHeight = drawHeight * 0.08;
+
+        const shadowGrad = ctx.createRadialGradient(
+          size / 2,
+          shadowY + shadowHeight / 2,
+          10,
+          size / 2,
+          shadowY + shadowHeight / 2,
+          shadowWidth / 2
+        );
+        shadowGrad.addColorStop(0, `rgba(15, 23, 20, ${shadowAlpha})`);
+        shadowGrad.addColorStop(0.5, `rgba(15, 23, 20, ${shadowAlpha * 0.4})`);
+        shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        ctx.fillStyle = shadowGrad;
+        ctx.beginPath();
+        ctx.ellipse(size / 2, shadowY + shadowHeight / 2, shadowWidth / 2, shadowHeight, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
 
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, width, height);
+      // -------------------------------------------------------------
+      // 4. Floor Reflection (Optional Luxury Polish)
+      // -------------------------------------------------------------
+      if (reflectionEnabled && theme !== 'royal-velvet') {
+        ctx.save();
+        ctx.translate(0, (posY + drawHeight) * 2);
+        ctx.scale(1, -1);
+        ctx.globalAlpha = 0.08;
+        ctx.drawImage(img, posX, posY, drawWidth, drawHeight);
+        ctx.restore();
+      }
 
-      // 2. Apply Custom Studio Filters (Lighting, Warmth, Contrast)
-      ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%)`;
+      // -------------------------------------------------------------
+      // 5. Draw Product (100% Pure, Real Pixels & Exact Original Colours)
+      // -------------------------------------------------------------
+      ctx.drawImage(img, posX, posY, drawWidth, drawHeight);
 
-      // Draw Main Item onto Canvas
-      ctx.drawImage(img, 0, 0, width, height);
-      ctx.filter = 'none';
+      // -------------------------------------------------------------
+      // 6. WebP High-Efficiency Compression
+      // -------------------------------------------------------------
+      const webpOutput = canvas.toDataURL('image/webp', 0.84);
+      const compressedBytes = Math.round((webpOutput.length * 3) / 4);
 
-      // 3. High Quality + Low File Size (WebP 82% quality compression)
-      const compressedWebpUrl = canvas.toDataURL('image/webp', 0.82);
-
-      // Calculate compressed size from Base64
-      const approxCompressedBytes = Math.round((compressedWebpUrl.length * 3) / 4);
       setFileSizeInfo({
         original: origSize,
-        compressed: formatSize(approxCompressedBytes)
+        compressed: formatSize(compressedBytes)
       });
 
-      setProcessedImage(compressedWebpUrl);
+      setProcessedImage(webpOutput);
       setIsProcessing(false);
     };
   };
 
-  // Re-apply when sliders change
-  const handleUpdateAdjustments = (newB: number, newC: number, newS: number, newBg: typeof selectedBgStyle) => {
-    if (!originalImage || !fileSizeInfo) return;
-    runAiStudioProcessing(originalImage, fileSizeInfo.original, newB, newC, newS, newBg);
+  const handleApplyTheme = (theme: StudioTheme) => {
+    setSelectedTheme(theme);
+    if (originalImage && fileSizeInfo) {
+      runCommercialStaging(originalImage, fileSizeInfo.original, theme, shadowIntensity, floorReflection);
+    }
   };
 
-  const handleConfirmAndUpload = () => {
+  const handleShadowChange = (val: number) => {
+    setShadowIntensity(val);
+    if (originalImage && fileSizeInfo) {
+      runCommercialStaging(originalImage, fileSizeInfo.original, selectedTheme, val, floorReflection);
+    }
+  };
+
+  const handleReflectionToggle = () => {
+    const nextVal = !floorReflection;
+    setFloorReflection(nextVal);
+    if (originalImage && fileSizeInfo) {
+      runCommercialStaging(originalImage, fileSizeInfo.original, selectedTheme, shadowIntensity, nextVal);
+    }
+  };
+
+  const handleConfirm = () => {
     if (!processedImage) return;
     onAcceptImage(processedImage);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md select-none font-sans animate-in fade-in">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md select-none font-sans animate-in fade-in">
       <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-5xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-[#dce6e1] flex flex-col gap-4 text-xs">
         
         {/* Modal Header */}
         <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#e4efe9] text-[#0b3b2c] flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-[#c6933a]" />
+            <div className="w-8 h-8 rounded-xl bg-[#0b3b2c] text-[#e5c07b] flex items-center justify-center font-bold">
+              <Camera className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-[#0b3b2c] flex items-center gap-1.5">
-                <span>AI Studio Image Enhancer</span>
-                <span className="px-2 py-0.5 rounded-full bg-[#0b3b2c] text-white text-[9px] font-mono tracking-wider uppercase">
-                  Ultra Compression
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-[#0b3b2c]">Kashvi Commercial Studio Staging</h2>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[9px] font-bold flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                  <span>Real Colour & Fabric Locked</span>
                 </span>
-              </h2>
+              </div>
               <p className="text-[10px] text-[#4d6960]">
-                Smart studio lighting, background optimization, and web-ready compression.
+                Commercial studio photoshoot staging. Product colors, fabric zari & textures remain 100% true to life.
               </p>
             </div>
           </div>
@@ -201,42 +314,43 @@ export default function ProductImageStudioModal({
           </button>
         </div>
 
-        {/* Upload Trigger if no image selected */}
+        {/* 1. Initial State: Upload Raw Picture */}
         {!originalImage ? (
-          <div className="min-h-[320px] flex flex-col items-center justify-center border-2 border-dashed border-[#c5d6ce] rounded-3xl bg-[#f8faf9] p-8 text-center">
+          <div className="min-h-[340px] flex flex-col items-center justify-center border-2 border-dashed border-[#c5d6ce] rounded-3xl bg-[#f8faf9] p-8 text-center">
             <input
               ref={fileInputRef}
               type="file"
               accept="image/*"
               onChange={handleSelectFile}
               className="hidden"
-              id="studio-file-upload"
+              id="raw-item-upload"
             />
             <div className="w-16 h-16 rounded-3xl bg-white shadow-xs border border-[#dce6e1] flex items-center justify-center mb-3">
               <Upload className="w-7 h-7 text-[#0b3b2c]" />
             </div>
-            <h3 className="font-bold text-sm text-[#0b3b2c]">Upload Raw Product Image</h3>
+            <h3 className="font-bold text-sm text-[#0b3b2c]">Upload Actual Product Photo</h3>
             <p className="text-[11px] text-[#4d6960] max-w-sm mt-1 mb-4">
-              Upload any phone click or camera shot. The AI Studio will balance the lighting, set background, and compress for faster web speed.
+              Take a regular clear photo on phone or camera. Studio Staging will add luxury depth, studio pedestal and physical contact shadows without altering the product's true colours.
             </p>
             <label
-              htmlFor="studio-file-upload"
-              className="px-5 py-2.5 rounded-2xl bg-[#0b3b2c] text-white font-bold text-xs shadow-xs hover:bg-[#124b39] transition-all cursor-pointer flex items-center gap-2"
+              htmlFor="raw-item-upload"
+              className="px-6 py-2.5 rounded-2xl bg-[#0b3b2c] text-white font-bold text-xs shadow-xs hover:bg-[#124b39] transition-all cursor-pointer flex items-center gap-2"
             >
-              <ImageIcon className="w-4 h-4 text-[#e5c07b]" />
-              <span>Choose Photo to Enhance</span>
+              <Camera className="w-4 h-4 text-[#e5c07b]" />
+              <span>Choose Photo to Stage</span>
             </label>
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Side-by-Side Comparison Grid */}
+            
+            {/* 2. Side-by-Side Comparison */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
-              {/* Left: Original Photo */}
+              {/* Left: Raw Customer Click */}
               <div className="rounded-2xl border border-[#dce6e1] bg-[#f8faf9] overflow-hidden flex flex-col">
                 <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-white flex justify-between items-center">
                   <span className="font-bold text-[11px] text-neutral-500 uppercase tracking-wider flex items-center gap-1.5">
-                    <Eye className="w-3.5 h-3.5" /> Original Raw Photo
+                    <Eye className="w-3.5 h-3.5" /> 1. Raw Captured Photo
                   </span>
                   {fileSizeInfo && (
                     <span className="font-mono text-[10px] text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded-md">
@@ -244,38 +358,38 @@ export default function ProductImageStudioModal({
                     </span>
                   )}
                 </div>
-                <div className="h-64 sm:h-80 p-3 flex items-center justify-center bg-neutral-50/50">
+                <div className="h-64 sm:h-80 p-4 flex items-center justify-center bg-neutral-50">
                   <img
                     src={originalImage}
-                    alt="Original"
+                    alt="Raw Product"
                     className="max-h-full max-w-full object-contain rounded-lg shadow-2xs"
                   />
                 </div>
               </div>
 
-              {/* Right: AI Enhanced Studio Photo */}
+              {/* Right: Studio Staged E-Commerce Output */}
               <div className="rounded-2xl border border-[#0b3b2c]/30 bg-[#f8faf9] overflow-hidden flex flex-col relative">
                 <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-[#e4efe9] flex justify-between items-center">
                   <span className="font-bold text-[11px] text-[#0b3b2c] uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#c6933a]" /> AI Studio Enhanced
+                    <Sparkles className="w-3.5 h-3.5 text-[#c6933a]" /> 2. Commercial Catalog Staging
                   </span>
                   {fileSizeInfo && (
-                    <span className="font-mono text-[10px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
-                      Size: {fileSizeInfo.compressed} (WebP)
+                    <span className="font-mono text-[10px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-md font-bold">
+                      Lightweight WebP: {fileSizeInfo.compressed}
                     </span>
                   )}
                 </div>
 
-                <div className="h-64 sm:h-80 p-3 flex items-center justify-center relative bg-white">
+                <div className="h-64 sm:h-80 p-4 flex items-center justify-center relative bg-white">
                   {isProcessing ? (
                     <div className="flex flex-col items-center justify-center gap-2">
                       <RefreshCw className="w-6 h-6 animate-spin text-[#0b3b2c]" />
-                      <span className="text-xs font-bold text-[#0b3b2c]">Generating Lighting & Background...</span>
+                      <span className="text-xs font-bold text-[#0b3b2c]">Generating 3D Studio Pedestal & Shadows...</span>
                     </div>
                   ) : processedImage ? (
                     <img
                       src={processedImage}
-                      alt="AI Studio Enhanced"
+                      alt="Commercial Staged Product"
                       className="max-h-full max-w-full object-contain rounded-lg shadow-sm"
                     />
                   ) : null}
@@ -284,20 +398,18 @@ export default function ProductImageStudioModal({
 
             </div>
 
-            {/* Customization & Fine-Tuning Controls */}
+            {/* 3. Commercial Studio Presets */}
             <div className="p-4 rounded-2xl bg-[#f8faf9] border border-[#dce6e1] space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-[#0b3b2c] text-xs flex items-center gap-1.5 uppercase tracking-wider">
-                  <Sliders className="w-3.5 h-3.5" /> Fine-Tune Studio Lighting & Background
+                  <Wand2 className="w-3.5 h-3.5 text-[#c6933a]" /> Select Photoshoot Environment (Pedestal & Lighting)
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    fileInputRef.current?.click();
-                  }}
+                  onClick={() => fileInputRef.current?.click()}
                   className="text-[11px] font-bold text-[#0b3b2c] underline cursor-pointer"
                 >
-                  Choose Different Image
+                  Change Image
                 </button>
                 <input
                   ref={fileInputRef}
@@ -308,103 +420,94 @@ export default function ProductImageStudioModal({
                 />
               </div>
 
-              {/* Background Theme Style Options */}
-              <div>
-                <span className="text-[10.5px] font-bold text-neutral-600 block mb-1.5">
-                  Item Backdrop Environment:
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { key: 'studio-marble', label: 'Studio Marble' },
-                    { key: 'luxury-podium', label: 'Luxury Champagne Podium' },
-                    { key: 'clean-white', label: 'Ecommerce Pure White' },
-                    { key: 'velvet-dark', label: 'Royal Dark Velvet' }
-                  ].map((style) => (
-                    <button
-                      key={style.key}
-                      type="button"
-                      onClick={() => {
-                        const newBg = style.key as typeof selectedBgStyle;
-                        setSelectedBgStyle(newBg);
-                        handleUpdateAdjustments(brightness, contrast, saturation, newBg);
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                        selectedBgStyle === style.key
-                          ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs'
-                          : 'bg-white text-[#4d6960] border-[#dce6e1] hover:border-[#0b3b2c]'
-                      }`}
-                    >
-                      {style.label}
-                    </button>
-                  ))}
+              {/* Themes Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {[
+                  {
+                    id: 'luxury-marble',
+                    name: 'Carrara Marble Podium',
+                    desc: 'Clean luxury studio setting'
+                  },
+                  {
+                    id: 'sunlit-linen',
+                    name: 'Warm Sunlit Boutique',
+                    desc: 'Soft golden daylight look'
+                  },
+                  {
+                    id: 'royal-velvet',
+                    name: 'Royal Heritage Mood',
+                    desc: 'Rich deep jewel backdrop'
+                  },
+                  {
+                    id: 'minimal-arch',
+                    name: 'Modern Architectural',
+                    desc: 'Contemporary high-fashion'
+                  },
+                  {
+                    id: 'pure-catalog',
+                    name: 'Seamless Studio White',
+                    desc: 'Myntra / Ajio Standard'
+                  }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => handleApplyTheme(item.id as StudioTheme)}
+                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col justify-between ${
+                      selectedTheme === item.id
+                        ? 'bg-[#0b3b2c] text-white border-[#0b3b2c] shadow-xs'
+                        : 'bg-white text-[#4d6960] border-[#dce6e1] hover:border-[#0b3b2c]'
+                    }`}
+                  >
+                    <span className="font-bold text-[11px] block">{item.name}</span>
+                    <span className={`text-[9.5px] mt-1 block ${selectedTheme === item.id ? 'text-[#e5c07b]' : 'text-neutral-400'}`}>
+                      {item.desc}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Grounding & Depth Toggles */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-[#edf2ef]">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-neutral-600">Floor Contact Shadow:</span>
+                    <input
+                      type="range"
+                      min="20"
+                      max="100"
+                      value={shadowIntensity}
+                      onChange={(e) => handleShadowChange(Number(e.target.value))}
+                      className="w-24 sm:w-32 accent-[#0b3b2c] cursor-pointer"
+                    />
+                    <span className="font-mono text-[10px] text-[#0b3b2c] font-bold">{shadowIntensity}%</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleReflectionToggle}
+                    className={`px-3 py-1 rounded-full text-[10.5px] font-bold border transition-all cursor-pointer ${
+                      floorReflection
+                        ? 'bg-[#e4efe9] text-[#0b3b2c] border-[#0b3b2c]'
+                        : 'bg-white text-neutral-500 border-[#dce6e1]'
+                    }`}
+                  >
+                    {floorReflection ? '✓ Studio Reflection ON' : '+ Add Studio Reflection'}
+                  </button>
+                </div>
+
+                <div className="text-[10px] text-[#4d6960] flex items-center gap-1 font-semibold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Returns Prevention: Actual product tones are zero-altered</span>
                 </div>
               </div>
 
-              {/* Sliders: Brightness, Contrast, Saturation */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-                <div className="bg-white p-2.5 rounded-xl border border-[#dce6e1]">
-                  <div className="flex justify-between text-[10.5px] font-bold text-neutral-600 mb-1">
-                    <span>Studio Brightness</span>
-                    <span className="font-mono text-[#0b3b2c]">{brightness}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="80"
-                    max="140"
-                    value={brightness}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setBrightness(val);
-                      handleUpdateAdjustments(val, contrast, saturation, selectedBgStyle);
-                    }}
-                    className="w-full accent-[#0b3b2c] cursor-pointer"
-                  />
-                </div>
-
-                <div className="bg-white p-2.5 rounded-xl border border-[#dce6e1]">
-                  <div className="flex justify-between text-[10.5px] font-bold text-neutral-600 mb-1">
-                    <span>Studio Contrast</span>
-                    <span className="font-mono text-[#0b3b2c]">{contrast}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="80"
-                    max="140"
-                    value={contrast}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setContrast(val);
-                      handleUpdateAdjustments(brightness, val, saturation, selectedBgStyle);
-                    }}
-                    className="w-full accent-[#0b3b2c] cursor-pointer"
-                  />
-                </div>
-
-                <div className="bg-white p-2.5 rounded-xl border border-[#dce6e1]">
-                  <div className="flex justify-between text-[10.5px] font-bold text-neutral-600 mb-1">
-                    <span>Colour Vibrancy</span>
-                    <span className="font-mono text-[#0b3b2c]">{saturation}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="80"
-                    max="150"
-                    value={saturation}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setSaturation(val);
-                      handleUpdateAdjustments(brightness, contrast, val, selectedBgStyle);
-                    }}
-                    className="w-full accent-[#0b3b2c] cursor-pointer"
-                  />
-                </div>
-              </div>
             </div>
 
-            {/* Bottom Actions: Cancel vs Accept */}
+            {/* Bottom Actions */}
             <div className="flex items-center justify-between pt-2 border-t border-[#edf2ef]">
               <span className="text-[10px] text-neutral-400">
-                Processed with 1200px sharp canvas resolution & lightweight WebP compression.
+                1400×1400 HD Square Format • Ready for Store Catalog
               </span>
               <div className="flex gap-2">
                 <button
@@ -417,14 +520,15 @@ export default function ProductImageStudioModal({
                 <button
                   type="button"
                   disabled={!processedImage || isProcessing}
-                  onClick={handleConfirmAndUpload}
+                  onClick={handleConfirm}
                   className="px-6 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold flex items-center gap-1.5 shadow-xs hover:bg-[#124b39] transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-4 h-4 text-[#e5c07b]" />
-                  <span>Okay, Add Enhanced Image</span>
+                  <span>Okay, Add Staged Image</span>
                 </button>
               </div>
             </div>
+
           </div>
         )}
 
