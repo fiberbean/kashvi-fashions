@@ -56,6 +56,7 @@ export default function AdminMasters({ currentUser, selectedSection, onClearSect
     }
   };
 
+  // Form States
   const [catName, setCatName] = useState('');
   const [catDept, setCatDept] = useState('fashions');
 
