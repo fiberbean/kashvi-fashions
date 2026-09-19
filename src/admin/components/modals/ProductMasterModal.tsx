@@ -184,7 +184,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   const filteredSizes = sizes.filter((sz) => !selectedCategory || !sz.category_id || String(sz.category_id) === String(selectedCategory));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs select-none font-sans animate-in fade-in">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs select-none font-sans animate-in fade-in">
       <div className="bg-white rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-[#dce6e1] space-y-4 text-xs">
         
         <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3 sticky top-0 bg-white z-10">

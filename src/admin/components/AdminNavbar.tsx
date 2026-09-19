@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  BellRing,
   ExternalLink,
   LogOut,
   LayoutDashboard,
@@ -10,13 +9,9 @@ import {
   Package,
   Layers,
   MapPin,
-  Truck,
-  CreditCard,
   Settings,
   ChevronDown,
   Tag,
-  ShieldCheck,
-  RotateCcw,
   Palette,
   Ruler,
   Scissors
@@ -70,8 +65,8 @@ export default function AdminNavbar({
     setOpenDropdown(null);
   };
 
+  // View ని మార్చకుండా కేవలం Pop-up మాత్రమే ఓపెన్ చేస్తుంది
   const handleMasterClick = (section: MasterSectionType) => {
-    onViewChange('masters');
     if (onSelectMaster) {
       onSelectMaster(section);
     }
@@ -94,11 +89,9 @@ export default function AdminNavbar({
   return (
     <nav
       ref={navRef}
-      className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-[#e2eae6] shadow-[0_2px_12px_rgba(11,59,44,0.03)] select-none font-sans"
+      className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#e2eae6] shadow-[0_2px_12px_rgba(11,59,44,0.03)] select-none font-sans"
     >
       <div className="max-w-[1600px] mx-auto px-3 sm:px-6 h-15 flex items-center justify-between gap-3">
-        
-        {/* Left Section: Brand Logo & Navigation */}
         <div className="flex items-center gap-4 lg:gap-5">
           <button
             type="button"
@@ -118,10 +111,7 @@ export default function AdminNavbar({
             </div>
           </button>
 
-          {/* Primary Nav Links & Dropdowns */}
           <div className="hidden md:flex items-center gap-1 text-xs font-semibold text-[#4d6960]">
-            
-            {/* 1. Dashboard View */}
             <button
               type="button"
               onClick={() => handleSelectView('dashboard')}
@@ -135,7 +125,6 @@ export default function AdminNavbar({
               <span>Dashboard</span>
             </button>
 
-            {/* 2. Catalog Dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -169,25 +158,16 @@ export default function AdminNavbar({
                     <Tag className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Categories & Sub-Categories</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('colours')}
-                    className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
-                  >
-                    <Palette className="w-3.5 h-3.5 text-neutral-400" />
-                    <span>Colours, Sizes & Fabrics</span>
-                  </button>
                 </div>
               )}
             </div>
 
-            {/* 3. Masters Dropdown (Product, Category, Sub-Category, Colours, Size, Fabric) */}
             <div className="relative">
               <button
                 type="button"
                 onClick={() => toggleDropdown('masters')}
                 className={`flex items-center gap-1 px-3 py-1.5 rounded-full transition-all cursor-pointer ${
-                  openDropdown === 'masters' || currentView === 'masters'
+                  openDropdown === 'masters'
                     ? 'bg-[#f0f4f2] text-[#0b3b2c]'
                     : 'hover:bg-[#f0f4f2] hover:text-[#0b3b2c]'
                 }`}
@@ -207,7 +187,6 @@ export default function AdminNavbar({
                     <Package className="w-3.5 h-3.5 text-[#0b3b2c]" />
                     <span>Product Master</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => handleMasterClick('category')}
@@ -216,7 +195,6 @@ export default function AdminNavbar({
                     <Tag className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Category Master</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => handleMasterClick('subcategory')}
@@ -225,7 +203,6 @@ export default function AdminNavbar({
                     <Layers className="w-3.5 h-3.5 text-neutral-400" />
                     <span>Sub-Category Master</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => handleMasterClick('colours')}
@@ -234,7 +211,6 @@ export default function AdminNavbar({
                     <Palette className="w-3.5 h-3.5 text-[#ff4d6d]" />
                     <span>Colours Master</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => handleMasterClick('sizes')}
@@ -243,7 +219,6 @@ export default function AdminNavbar({
                     <Ruler className="w-3.5 h-3.5 text-blue-500" />
                     <span>Size Master</span>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => handleMasterClick('fabrics')}
@@ -256,7 +231,6 @@ export default function AdminNavbar({
               )}
             </div>
 
-            {/* 4. Orders Dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -294,7 +268,6 @@ export default function AdminNavbar({
               )}
             </div>
 
-            {/* 5. Store Config Dropdown */}
             <div className="relative">
               <button
                 type="button"
@@ -324,7 +297,7 @@ export default function AdminNavbar({
                   )}
                   <button
                     type="button"
-                    onClick={() => handleSelectView('masters')}
+                    onClick={() => handleMasterClick('category')}
                     className="w-full text-left flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-[#f4f7f5] hover:text-[#0b3b2c] font-medium cursor-pointer"
                   >
                     <MapPin className="w-3.5 h-3.5 text-neutral-400" />
@@ -333,11 +306,9 @@ export default function AdminNavbar({
                 </div>
               )}
             </div>
-
           </div>
         </div>
 
-        {/* Right Section: Auto Sync, Profile & Logout */}
         <div className="flex items-center gap-2.5">
           <button
             type="button"
@@ -389,7 +360,6 @@ export default function AdminNavbar({
             <span>Lock</span>
           </button>
         </div>
-
       </div>
     </nav>
   );
