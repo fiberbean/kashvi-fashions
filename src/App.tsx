@@ -2,19 +2,13 @@ import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import CustomerApp from './CustomerApp';
 import AdminApp from "./AdminApp";
-import AdminRouteGuard from './components/AdminRouteGuard';
 
 export default function App() {
   return (
     <Router>
       <Routes>
-        {/* ADMIN ROUTES - Protected */}
-        <Route path="/kfmama/*" element={
-          <AdminRouteGuard>
-            <AdminApp />
-          </AdminRouteGuard>
-        } />
-
+        <Route path="/kfmama/*" element={<AdminApp />} />
+        
         {/* CUSTOMER ROUTES - Public */}
         <Route path="/*" element={<CustomerApp />} />
 
