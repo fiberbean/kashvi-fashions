@@ -34,9 +34,73 @@ interface TaggedImage {
   size_bytes?: string;
 }
 
-// Helper to determine brightness of hex color for text contrast
-function isColorLight(hexInput?: string | null): boolean {
-  if (!hexInput) return false;
+// Built-in color map to guarantee color background even if DB hex is missing/named differently
+const STANDARD_COLOR_MAP: { [key: string]: string } = {
+  'baby pink': '#F4C2C2',
+  'beige': '#F5F5DC',
+  'black': '#1A1A1A',
+  'crimson red': '#DC143C',
+  'dark green': '#006400',
+  'grey': '#808080',
+  'gray': '#808080',
+  'maroon': '#800000',
+  'mustard yellow': '#E1AD01',
+  'musturd yellow': '#E1AD01',
+  'navy blue': '#000080',
+  'peach': '#FFDAB9',
+  'pink': '#FFC0CB',
+  'rani pink': '#E30B5C',
+  'sky blue': '#87CEEB',
+  'turquoise': '#40E0D0',
+  'violet': '#8A2BE2',
+  'white': '#FFFFFF',
+  'yellow': '#FFD700',
+  'red': '#FF0000',
+  'green': '#008000',
+  'blue': '#0000FF',
+  'orange': '#FFA500',
+  'purple': '#800080',
+  'brown': '#A52A2A',
+  'gold': '#D4AF37',
+  'golden': '#D4AF37',
+  'silver': '#C0C0C0',
+  'rose gold': '#B76E79',
+  'copper': '#B87333',
+  'magenta': '#FF00FF',
+  'cyan': '#00FFFF',
+  'olive': '#808000',
+  'coral': '#FF7F50',
+  'teal': '#008080'
+};
+
+function resolveColorHex(colorObj: any): string {
+  if (!colorObj) return '#6d4aff';
+  const nameKey = (colorObj.name || '').toLowerCase().trim();
+  const directHex =
+    colorObj.hex ||
+    colorObj.code ||
+    colorObj.color_code ||
+    colorObj.hex_code ||
+    colorObj.value ||
+    colorObj.hex_value;
+
+  if (directHex && typeof directHex === 'string' && directHex.trim()) {
+    const clean = directHex.trim();
+    return clean.startsWith('#') ? clean : `#${clean}`;
+  }
+
+  if (STANDARD_COLOR_MAP[nameKey]) {
+    return STANDARD_COLOR_MAP[nameKey];
+  }
+
+  for (const [key, val] of Object.entries(STANDARD_COLOR_MAP)) {
+    if (nameKey.includes(key)) return val;
+  }
+
+  return '#6d4aff';
+}
+
+function isColorLight(hexInput: string): boolean {
   let hex = hexInput.replace('#', '').trim();
   if (hex.length === 3) {
     hex = hex.split('').map((char) => char + char).join('');
@@ -46,7 +110,7 @@ function isColorLight(hexInput?: string | null): boolean {
   const g = parseInt(hex.substring(2, 4), 16);
   const b = parseInt(hex.substring(4, 6), 16);
   const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness > 155;
+  return brightness > 150;
 }
 
 export default function ProductMasterModal({ onClose }: ProductMasterModalProps) {
@@ -81,7 +145,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
@@ -97,11 +160,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     const fetchMasters = async () => {
       try {
         const [catRes, subCatRes, colRes, sizeRes, fabRes, unitRes] = await Promise.all([
-          supabase.from('categories').select('*').eq('active', true).order('name'),
-          supabase.from('sub_categories').select('*').eq('active', true).order('name'),
-          supabase.from('colours').select('*').eq('active', true).order('name'),
-          supabase.from('sizes').select('*').eq('active', true).order('display_order', { ascending: true }),
-          supabase.from('fabrics').select('*').eq('active', true).order('name'),
+          supabase.from('categories').select('*').order('name'),
+          supabase.from('sub_categories').select('*').order('name'),
+          supabase.from('colours').select('*').order('name'),
+          supabase.from('sizes').select('*').order('display_order', { ascending: true }),
+          supabase.from('fabrics').select('*').order('name'),
           supabase.from('units').select('*').order('name')
         ]);
 
@@ -183,25 +246,33 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         list = subCategories.filter((sc) => {
           const parent = categories.find((c) => String(c.id) === String(sc.category_id));
           const parentName = (parent?.name || '').toLowerCase();
+          const parentDept = (parent?.department || '').toLowerCase();
           const scName = (sc.name || '').toLowerCase();
           return (
             parentName.includes('jewel') ||
+            parentDept.includes('jewel') ||
             parentName.includes('bangle') ||
             scName.includes('bangle') ||
             scName.includes('necklace') ||
             scName.includes('earring') ||
             scName.includes('chain') ||
-            scName.includes('ring')
+            scName.includes('ring') ||
+            scName.includes('chuda')
           );
         });
       }
 
+      // If still empty, display all sub-categories not assigned to standard fashion categories
       if (list.length === 0 && subCategories.length > 0) {
-        list = subCategories.filter((sc) => {
-          const parent = categories.find((c) => String(c.id) === String(sc.category_id));
-          const parentDept = (parent?.department || '').toLowerCase();
-          return parentDept !== 'fashions' && parentDept !== 'apparel';
-        });
+        const fashionCatIds = new Set(
+          categories
+            .filter((c) => {
+              const dept = (c.department || '').toLowerCase().trim();
+              return dept === 'fashions' || dept === 'fashion' || dept === 'apparel';
+            })
+            .map((c) => String(c.id))
+        );
+        list = subCategories.filter((sc) => !sc.category_id || !fashionCatIds.has(String(sc.category_id)));
       }
 
       return [...list].sort((a, b) =>
@@ -392,6 +463,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
           </div>
 
           <div className="flex items-center gap-3">
+            {/* PRODUCT CODE: PROMINENT & CLEAR */}
             <div className="bg-[#0a0e17]/90 px-4 py-1.5 rounded-2xl border border-white/15 text-right shadow-inner min-w-[125px]">
               <span className="text-[8.5px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] block">PRODUCT CODE</span>
               <span className="font-mono text-base font-extrabold text-[#00ff9d] tracking-wide leading-tight block">
@@ -613,7 +685,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
             </span>
             
-            {/* UNIVERSAL COLOURS WITH DYNAMIC COLOR PREVIEW ON SELECTION */}
+            {/* UNIVERSAL COLOURS: SELECTED BUTTON CHANGES COMPLETELY TO THAT COLOR */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-mono font-bold text-[#8b9bb4] flex items-center gap-1">
@@ -623,12 +695,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                   {selectedColors.length} selected
                 </span>
               </div>
-              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
                 {colours.map((c) => {
-                  const active = selectedColors.includes(c.name);
-                  const rawHex = (c as any).hex || (c as any).code || (c as any).color_code || '';
-                  const validHex = rawHex.startsWith('#') ? rawHex : (rawHex ? `#${rawHex}` : '');
-                  const isLight = isColorLight(validHex);
+                  const isSelected = selectedColors.includes(c.name);
+                  const hexCode = resolveColorHex(c);
+                  const isLight = isColorLight(hexCode);
 
                   return (
                     <button
@@ -636,37 +707,37 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                       type="button"
                       onClick={() => toggleSelection(c.name, selectedColors, setSelectedColors)}
                       style={
-                        active && validHex
+                        isSelected
                           ? {
-                              backgroundColor: validHex,
-                              borderColor: validHex,
-                              color: isLight ? '#0a0e17' : '#ffffff',
-                              boxShadow: `0 4px 14px ${validHex}55`
+                              backgroundColor: hexCode,
+                              borderColor: isLight ? '#00000033' : '#ffffff44',
+                              color: isLight ? '#111827' : '#ffffff',
+                              boxShadow: `0 4px 14px ${hexCode}77`
                             }
                           : {}
                       }
                       className={`px-3 py-1.5 rounded-xl text-[10.5px] font-bold flex items-center gap-1.5 border transition-all cursor-pointer active:scale-95 ${
-                        active
-                          ? validHex
-                            ? '' // Handled by inline style
-                            : 'bg-[#6d4aff] text-white border-[#6d4aff] shadow-md shadow-[#6d4aff]/40'
-                          : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/20'
+                        isSelected
+                          ? '' // Styled by inline style above
+                          : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/25'
                       }`}
                     >
-                      {/* Color Preview Swatch */}
-                      {validHex && (
-                        <span
-                          className={`w-2.5 h-2.5 rounded-full border shrink-0 transition-transform ${
-                            active
-                              ? isLight ? 'border-black/30 scale-110' : 'border-white/40 scale-110'
-                              : 'border-white/20'
-                          }`}
-                          style={{ backgroundColor: validHex }}
-                        />
-                      )}
+                      {/* Color Preview Swatch indicator */}
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full border shrink-0 ${
+                          isSelected
+                            ? isLight ? 'border-black/30' : 'border-white/50'
+                            : 'border-white/20'
+                        }`}
+                        style={{ backgroundColor: hexCode }}
+                      />
                       
-                      {active && (
-                        <Check className={`w-3 h-3 ${validHex && isLight ? 'text-black' : 'text-[#00ff9d]'}`} />
+                      {isSelected && (
+                        <Check
+                          className={`w-3 h-3 stroke-[2.5] ${
+                            isLight ? 'text-black' : 'text-white'
+                          }`}
+                        />
                       )}
                       <span>{c.name}</span>
                     </button>
@@ -730,7 +801,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                         key={s.id}
                         type="button"
                         onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
-                        className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer active:scale-95 ${
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
                           active
                             ? 'bg-[#00d9ff] text-neutral-950 border-[#00d9ff] shadow-md shadow-[#00d9ff]/30'
                             : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white'
@@ -745,7 +816,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             </div>
 
-            {/* Fabrics */}
+            {/* Fabrics: Optional (Mainly for Fashion) */}
             <div>
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] block mb-1.5 flex items-center gap-1">
                 <Scissors className="w-3 h-3 text-[#00ff9d]" /> Fabrics:
