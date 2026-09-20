@@ -14,7 +14,7 @@ import {
   Plus,
   Lock,
   Filter,
-  FolderPlus
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SubCategoryRecord } from '../../types';
@@ -53,15 +53,15 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
   // Group Filter
   const [filterGroup, setFilterGroup] = useState<string>('ALL');
 
-  // Custom Group Creation State
+  // Simple Quick Group Creation
   const [isAddingGroup, setIsAddingGroup] = useState<boolean>(false);
   const [newGroupName, setNewGroupName] = useState<string>('');
-  const [newGroupDesc, setNewGroupDesc] = useState<string>('');
   const [creatingGroup, setCreatingGroup] = useState<boolean>(false);
 
   // Size Form State
   const [sizeCode, setSizeCode] = useState<string>('');
   const [originalId, setOriginalId] = useState<string | null>(null);
+  const [nextSeriesCode, setNextSeriesCode] = useState<string>('SIZE0001');
   const [name, setName] = useState<string>('');
   const [selectedSubCatId, setSelectedSubCatId] = useState<string>('');
   const [sizeGroup, setSizeGroup] = useState<string>('apparel');
@@ -71,6 +71,12 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Check if string is already in official SIZE series
+  const isSizeSeries = (idString: string | null) => {
+    if (!idString) return false;
+    return /^SIZE\d+$/i.test(idString.trim());
+  };
 
   // 1. Fetch Sizes, Groups, and SubCategories
   const loadData = async () => {
@@ -89,12 +95,11 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
       if (groupRes.data && groupRes.data.length > 0) {
         setSizeGroups(groupRes.data);
       } else {
-        // Fallback default list
         setSizeGroups([
-          { id: 'apparel', name: 'Apparel', description: 'XS, S, M, L, XL...' },
-          { id: 'bangles', name: 'Bangles', description: '2.2, 2.4, 2.6, 2.8...' },
-          { id: 'lingerie', name: 'Lingerie', description: '30B, 32B, 34B, 36C...' },
-          { id: 'free_size', name: 'Free Size', description: 'Sarees, Fabrics' }
+          { id: 'apparel', name: 'Apparel' },
+          { id: 'bangles', name: 'Bangles' },
+          { id: 'lingerie', name: 'Lingerie' },
+          { id: 'free_size', name: 'Free Size' }
         ]);
       }
 
@@ -119,8 +124,8 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // 2. Generate Next Code in SIZE0001 series
-  const generateSizeCode = async () => {
+  // 2. Compute Next Available Code in SIZE0001 series
+  const fetchNextSizeCode = async () => {
     try {
       const { data } = await supabase
         .from('sizes')
@@ -136,21 +141,25 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
             if (val > maxNum) maxNum = val;
           }
         });
-        setSizeCode(`SIZE${String(maxNum + 1).padStart(4, '0')}`);
+        const generated = `SIZE${String(maxNum + 1).padStart(4, '0')}`;
+        setNextSeriesCode(generated);
+        return generated;
       } else {
-        setSizeCode('SIZE0001');
+        setNextSeriesCode('SIZE0001');
+        return 'SIZE0001';
       }
     } catch {
-      setSizeCode('SIZE0001');
+      setNextSeriesCode('SIZE0001');
+      return 'SIZE0001';
     }
   };
 
   useEffect(() => {
     loadData();
-    generateSizeCode();
+    fetchNextSizeCode().then((code) => setSizeCode(code));
   }, []);
 
-  const resetForm = () => {
+  const resetForm = async () => {
     setEditingMode(false);
     setOriginalId(null);
     setName('');
@@ -158,18 +167,30 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     setSizeGroup(sizeGroups.length > 0 ? sizeGroups[0].id : 'apparel');
     setDisplayOrder(sizes.length > 0 ? sizes.length + 1 : 1);
     setIsActive(true);
-    generateSizeCode();
+    setIsAddingGroup(false);
+    const code = await fetchNextSizeCode();
+    setSizeCode(code);
   };
 
-  const handleSelectCard = (item: SizeRecord) => {
+  // When clicking an existing card:
+  // If it's an OLD/RANDOM ID, AUTOMATICALLY ASSIGN NEXT SIZE0001 CODE!
+  const handleSelectCard = async (item: SizeRecord) => {
     setEditingMode(true);
     setOriginalId(item.id);
-    setSizeCode(item.id);
     setName(item.name);
     setSelectedSubCatId(item.sub_category_id || '');
     setSizeGroup(item.size_group || 'apparel');
     setDisplayOrder(Number(item.display_order) || 0);
     setIsActive(item.active ?? true);
+    setIsAddingGroup(false);
+
+    if (isSizeSeries(item.id)) {
+      setSizeCode(item.id);
+    } else {
+      // Automatic change to series ID for legacy records
+      const freshCode = await fetchNextSizeCode();
+      setSizeCode(freshCode);
+    }
   };
 
   const handleSubCategoryChange = (subCatId: string) => {
@@ -181,16 +202,8 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  const isSizeSeries = (idString: string | null) => {
-    if (!idString) return false;
-    return /^SIZE\d+$/i.test(idString.trim());
-  };
-
-  const isIdEditable = editingMode && originalId ? !isSizeSeries(originalId) : false;
-
-  // Handle Custom Group Creation
-  const handleCreateCustomGroup = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Quick Simple Group Creation
+  const handleCreateSimpleGroup = async () => {
     if (!newGroupName.trim()) return;
     setCreatingGroup(true);
 
@@ -204,25 +217,19 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
       const { error } = await supabase.from('size_groups').insert([{
         id: slug,
         name: newGroupName.trim(),
-        description: newGroupDesc.trim() || null,
         display_order: sizeGroups.length + 1,
         active: true
       }]);
 
       if (error) throw error;
 
-      const updatedList = [...sizeGroups, {
-        id: slug,
-        name: newGroupName.trim(),
-        description: newGroupDesc.trim() || null
-      }];
-      setSizeGroups(updatedList);
+      const updated = [...sizeGroups, { id: slug, name: newGroupName.trim() }];
+      setSizeGroups(updated);
       setSizeGroup(slug);
       setNewGroupName('');
-      setNewGroupDesc('');
       setIsAddingGroup(false);
     } catch (err: any) {
-      alert(`Could not create group: ${err.message}`);
+      alert(`Could not add group: ${err.message}`);
     } finally {
       setCreatingGroup(false);
     }
@@ -335,6 +342,8 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     return s.size_group === filterGroup;
   });
 
+  const isLegacyMigration = editingMode && originalId && !isSizeSeries(originalId);
+
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-5 bg-[#0a0e17]/85 backdrop-blur-xl select-none font-sans animate-in fade-in">
       <div className="bg-[#101628]/95 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 max-w-5xl w-full max-h-[92vh] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(109,74,255,0.2)] border border-white/10 flex flex-col text-xs relative">
@@ -356,7 +365,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Create customizable size groups & manage size matrix
+                Auto-assigned SIZE series with simplified group customization
               </span>
             </div>
           </div>
@@ -391,7 +400,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   Size Matrix ({filteredSizes.length})
                 </span>
 
-                {/* Filter Dropdown with Dynamic Groups */}
+                {/* Filter Dropdown */}
                 <div className="flex items-center gap-1 bg-[#0a0e17] px-2 py-1 rounded-xl border border-white/10">
                   <Filter className="w-3 h-3 text-[#00d9ff]" />
                   <select
@@ -491,7 +500,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                               ? 'bg-[#00ff9d]/10 text-[#00ff9d] border-[#00ff9d]/30'
                               : 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/40'
                           }`}>
-                            {isLocked && <Lock className="w-2.5 h-2.5" />}
+                            {isLocked ? <Lock className="w-2.5 h-2.5" /> : <Sparkles className="w-2.5 h-2.5" />}
                             {s.id}
                           </span>
 
@@ -507,7 +516,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
             </div>
           </div>
 
-          {/* RIGHT PANE: FORM & CUSTOM GROUP MAKER (5 COLS) */}
+          {/* RIGHT PANE: FORM (5 COLS) */}
           <div className="lg:col-span-5 bg-[#0a0e17]/60 p-4 rounded-3xl border border-white/10 space-y-3.5">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <span className="font-mono font-bold text-[#00d9ff] text-[11px] uppercase tracking-wider flex items-center gap-1.5">
@@ -531,14 +540,14 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
               </div>
             )}
 
-            <form onSubmit={handleSave} className="space-y-3">
-              {/* Size ID */}
+            <form onSubmit={handleSave} className="space-y-3.5">
+              {/* Size ID (Strictly Auto-Assigned & Non-Editable) */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1 flex items-center justify-between">
                   <span>Size ID *</span>
-                  {isIdEditable ? (
-                    <span className="text-[8.5px] text-[#ffa500] font-mono font-bold">
-                      ASSIGN SIZE SERIES NOW
+                  {isLegacyMigration ? (
+                    <span className="text-[8.5px] text-[#00ff9d] font-mono font-bold flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5" /> AUTO-UPGRADED TO SERIES
                     </span>
                   ) : (
                     <span className="text-[8.5px] text-[#8b9bb4] font-mono flex items-center gap-1">
@@ -550,25 +559,13 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   <input
                     type="text"
                     required
-                    readOnly={!isIdEditable}
+                    readOnly
                     value={sizeCode}
-                    onChange={(e) => {
-                      if (isIdEditable) {
-                        setSizeCode(e.target.value.toUpperCase());
-                      }
-                    }}
-                    placeholder="e.g. SIZE0001"
-                    className={`w-full px-3 py-2 rounded-xl border font-mono font-bold text-[11px] outline-none transition-colors ${
-                      isIdEditable
-                        ? 'border-[#ffa500]/50 bg-[#101628] text-[#ffa500] focus:border-[#ffa500]'
-                        : 'border-white/10 bg-[#0a0e17]/60 text-[#00ff9d] cursor-not-allowed'
-                    }`}
+                    className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#0a0e17]/60 font-mono font-bold text-[11px] text-[#00ff9d] outline-none cursor-not-allowed"
                   />
-                  {!isIdEditable && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b9bb4]">
-                      <Lock className="w-3.5 h-3.5 text-[#8b9bb4]" />
-                    </div>
-                  )}
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b9bb4]">
+                    <Lock className="w-3.5 h-3.5 text-[#8b9bb4]" />
+                  </div>
                 </div>
               </div>
 
@@ -587,78 +584,58 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 />
               </div>
 
-              {/* Dynamic Size Groups Section with Custom Group Creator */}
-              <div className="p-2.5 bg-[#101628] rounded-2xl border border-white/10 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider">
+              {/* CONVENIENT SIZE GROUP DROPDOWN + QUICK "+ ADD" BUTTON */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider">
                     Size Group *
-                  </span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => setIsAddingGroup(!isAddingGroup)}
-                    className="text-[9px] font-mono text-[#00d9ff] hover:text-[#00ff9d] flex items-center gap-1 cursor-pointer transition-colors"
+                    className="text-[9.5px] font-mono text-[#00d9ff] hover:text-[#00ff9d] font-bold cursor-pointer transition-colors"
                   >
-                    <FolderPlus className="w-3 h-3" />
-                    <span>{isAddingGroup ? 'Close' : '+ New Group'}</span>
+                    {isAddingGroup ? 'Cancel' : '+ New Group'}
                   </button>
                 </div>
 
-                {/* Inline Custom Group Form */}
-                {isAddingGroup && (
-                  <div className="p-2.5 rounded-xl bg-[#0a0e17] border border-[#00d9ff]/30 space-y-2">
-                    <span className="text-[9.5px] font-bold text-[#00d9ff] block">
-                      Create Custom Size Group
-                    </span>
+                {/* Quick Add Inline Box if clicked */}
+                {isAddingGroup ? (
+                  <div className="flex items-center gap-1.5 p-1.5 bg-[#101628] rounded-xl border border-[#00d9ff]/40 animate-in fade-in">
                     <input
                       type="text"
-                      placeholder="Group Name (e.g. Kids Wear, Footwear)"
+                      autoFocus
+                      placeholder="Enter new group name..."
                       value={newGroupName}
                       onChange={(e) => setNewGroupName(e.target.value)}
-                      className="w-full px-2 py-1 rounded-lg border border-white/10 bg-[#101628] text-white text-[10px] outline-none"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Example sizes (e.g. 6-7Y, 8-9Y or UK 6, UK 7)"
-                      value={newGroupDesc}
-                      onChange={(e) => setNewGroupDesc(e.target.value)}
-                      className="w-full px-2 py-1 rounded-lg border border-white/10 bg-[#101628] text-[#8b9bb4] text-[9.5px] outline-none"
+                      className="flex-1 px-2.5 py-1.5 bg-[#0a0e17] rounded-lg text-white text-[10px] font-bold outline-none border border-white/10"
                     />
                     <button
                       type="button"
                       disabled={creatingGroup || !newGroupName.trim()}
-                      onClick={handleCreateCustomGroup}
-                      className="w-full py-1.5 rounded-lg bg-[#00d9ff]/20 hover:bg-[#00d9ff]/30 border border-[#00d9ff]/50 text-[#00d9ff] font-bold text-[9.5px] flex items-center justify-center gap-1 cursor-pointer"
+                      onClick={handleCreateSimpleGroup}
+                      className="px-3 py-1.5 bg-[#00d9ff]/20 hover:bg-[#00d9ff]/30 text-[#00d9ff] rounded-lg font-mono font-bold text-[10px] cursor-pointer disabled:opacity-40"
                     >
-                      {creatingGroup ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                      <span>Save & Apply Group</span>
+                      {creatingGroup ? '...' : 'Add'}
                     </button>
                   </div>
+                ) : (
+                  <select
+                    required
+                    value={sizeGroup}
+                    onChange={(e) => setSizeGroup(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer"
+                  >
+                    {sizeGroups.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
+                  </select>
                 )}
-
-                {/* Dynamic Groups Grid */}
-                <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
-                  {sizeGroups.map((grp) => {
-                    const isSelected = sizeGroup === grp.id;
-                    return (
-                      <button
-                        key={grp.id}
-                        type="button"
-                        onClick={() => setSizeGroup(grp.id)}
-                        className={`p-2 rounded-xl border text-left font-mono transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-[#6d4aff]/25 border-[#6d4aff] text-white shadow-sm'
-                            : 'bg-[#0a0e17] border-white/10 text-[#8b9bb4] hover:text-white'
-                        }`}
-                      >
-                        <div className="font-bold text-[10.5px] text-white truncate">{grp.name}</div>
-                        <div className="text-[8.5px] text-[#8b9bb4] truncate">{grp.description || grp.id}</div>
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
 
-              {/* Sub-Category Association (Optional) */}
+              {/* Linked Sub-Category */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
                   Linked Sub-Category (Optional)
@@ -666,7 +643,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 <select
                   value={selectedSubCatId}
                   onChange={(e) => handleSubCategoryChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors"
+                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer"
                 >
                   <option value="">-- Universal (Applicable to All) --</option>
                   {subCategories.map((sc) => (
@@ -677,7 +654,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 </select>
               </div>
 
-              {/* Display Order & Active Status */}
+              {/* Display Order & Status */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
