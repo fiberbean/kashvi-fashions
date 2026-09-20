@@ -13,7 +13,8 @@ import {
   Search,
   Tag,
   ChevronDown,
-  Layers
+  Layers,
+  MinusCircle
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SubCategoryRecord } from '../../types';
@@ -345,9 +346,33 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Direct Permanent Delete for Size Record
+  // ACTION 1: REMOVE FROM GROUP ONLY (Disassociates group link)
+  const handleRemoveFromGroupOnly = async (sizeId: string, sName: string) => {
+    if (!window.confirm(`Remove size "${sName}" from this group? (It will remain in global system)`)) return;
+    setGroupActionLoading(true);
+    setGroupError(null);
+
+    try {
+      const { error } = await supabase
+        .from('sizes')
+        .update({ size_group: 'unassigned' })
+        .eq('id', sizeId);
+
+      if (error) throw error;
+
+      setSizes((prev) =>
+        prev.map((s) => (s.id === sizeId ? { ...s, size_group: 'unassigned' } : s))
+      );
+    } catch (err: any) {
+      setGroupError(err.message || 'Failed to remove size from group.');
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
+  // ACTION 2: PERMANENTLY DELETE FROM SYSTEM (Database row removed)
   const handleDeleteSizePermanently = async (sizeId: string, sName: string) => {
-    if (!window.confirm(`Are you sure you want to permanently delete size "${sName}" (${sizeId})?`)) return;
+    if (!window.confirm(`PERMANENTLY DELETE size "${sName}" (${sizeId}) from entire system? This cannot be undone.`)) return;
     setGroupActionLoading(true);
     setGroupError(null);
 
@@ -357,7 +382,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
       setSizes((prev) => prev.filter((s) => s.id !== sizeId));
     } catch (err: any) {
-      setGroupError(err.message || 'Failed to delete size.');
+      setGroupError(err.message || 'Failed to permanently delete size.');
     } finally {
       setGroupActionLoading(false);
     }
@@ -644,7 +669,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         </form>
       </div>
 
-      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + EXPLICIT DELETE TRASH BUTTON */}
+      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + SEPARATE REMOVE & DELETE CONTROLS */}
       {showGroupManager && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-xl w-full shadow-2xl space-y-4 relative">
@@ -795,7 +820,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       )}
                     </div>
 
-                    {/* SIZES LIST: CLEAR VISIBLE DELETE (TRASH) & EDIT BUTTONS */}
+                    {/* SIZES LIST: EDIT, REMOVE FROM GROUP & PERMANENT DELETE ICONS */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {attachedSizes.length === 0 ? (
                         <span className="text-[9.5px] font-mono text-[#8b9bb4]/60 italic py-1">
@@ -850,8 +875,10 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                 </span>
                               </div>
 
-                              {/* Visible Edit and Delete Icons */}
-                              <div className="flex items-center gap-1.5 border-l border-white/15 pl-1.5 ml-0.5">
+                              {/* 3 DISTINCT ACTION CONTROLS */}
+                              <div className="flex items-center gap-1 border-l border-white/15 pl-1.5 ml-0.5">
+                                
+                                {/* 1. Edit Label */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -861,14 +888,25 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                   className="text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer p-0.5 transition-colors"
                                   title={`Edit name of ${s.name}`}
                                 >
-                                  <Edit2 className="w-3 h-3" />
+                                  <Edit2 className="w-2.5 h-2.5" />
                                 </button>
                                 
+                                {/* 2. Remove From This Group Only (Minus / Unlink) */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFromGroupOnly(s.id, s.name)}
+                                  className="text-[#ffa500] hover:bg-[#ffa500]/20 rounded p-0.5 cursor-pointer transition-colors"
+                                  title={`Remove ${s.name} from "${grp.name}" only (keep in global system)`}
+                                >
+                                  <MinusCircle className="w-3 h-3" />
+                                </button>
+
+                                {/* 3. Permanently Delete Record from Database (Trash) */}
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteSizePermanently(s.id, s.name)}
                                   className="text-[#ff6b6b] hover:bg-[#ff6b6b]/20 rounded p-0.5 cursor-pointer transition-colors"
-                                  title={`Delete size ${s.name} permanently`}
+                                  title={`PERMANENTLY DELETE ${s.name} from database`}
                                 >
                                   <Trash2 className="w-3 h-3" />
                                 </button>
@@ -919,7 +957,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                 type="button"
                                 onClick={() => handleAddExistingSizeToGroup(sizeVal, grp.id)}
                                 className="px-2.5 py-1 bg-[#0a0e17] hover:bg-[#6d4aff]/40 hover:border-[#6d4aff] border border-white/10 rounded-md text-white font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                title={`Click to add "${sizeVal}" into ${grp.name}`}
                               >
                                 <Plus className="w-3 h-3 text-[#00ff9d]" />
                                 <span>{sizeVal}</span>
