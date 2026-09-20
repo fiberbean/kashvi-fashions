@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   Package,
   Building2,
@@ -14,7 +14,11 @@ import {
   Scissors,
   Check,
   Upload,
-  AlertCircle
+  AlertCircle,
+  Search,
+  ChevronDown,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
@@ -54,6 +58,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   const [openingStock, setOpeningStock] = useState<number>(0);
   const [images, setImages] = useState<TaggedImage[]>([]);
 
+  // Sub-Category Searchable Dropdown state
+  const [isSubCatDropdownOpen, setIsSubCatDropdownOpen] = useState<boolean>(false);
+  const [subCatSearch, setSubCatSearch] = useState<string>('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   // Fast WebP Compression Upload state
   const [isCompressingQuickUpload, setIsCompressingQuickUpload] = useState<boolean>(false);
 
@@ -62,6 +71,17 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsSubCatDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Load all Masters from Supabase DB
   useEffect(() => {
@@ -126,11 +146,22 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     return categories.filter((c) => !c.department || c.department === brand);
   }, [categories, brand]);
 
-  // Filter Sub-Categories by selected Main Category
+  // Filter Sub-Categories by selected Main Category with Alphabetical (A to Z) Order
   const filteredSubCats = useMemo(() => {
     if (!selectedCategory) return [];
-    return subCategories.filter((sc) => String(sc.category_id) === String(selectedCategory));
+    const list = subCategories.filter((sc) => String(sc.category_id) === String(selectedCategory));
+    return [...list].sort((a, b) =>
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+    );
   }, [subCategories, selectedCategory]);
+
+  // Live Filter for Sub-Category Dropdown Search
+  const searchedSubCats = useMemo(() => {
+    if (!subCatSearch.trim()) return filteredSubCats;
+    return filteredSubCats.filter((sc) =>
+      sc.name.toLowerCase().includes(subCatSearch.toLowerCase())
+    );
+  }, [filteredSubCats, subCatSearch]);
 
   // Selected sub-category object
   const activeSubCategoryObj = useMemo(() => {
@@ -138,22 +169,21 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   }, [subCategories, selectedSubCategory]);
 
   // STRICT SIZES FILTERING:
-  // Sub-Category సెలెక్ట్ అయితేనే దానికి సంబంధించిన సైజులు మాత్రమే వస్తాయి!
+  // Sub-Category సెలెక్ట్ అయితేనే దానికి సంబంధించిన సైజులు గ్రూప్ వైజ్ ఖచ్చితంగా వస్తాయి!
   const availableSizes = useMemo(() => {
-    if (!selectedSubCategory) {
-      return [];
-    }
+    if (!selectedSubCategory) return [];
 
-    // 1. Direct sub_category_id match from sizes table
+    // 1. Direct sub_category_id match
     const directMatches = sizes.filter(
       (sz) => sz.sub_category_id && String(sz.sub_category_id) === String(selectedSubCategory)
     );
     if (directMatches.length > 0) return directMatches;
 
-    // 2. If sizes table has size_group matched with Sub-Category's size_group
+    // 2. Multi-group match via size_group
     if (activeSubCategoryObj?.size_group) {
+      const targetGroup = activeSubCategoryObj.size_group.toLowerCase().trim();
       const groupMatches = sizes.filter(
-        (sz) => sz.size_group === activeSubCategoryObj.size_group
+        (sz) => (sz.size_group || '').toLowerCase().trim() === targetGroup
       );
       if (groupMatches.length > 0) return groupMatches;
     }
@@ -166,6 +196,15 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
       setList(list.filter((i) => i !== item));
     } else {
       setList([...list, item]);
+    }
+  };
+
+  // Toggle All Sizes for quick assignment
+  const handleToggleAllSizes = () => {
+    if (selectedSizes.length === availableSizes.length && availableSizes.length > 0) {
+      setSelectedSizes([]);
+    } else {
+      setSelectedSizes(availableSizes.map((s) => s.name));
     }
   };
 
@@ -266,7 +305,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
       const { error } = await supabase.from('products').insert([payload]);
       if (error) throw error;
 
-      alert(`Product ${productCode} saved successfully!`);
+      alert(`Product ${productCode} saved successfully! Purchase Inward dwara stock direct ga add chesukovachu.`);
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save product.');
@@ -295,11 +334,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                 <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
                   <span>Product Master Creator</span>
                   <span className="px-2 py-0.5 rounded-full bg-[#6d4aff]/20 text-[#00d9ff] border border-[#6d4aff]/40 text-[9px] font-mono uppercase">
-                    SKU Matrix
+                    Catalog Setup
                   </span>
                 </h2>
                 <span className="text-[10px] text-[#8b9bb4]">
-                  Universal colors with strictly linked Sub-Category sizes
+                  Universal colors with strictly linked Sub-Category size groups
                 </span>
               </div>
             </div>
@@ -383,7 +422,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Kundan Chuda Bangles / Pure Banarasi Silk Saree"
+                  placeholder="e.g. Daily Comfort Cotton Bra / Pure Banarasi Silk Saree"
                   className="w-full px-3.5 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17]/80 font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors placeholder:text-slate-600"
                 />
               </div>
@@ -403,6 +442,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
 
             {/* Category / Sub-Category / Unit / Stock */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              {/* Category */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
                   Category *
@@ -414,8 +454,9 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                     setSelectedCategory(e.target.value);
                     setSelectedSubCategory('');
                     setSelectedSizes([]);
+                    setSubCatSearch('');
                   }}
-                  className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors"
+                  className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer [&>option]:bg-[#101628] [&>option]:text-white"
                 >
                   <option value="">Select Category</option>
                   {filteredCategories.map((c) => (
@@ -424,28 +465,73 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                 </select>
               </div>
 
-              <div>
+              {/* Sub-Category Searchable Dropdown */}
+              <div className="relative" ref={dropdownRef}>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5 flex items-center justify-between">
                   <span>Sub-Category *</span>
-                  <span className="text-[9px] text-[#00d9ff]">CONTROLS SIZES</span>
+                  <span className="text-[8.5px] text-[#00d9ff] font-bold">A-Z SEARCH</span>
                 </label>
-                <select
-                  required
-                  value={selectedSubCategory}
-                  onChange={(e) => {
-                    setSelectedSubCategory(e.target.value);
-                    setSelectedSizes([]); // Reset sizes when sub-category changes
+                
+                <div
+                  onClick={() => {
+                    if (selectedCategory) setIsSubCatDropdownOpen(!isSubCatDropdownOpen);
                   }}
-                  disabled={!selectedCategory}
-                  className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors disabled:opacity-40"
+                  className={`w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white flex items-center justify-between cursor-pointer transition-colors ${
+                    !selectedCategory ? 'opacity-40 cursor-not-allowed' : 'hover:border-[#00d9ff]/50'
+                  }`}
                 >
-                  <option value="">Select Sub-Category</option>
-                  {filteredSubCats.map((sc) => (
-                    <option key={sc.id} value={sc.id}>{sc.name}</option>
-                  ))}
-                </select>
+                  <span className="truncate">
+                    {activeSubCategoryObj ? activeSubCategoryObj.name : (selectedCategory ? 'Select Sub-Category' : 'Select Category 1st')}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-[#8b9bb4] transition-transform ${isSubCatDropdownOpen ? 'rotate-180' : ''}`} />
+                </div>
+
+                {isSubCatDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#101628] border border-white/15 rounded-2xl p-2 shadow-2xl space-y-1.5 animate-in fade-in">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        autoFocus
+                        value={subCatSearch}
+                        onChange={(e) => setSubCatSearch(e.target.value)}
+                        placeholder="Search sub-category..."
+                        className="w-full pl-7 pr-2.5 py-1.5 bg-[#0a0e17] rounded-xl text-white text-[10.5px] outline-none border border-white/10 focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/50"
+                      />
+                      <Search className="w-3 h-3 text-[#8b9bb4] absolute left-2 top-1/2 -translate-y-1/2" />
+                    </div>
+
+                    <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1 custom-scrollbar">
+                      {searchedSubCats.length === 0 ? (
+                        <div className="p-2 text-center text-[#8b9bb4] text-[9.5px] italic">
+                          No matching sub-categories.
+                        </div>
+                      ) : (
+                        searchedSubCats.map((sc) => (
+                          <div
+                            key={sc.id}
+                            onClick={() => {
+                              setSelectedSubCategory(sc.id);
+                              setSelectedSizes([]);
+                              setIsSubCatDropdownOpen(false);
+                              setSubCatSearch('');
+                            }}
+                            className={`px-2.5 py-1.5 rounded-xl text-[10.5px] font-medium cursor-pointer transition-colors flex items-center justify-between ${
+                              selectedSubCategory === sc.id
+                                ? 'bg-[#6d4aff]/30 text-[#00d9ff] font-bold'
+                                : 'text-white hover:bg-white/5'
+                            }`}
+                          >
+                            <span className="truncate">{sc.name}</span>
+                            {selectedSubCategory === sc.id && <Check className="w-3 h-3 text-[#00d9ff]" />}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
+              {/* Unit */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
                   Unit *
@@ -454,7 +540,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                   required
                   value={selectedUnit}
                   onChange={(e) => setSelectedUnit(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors"
+                  className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer [&>option]:bg-[#101628] [&>option]:text-white"
                 >
                   <option value="">Select Unit</option>
                   {units.map((u) => (
@@ -463,15 +549,18 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                 </select>
               </div>
 
+              {/* Initial / Inward Base Stock */}
               <div>
-                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
-                  Opening Stock
+                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5 flex items-center justify-between">
+                  <span>Opening Stock</span>
+                  <span className="text-[8.5px] text-[#8b9bb4]">OR VIA PURCHASE</span>
                 </label>
                 <input
                   type="number"
                   min="0"
                   value={openingStock}
                   onChange={(e) => setOpeningStock(Number(e.target.value))}
+                  placeholder="0"
                   className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-mono font-bold text-[#00ff9d] outline-none focus:border-[#00d9ff] transition-colors"
                 />
               </div>
@@ -483,7 +572,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                 <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
               </span>
               
-              {/* UNIVERSAL COLOURS - All active colours available for any product */}
+              {/* UNIVERSAL COLOURS */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[10px] font-mono font-bold text-[#8b9bb4] flex items-center gap-1">
@@ -493,7 +582,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                     {selectedColors.length} selected
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1 custom-scrollbar">
                   {colours.map((c) => {
                     const active = selectedColors.includes(c.name);
                     return (
@@ -516,30 +605,49 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
 
               {/* STRICTLY LINKED SUB-CATEGORY SIZES */}
-              <div className="p-3 bg-[#101628] rounded-2xl border border-white/10 space-y-2">
+              <div className="p-3.5 bg-[#101628] rounded-2xl border border-white/10 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-mono font-bold text-[#00d9ff] flex items-center gap-1 uppercase tracking-wider">
-                    <Ruler className="w-3.5 h-3.5" /> Sub-Category Sizes:
-                  </span>
-                  {activeSubCategoryObj ? (
-                    <span className="text-[9.5px] font-mono text-[#00ff9d] bg-[#00ff9d]/10 px-2 py-0.5 rounded-md border border-[#00ff9d]/30 font-bold">
-                      Linked to: {activeSubCategoryObj.name}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] flex items-center gap-1 uppercase tracking-wider">
+                      <Ruler className="w-3.5 h-3.5" /> Available Sizes:
                     </span>
-                  ) : (
-                    <span className="text-[9px] font-mono text-[#ff6b6b] flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" /> Select Sub-Category Above
-                    </span>
+                    {activeSubCategoryObj && (
+                      <span className="text-[9px] font-mono text-[#00ff9d] bg-[#00ff9d]/10 px-2 py-0.5 rounded-md border border-[#00ff9d]/30 font-bold">
+                        Group: {activeSubCategoryObj.size_group || 'General'}
+                      </span>
+                    )}
+                  </div>
+
+                  {availableSizes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleToggleAllSizes}
+                      className="text-[9.5px] font-mono text-[#00d9ff] hover:text-[#00ff9d] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    >
+                      {selectedSizes.length === availableSizes.length ? (
+                        <>
+                          <CheckSquare className="w-3 h-3 text-[#00ff9d]" />
+                          <span>Deselect All</span>
+                        </>
+                      ) : (
+                        <>
+                          <Square className="w-3 h-3" />
+                          <span>Select All ({availableSizes.length})</span>
+                        </>
+                      )}
+                    </button>
                   )}
                 </div>
 
                 <div className="flex flex-wrap gap-1.5 min-h-[42px] items-center">
                   {!selectedSubCategory ? (
-                    <span className="text-[10.5px] text-[#8b9bb4] italic py-1">
-                      👉 ముందుగా Sub-Category ఎంచుకోండి. దానికి లింక్ అయిన సైజులు మాత్రమే ఇక్కడ కనిపిస్తాయి.
+                    <span className="text-[10.5px] text-[#8b9bb4] italic py-1 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-[#ffa500]" />
+                      Select Sub-Category above to load its linked size group.
                     </span>
                   ) : availableSizes.length === 0 ? (
                     <span className="text-[10.5px] text-[#ffa500] italic py-1">
-                      ఈ Sub-Category ({activeSubCategoryObj?.name}) కి సంబంధించి Sizes Table లో ఏ సైజులూ లింక్ అయి లేవు.
+                      No sizes registered under this Sub-Category ({activeSubCategoryObj?.name}) size group.
                     </span>
                   ) : (
                     availableSizes.map((s) => {
@@ -549,7 +657,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                           key={s.id}
                           type="button"
                           onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
-                          className={`px-3 py-1.5 rounded-xl text-[10.5px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                          className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
                             active
                               ? 'bg-[#00d9ff] text-neutral-950 border-[#00d9ff] shadow-md shadow-[#00d9ff]/30'
                               : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white'
