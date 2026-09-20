@@ -14,7 +14,9 @@ import {
   Plus,
   Lock,
   Filter,
-  Sparkles
+  Sparkles,
+  Settings,
+  Check
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SubCategoryRecord } from '../../types';
@@ -53,10 +55,13 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
   // Group Filter
   const [filterGroup, setFilterGroup] = useState<string>('ALL');
 
-  // Simple Quick Group Creation
-  const [isAddingGroup, setIsAddingGroup] = useState<boolean>(false);
+  // Group Manager Popup State
+  const [showGroupManager, setShowGroupManager] = useState<boolean>(false);
   const [newGroupName, setNewGroupName] = useState<string>('');
-  const [creatingGroup, setCreatingGroup] = useState<boolean>(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingGroupName, setEditingGroupName] = useState<string>('');
+  const [groupActionLoading, setGroupActionLoading] = useState<boolean>(false);
+  const [groupError, setGroupError] = useState<string | null>(null);
 
   // Size Form State
   const [sizeCode, setSizeCode] = useState<string>('');
@@ -72,7 +77,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Check if string is already in official SIZE series
+  // Check if string is in official SIZE series
   const isSizeSeries = (idString: string | null) => {
     if (!idString) return false;
     return /^SIZE\d+$/i.test(idString.trim());
@@ -124,7 +129,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // 2. Compute Next Available Code in SIZE0001 series
+  // 2. Fetch Next Code in SIZE0001 series
   const fetchNextSizeCode = async () => {
     try {
       const { data } = await supabase
@@ -167,13 +172,12 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     setSizeGroup(sizeGroups.length > 0 ? sizeGroups[0].id : 'apparel');
     setDisplayOrder(sizes.length > 0 ? sizes.length + 1 : 1);
     setIsActive(true);
-    setIsAddingGroup(false);
     const code = await fetchNextSizeCode();
     setSizeCode(code);
   };
 
   // When clicking an existing card:
-  // If it's an OLD/RANDOM ID, AUTOMATICALLY ASSIGN NEXT SIZE0001 CODE!
+  // If it's a legacy ID, automatically assigns the next SIZE0001 series code!
   const handleSelectCard = async (item: SizeRecord) => {
     setEditingMode(true);
     setOriginalId(item.id);
@@ -182,12 +186,10 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     setSizeGroup(item.size_group || 'apparel');
     setDisplayOrder(Number(item.display_order) || 0);
     setIsActive(item.active ?? true);
-    setIsAddingGroup(false);
 
     if (isSizeSeries(item.id)) {
       setSizeCode(item.id);
     } else {
-      // Automatic change to series ID for legacy records
       const freshCode = await fetchNextSizeCode();
       setSizeCode(freshCode);
     }
@@ -202,10 +204,12 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Quick Simple Group Creation
-  const handleCreateSimpleGroup = async () => {
+  // Group Manager Actions: Create
+  const handleCreateGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!newGroupName.trim()) return;
-    setCreatingGroup(true);
+    setGroupActionLoading(true);
+    setGroupError(null);
 
     const slug = newGroupName
       .trim()
@@ -220,18 +224,63 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         display_order: sizeGroups.length + 1,
         active: true
       }]);
-
       if (error) throw error;
 
       const updated = [...sizeGroups, { id: slug, name: newGroupName.trim() }];
       setSizeGroups(updated);
       setSizeGroup(slug);
       setNewGroupName('');
-      setIsAddingGroup(false);
     } catch (err: any) {
-      alert(`Could not add group: ${err.message}`);
+      setGroupError(err.message || 'Failed to create group.');
     } finally {
-      setCreatingGroup(false);
+      setGroupActionLoading(false);
+    }
+  };
+
+  // Group Manager Actions: Update Existing Group
+  const handleUpdateGroup = async (groupId: string) => {
+    if (!editingGroupName.trim()) return;
+    setGroupActionLoading(true);
+    setGroupError(null);
+
+    try {
+      const { error } = await supabase
+        .from('size_groups')
+        .update({ name: editingGroupName.trim() })
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      setSizeGroups((prev) =>
+        prev.map((g) => (g.id === groupId ? { ...g, name: editingGroupName.trim() } : g))
+      );
+      setEditingGroupId(null);
+      setEditingGroupName('');
+    } catch (err: any) {
+      setGroupError(err.message || 'Failed to update group.');
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
+  // Group Manager Actions: Delete Group
+  const handleDeleteGroup = async (groupId: string, groupName: string) => {
+    if (!window.confirm(`Are you sure you want to delete size group "${groupName}"?`)) return;
+    setGroupActionLoading(true);
+    setGroupError(null);
+
+    try {
+      const { error } = await supabase.from('size_groups').delete().eq('id', groupId);
+      if (error) throw error;
+
+      setSizeGroups((prev) => prev.filter((g) => g.id !== groupId));
+      if (sizeGroup === groupId && sizeGroups.length > 0) {
+        setSizeGroup(sizeGroups[0].id);
+      }
+    } catch (err: any) {
+      setGroupError(err.message || 'Failed to delete group. It may be used in sizes.');
+    } finally {
+      setGroupActionLoading(false);
     }
   };
 
@@ -365,7 +414,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Auto-assigned SIZE series with simplified group customization
+                Auto-assigned SIZE series with comprehensive group manager
               </span>
             </div>
           </div>
@@ -584,7 +633,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 />
               </div>
 
-              {/* CONVENIENT SIZE GROUP DROPDOWN + QUICK "+ ADD" BUTTON */}
+              {/* SIZE GROUP DROPDOWN + POPUP TRIGGER */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider">
@@ -592,47 +641,26 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   </label>
                   <button
                     type="button"
-                    onClick={() => setIsAddingGroup(!isAddingGroup)}
-                    className="text-[9.5px] font-mono text-[#00d9ff] hover:text-[#00ff9d] font-bold cursor-pointer transition-colors"
+                    onClick={() => setShowGroupManager(true)}
+                    className="text-[9.5px] font-mono text-[#00d9ff] hover:text-[#00ff9d] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                   >
-                    {isAddingGroup ? 'Cancel' : '+ New Group'}
+                    <Settings className="w-3 h-3" />
+                    <span>Manage Groups</span>
                   </button>
                 </div>
 
-                {/* Quick Add Inline Box if clicked */}
-                {isAddingGroup ? (
-                  <div className="flex items-center gap-1.5 p-1.5 bg-[#101628] rounded-xl border border-[#00d9ff]/40 animate-in fade-in">
-                    <input
-                      type="text"
-                      autoFocus
-                      placeholder="Enter new group name..."
-                      value={newGroupName}
-                      onChange={(e) => setNewGroupName(e.target.value)}
-                      className="flex-1 px-2.5 py-1.5 bg-[#0a0e17] rounded-lg text-white text-[10px] font-bold outline-none border border-white/10"
-                    />
-                    <button
-                      type="button"
-                      disabled={creatingGroup || !newGroupName.trim()}
-                      onClick={handleCreateSimpleGroup}
-                      className="px-3 py-1.5 bg-[#00d9ff]/20 hover:bg-[#00d9ff]/30 text-[#00d9ff] rounded-lg font-mono font-bold text-[10px] cursor-pointer disabled:opacity-40"
-                    >
-                      {creatingGroup ? '...' : 'Add'}
-                    </button>
-                  </div>
-                ) : (
-                  <select
-                    required
-                    value={sizeGroup}
-                    onChange={(e) => setSizeGroup(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer"
-                  >
-                    {sizeGroups.map((g) => (
-                      <option key={g.id} value={g.id}>
-                        {g.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
+                <select
+                  required
+                  value={sizeGroup}
+                  onChange={(e) => setSizeGroup(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer"
+                >
+                  {sizeGroups.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Linked Sub-Category */}
@@ -704,6 +732,150 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
           </div>
         </div>
       </div>
+
+      {/* POPUP MODAL: SIZE GROUPS MANAGER (EDIT EXISTING / CREATE NEW) */}
+      {showGroupManager && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 relative">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Settings className="w-4 h-4 text-[#00d9ff]" />
+                <h3 className="font-extrabold text-white text-sm tracking-wide">
+                  Manage Size Groups
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGroupManager(false);
+                  setEditingGroupId(null);
+                  setGroupError(null);
+                }}
+                className="p-1 rounded-lg bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {groupError && (
+              <div className="p-2 rounded-xl bg-[#ff6b6b]/10 border border-[#ff6b6b]/30 text-[#ff6b6b] text-[10px]">
+                {groupError}
+              </div>
+            )}
+
+            {/* Create New Group Input */}
+            <form onSubmit={handleCreateGroup} className="flex gap-2">
+              <input
+                type="text"
+                placeholder="New Group Name (e.g. Footwear, Kids)"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                className="flex-1 px-3 py-2 bg-[#0a0e17] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff]"
+              />
+              <button
+                type="submit"
+                disabled={groupActionLoading || !newGroupName.trim()}
+                className="px-3.5 py-2 rounded-xl bg-[#00d9ff]/20 hover:bg-[#00d9ff]/30 text-[#00d9ff] font-bold text-[11px] border border-[#00d9ff]/40 flex items-center gap-1 cursor-pointer disabled:opacity-40"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add</span>
+              </button>
+            </form>
+
+            {/* List of Existing Groups with Inline Edit & Delete */}
+            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+              <span className="text-[10px] font-mono text-[#8b9bb4] uppercase tracking-wider block mb-1">
+                Existing Groups ({sizeGroups.length})
+              </span>
+
+              {sizeGroups.map((grp) => {
+                const isEditing = editingGroupId === grp.id;
+                return (
+                  <div
+                    key={grp.id}
+                    className="flex items-center justify-between p-2 rounded-xl bg-[#0a0e17]/80 border border-white/5 hover:border-white/15"
+                  >
+                    {isEditing ? (
+                      <div className="flex items-center gap-2 flex-1 mr-2">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editingGroupName}
+                          onChange={(e) => setEditingGroupName(e.target.value)}
+                          className="flex-1 px-2 py-1 bg-[#101628] rounded-lg text-white text-[10.5px] border border-[#00d9ff] outline-none font-bold"
+                        />
+                        <button
+                          type="button"
+                          disabled={groupActionLoading}
+                          onClick={() => handleUpdateGroup(grp.id)}
+                          className="p-1 rounded bg-[#00ff9d]/20 text-[#00ff9d] hover:bg-[#00ff9d]/30"
+                          title="Save"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingGroupId(null)}
+                          className="p-1 rounded bg-white/5 text-[#8b9bb4] hover:text-white"
+                          title="Cancel"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-bold text-white text-[11px] truncate">
+                            {grp.name}
+                          </span>
+                          <span className="font-mono text-[8.5px] text-[#8b9bb4]">
+                            ID: {grp.id}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingGroupId(grp.id);
+                              setEditingGroupName(grp.name);
+                            }}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] transition-colors"
+                            title="Edit Group Name"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteGroup(grp.id, grp.name)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b] transition-colors"
+                            title="Delete Group"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGroupManager(false);
+                  setEditingGroupId(null);
+                }}
+                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-[11px] cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
