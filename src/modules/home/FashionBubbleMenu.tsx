@@ -52,26 +52,28 @@ export default function FashionBubbleMenu() {
         const [catResponse, subResponse] = await Promise.all([
           supabase
             .from('categories')
-            .select('id, name, slug, department, image_url, active'),
+            .select('id, name, slug, department, image_url, active')
+            .order('name'),
           supabase
             .from('sub_categories')
-            .select('id, name, category_id, category_name, image_url, active')
-            .eq('active', true),
+            .select('id, name, category_id, category_name, department, image_url, active')
+            .order('name'),
         ]);
 
         const catData = catResponse.data || [];
         const subData = subResponse.data || [];
 
         if (catData.length > 0) {
+          // Robust filter: Only include categories that are clearly not Jewellery
           const fashionCats = catData.filter((c) => {
-            const nameLower = (c.name || '').toLowerCase();
-            const slugLower = (c.slug || '').toLowerCase();
-            const deptLower = (c.department || '').toLowerCase();
+            const nameLower = (c.name || '').toLowerCase().trim();
+            const slugLower = (c.slug || '').toLowerCase().trim();
+            const deptLower = (c.department || '').toLowerCase().trim();
 
             const isJewellery =
+              deptLower.includes('jewel') ||
               nameLower.includes('jewel') ||
-              slugLower.includes('jewel') ||
-              deptLower.includes('jewel');
+              slugLower.includes('jewel');
 
             return !isJewellery && c.active !== false;
           });
@@ -80,6 +82,8 @@ export default function FashionBubbleMenu() {
           const subByCatName = new Map<string, SubCategory[]>();
 
           subData.forEach((sub) => {
+            if (sub.active === false) return; // ignore only explicitly disabled
+
             if (sub.category_id) {
               const cid = String(sub.category_id).trim();
               if (!subByCatId.has(cid)) subByCatId.set(cid, []);
@@ -218,7 +222,7 @@ export default function FashionBubbleMenu() {
               </button>
             </div>
 
-            {/* Half-Size Mini Arch Grid (Exact Menu Style in Half Scale) */}
+            {/* Half-Size Mini Arch Grid */}
             <div className="overflow-y-auto max-h-[55vh] py-4 no-scrollbar flex-1">
               {activeCategory.sub_categories && activeCategory.sub_categories.length > 0 ? (
                 <div className="grid grid-cols-4 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
@@ -232,7 +236,6 @@ export default function FashionBubbleMenu() {
                         onClick={() => setActiveCategory(null)}
                         className="group flex flex-col items-center w-[68px] sm:w-[76px] text-center cursor-pointer active:scale-95 transition-all"
                       >
-                        {/* Half-Sized Arch Frame (50% scale of main menu) */}
                         <div className="relative w-full h-[88px] sm:h-[96px] rounded-t-[32px] rounded-b-xl p-0.5 bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/25 shadow-2xs group-hover:border-[#ff4d6d] group-hover:shadow-sm transition-all duration-300">
                           <div className="w-full h-full rounded-t-[28px] rounded-b-lg overflow-hidden bg-neutral-100 relative">
                             <img
@@ -249,7 +252,6 @@ export default function FashionBubbleMenu() {
                           </div>
                         </div>
 
-                        {/* Title */}
                         <span className="mt-1.5 text-[10px] font-serif font-bold text-neutral-800 group-hover:text-[#ff4d6d] transition-colors line-clamp-1 w-full text-center">
                           {sub.name}
                         </span>

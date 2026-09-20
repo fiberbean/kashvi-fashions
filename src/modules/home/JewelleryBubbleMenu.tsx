@@ -29,33 +29,59 @@ export default function JewelleryBubbleMenu() {
       setLoading(true);
       try {
         const [catResponse, subResponse] = await Promise.all([
-          supabase
-            .from('categories')
-            .select('id, name, slug, department')
-            .or('slug.eq.jewellery,name.ilike.%jewellery%,department.eq.jewellery'),
-          supabase
-            .from('sub_categories')
-            .select('id, name, category_id, category_name, image_url, active')
-            .eq('active', true),
+          supabase.from('categories').select('id, name, slug, department'),
+          supabase.from('sub_categories').select('id, name, category_id, category_name, department, image_url, active'),
         ]);
 
         const catData = catResponse.data || [];
         const subData = subResponse.data || [];
 
-        const jewelleryCategoryIds = catData.map((c) => c.id);
+        // 1. Identify all Jewellery Category IDs
+        const jewelleryCategoryIds = new Set(
+          catData
+            .filter((c) => {
+              const d = (c.department || '').toLowerCase().trim();
+              const n = (c.name || '').toLowerCase().trim();
+              const s = (c.slug || '').toLowerCase().trim();
+              return d.includes('jewel') || n.includes('jewel') || s.includes('jewel');
+            })
+            .map((c) => String(c.id).trim())
+        );
 
-        let items: JewelleryItem[] = [];
+        // 2. Extract Jewellery Sub-Categories
+        let items = subData.filter((sub) => {
+          if (sub.active === false) return false;
 
-        if (subData.length > 0) {
-          items = subData.filter((sub) => {
-            const matchesId = sub.category_id && jewelleryCategoryIds.includes(sub.category_id);
-            const matchesName = sub.category_name && sub.category_name.toLowerCase().includes('jewellery');
-            return matchesId || matchesName;
-          });
+          const subDept = ((sub as any).department || '').toLowerCase().trim();
+          if (subDept.includes('jewel')) return true;
 
-          if (items.length === 0 && catData.length > 0) {
-            items = subData;
+          if (sub.category_id && jewelleryCategoryIds.has(String(sub.category_id).trim())) {
+            return true;
           }
+
+          const cName = (sub.category_name || '').toLowerCase().trim();
+          if (cName.includes('jewel')) return true;
+
+          // Name-based fallback for jewellery ornaments
+          const sName = (sub.name || '').toLowerCase().trim();
+          return (
+            sName.includes('bangle') ||
+            sName.includes('necklace') ||
+            sName.includes('earring') ||
+            sName.includes('chain') ||
+            sName.includes('ring') ||
+            sName.includes('chuda') ||
+            sName.includes('haram') ||
+            sName.includes('choker')
+          );
+        });
+
+        // 3. Fallback: If still empty, display non-fashion items
+        if (items.length === 0 && subData.length > 0) {
+          items = subData.filter((sub) => {
+            const subDept = ((sub as any).department || '').toLowerCase().trim();
+            return !subDept.includes('fashion') && sub.active !== false;
+          });
         }
 
         jewelleryCache = items;
