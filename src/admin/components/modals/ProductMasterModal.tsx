@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
-import ProductImageStudioModal from './ProductImageStudioModal';
+import ImageOptimizerModal from './ImageOptimizerModal';
 
 interface ProductMasterModalProps {
   onClose: () => void;
@@ -452,14 +452,14 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
       </div>
 
       {/* AI Studio Image Modal Popup */}
-      {showStudioModal && (
-        <ProductImageStudioModal
-          onClose={() => setShowStudioModal(false)}
-          onAcceptImage={handleAcceptAiImage}
-          productTitle={name}
-          categoryName={selectedCatObj?.name}
-        />
-      )}
+{showStudioModal && (
+  <ImageOptimizerModal
+    onClose={() => setShowStudioModal(false)}
+    onAcceptImage={handleAcceptAiImage}
+    productTitle={name}
+    categoryName={selectedCatObj?.name}
+  />
+)}
     </>
   );
 }
