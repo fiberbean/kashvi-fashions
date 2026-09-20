@@ -6,8 +6,6 @@ import {
   Loader2,
   Trash2,
   Edit2,
-  CheckCircle2,
-  XCircle,
   RotateCcw,
   RefreshCw,
   AlertCircle,
@@ -77,13 +75,11 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Check if string is in official SIZE series
   const isSizeSeries = (idString: string | null) => {
     if (!idString) return false;
     return /^SIZE\d+$/i.test(idString.trim());
   };
 
-  // 1. Fetch Sizes, Groups, and SubCategories
   const loadData = async () => {
     setLoadingList(true);
     setFetchError(null);
@@ -129,7 +125,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // 2. Fetch Next Code in SIZE0001 series
   const fetchNextSizeCode = async () => {
     try {
       const { data } = await supabase
@@ -176,8 +171,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     setSizeCode(code);
   };
 
-  // When clicking an existing card:
-  // If it's a legacy ID, automatically assigns the next SIZE0001 series code!
   const handleSelectCard = async (item: SizeRecord) => {
     setEditingMode(true);
     setOriginalId(item.id);
@@ -204,7 +197,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Group Manager Actions: Create
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName.trim()) return;
@@ -237,7 +229,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Group Manager Actions: Update Existing Group
   const handleUpdateGroup = async (groupId: string) => {
     if (!editingGroupName.trim()) return;
     setGroupActionLoading(true);
@@ -263,7 +254,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Group Manager Actions: Delete Group
   const handleDeleteGroup = async (groupId: string, groupName: string) => {
     if (!window.confirm(`Are you sure you want to delete size group "${groupName}"?`)) return;
     setGroupActionLoading(true);
@@ -278,7 +268,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         setSizeGroup(sizeGroups[0].id);
       }
     } catch (err: any) {
-      setGroupError(err.message || 'Failed to delete group. It may be used in sizes.');
+      setGroupError(err.message || 'Failed to delete group. Sizes may be attached.');
     } finally {
       setGroupActionLoading(false);
     }
@@ -414,7 +404,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Auto-assigned SIZE series with comprehensive group manager
+                Compact size tags with real-time status LED
               </span>
             </div>
           </div>
@@ -496,7 +486,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   No sizes found in this group. Register using the form.
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {filteredSizes.map((s) => {
                     const isSelected = editingMode && originalId === s.id;
                     const isLocked = isSizeSeries(s.id);
@@ -506,55 +496,55 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       <div
                         key={s.id}
                         onClick={() => handleSelectCard(s)}
-                        className={`group p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative min-h-[96px] ${
+                        className={`group p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative min-h-[78px] ${
                           isSelected
                             ? 'bg-[#6d4aff]/25 border-[#6d4aff] shadow-lg shadow-[#6d4aff]/30 scale-[1.02]'
                             : 'bg-[#0a0e17]/80 border-white/10 hover:border-[#00d9ff]/50 hover:bg-[#151c33]/80'
                         }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/15 flex items-center justify-center font-bold text-white text-[12px] font-mono shadow-inner group-hover:border-[#00d9ff]/50">
-                              {s.name}
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-mono text-[8.5px] text-[#8b9bb4]">
-                                #{s.display_order ?? 0}
-                              </span>
-                              <span className="font-mono text-[8.5px] text-[#00d9ff] uppercase font-bold truncate">
-                                {grp?.name || s.size_group}
-                              </span>
-                            </div>
-                          </div>
+                        {/* RIGHT TOP: LED LIGHT INDICATOR & DELETE */}
+                        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
+                          {/* LED Light Bulb */}
+                          <div
+                            className={`w-2 h-2 rounded-full transition-all ${
+                              s.active
+                                ? 'bg-[#00ff9d] shadow-[0_0_8px_#00ff9d]'
+                                : 'bg-[#ff6b6b] shadow-[0_0_8px_#ff6b6b]'
+                            }`}
+                            title={s.active ? 'Status: Active' : 'Status: Deactive'}
+                          />
 
+                          {/* Delete on hover */}
                           <button
                             type="button"
                             onClick={(e) => handleDeleteSize(e, s.id, s.name)}
-                            className="p-1 rounded-lg bg-white/5 hover:bg-[#ff6b6b] text-[#8b9bb4] hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                            className="p-1 rounded-md bg-white/5 hover:bg-[#ff6b6b] text-[#8b9bb4] hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100 ml-1"
                             title="Delete Size"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-2.5 h-2.5" />
                           </button>
                         </div>
 
-                        <div className="my-1">
-                          <span className="text-[8.5px] font-mono text-[#8b9bb4] block truncate">
-                            {s.sub_category_name ? `📁 ${s.sub_category_name}` : '🌐 Universal All'}
+                        {/* TOP: SIZE NAME (BIG & BOLD) */}
+                        <div className="pr-8">
+                          <span className="text-[17px] font-extrabold text-white tracking-wide font-mono block leading-tight">
+                            {s.name}
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                        {/* BOTTOM: SIZE ID + GROUP PILL */}
+                        <div className="flex items-center justify-between pt-1.5 border-t border-white/5 mt-1">
                           <span className={`font-mono text-[9px] font-extrabold px-1.5 py-0.5 rounded border tracking-wider flex items-center gap-1 ${
                             isLocked
                               ? 'bg-[#00ff9d]/10 text-[#00ff9d] border-[#00ff9d]/30'
                               : 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/40'
                           }`}>
-                            {isLocked ? <Lock className="w-2.5 h-2.5" /> : <Sparkles className="w-2.5 h-2.5" />}
+                            {isLocked ? <Lock className="w-2 h-2" /> : <Sparkles className="w-2 h-2" />}
                             {s.id}
                           </span>
 
-                          <span className={`text-[8.5px] font-mono ${s.active ? 'text-[#00ff9d]' : 'text-[#ff6b6b]'}`}>
-                            ● {s.active ? 'Active' : 'Disabled'}
+                          <span className="font-mono text-[8px] text-[#8b9bb4] uppercase truncate max-w-[75px]">
+                            {grp?.name || s.size_group}
                           </span>
                         </div>
                       </div>
@@ -703,13 +693,17 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   <button
                     type="button"
                     onClick={() => setIsActive(!isActive)}
-                    className={`w-full py-2 px-3 rounded-xl border font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-pointer transition-all ${
+                    className={`w-full py-2 px-3 rounded-xl border font-bold text-[11px] flex items-center justify-center gap-2 cursor-pointer transition-all ${
                       isActive
                         ? 'bg-[#00ff9d]/15 border-[#00ff9d]/40 text-[#00ff9d]'
                         : 'bg-[#ff6b6b]/15 border-[#ff6b6b]/40 text-[#ff6b6b]'
                     }`}
                   >
-                    {isActive ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        isActive ? 'bg-[#00ff9d] shadow-[0_0_8px_#00ff9d]' : 'bg-[#ff6b6b] shadow-[0_0_8px_#ff6b6b]'
+                      }`}
+                    />
                     <span>{isActive ? 'Active' : 'Disabled'}</span>
                   </button>
                 </div>
@@ -733,15 +727,15 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         </div>
       </div>
 
-      {/* POPUP MODAL: SIZE GROUPS MANAGER (EDIT EXISTING / CREATE NEW) */}
+      {/* POPUP MODAL: SIZE GROUPS MANAGER WITH ATTACHED SIZES PILLS */}
       {showGroupManager && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 relative">
+          <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 relative">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Settings className="w-4 h-4 text-[#00d9ff]" />
                 <h3 className="font-extrabold text-white text-sm tracking-wide">
-                  Manage Size Groups
+                  Manage Size Groups & View Assigned Sizes
                 </h3>
               </div>
               <button
@@ -767,7 +761,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
             <form onSubmit={handleCreateGroup} className="flex gap-2">
               <input
                 type="text"
-                placeholder="New Group Name (e.g. Footwear, Kids)"
+                placeholder="Enter new group name (e.g. Footwear, Kids)..."
                 value={newGroupName}
                 onChange={(e) => setNewGroupName(e.target.value)}
                 className="flex-1 px-3 py-2 bg-[#0a0e17] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff]"
@@ -778,84 +772,108 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 className="px-3.5 py-2 rounded-xl bg-[#00d9ff]/20 hover:bg-[#00d9ff]/30 text-[#00d9ff] font-bold text-[11px] border border-[#00d9ff]/40 flex items-center gap-1 cursor-pointer disabled:opacity-40"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Add</span>
+                <span>Add Group</span>
               </button>
             </form>
 
-            {/* List of Existing Groups with Inline Edit & Delete */}
-            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-              <span className="text-[10px] font-mono text-[#8b9bb4] uppercase tracking-wider block mb-1">
+            {/* Existing Groups List with Attached Sizes Preview */}
+            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+              <span className="text-[10px] font-mono text-[#8b9bb4] uppercase tracking-wider block">
                 Existing Groups ({sizeGroups.length})
               </span>
 
               {sizeGroups.map((grp) => {
                 const isEditing = editingGroupId === grp.id;
+                // Get all sizes attached to this group
+                const attachedSizes = sizes.filter((s) => s.size_group === grp.id);
+
                 return (
                   <div
                     key={grp.id}
-                    className="flex items-center justify-between p-2 rounded-xl bg-[#0a0e17]/80 border border-white/5 hover:border-white/15"
+                    className="p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10 hover:border-white/20 space-y-2 transition-all"
                   >
-                    {isEditing ? (
-                      <div className="flex items-center gap-2 flex-1 mr-2">
-                        <input
-                          type="text"
-                          autoFocus
-                          value={editingGroupName}
-                          onChange={(e) => setEditingGroupName(e.target.value)}
-                          className="flex-1 px-2 py-1 bg-[#101628] rounded-lg text-white text-[10.5px] border border-[#00d9ff] outline-none font-bold"
-                        />
-                        <button
-                          type="button"
-                          disabled={groupActionLoading}
-                          onClick={() => handleUpdateGroup(grp.id)}
-                          className="p-1 rounded bg-[#00ff9d]/20 text-[#00ff9d] hover:bg-[#00ff9d]/30"
-                          title="Save"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingGroupId(null)}
-                          className="p-1 rounded bg-white/5 text-[#8b9bb4] hover:text-white"
-                          title="Cancel"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-bold text-white text-[11px] truncate">
-                            {grp.name}
-                          </span>
-                          <span className="font-mono text-[8.5px] text-[#8b9bb4]">
-                            ID: {grp.id}
-                          </span>
+                    <div className="flex items-center justify-between gap-2">
+                      {isEditing ? (
+                        <div className="flex items-center gap-2 flex-1 mr-2">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={editingGroupName}
+                            onChange={(e) => setEditingGroupName(e.target.value)}
+                            className="flex-1 px-2.5 py-1 bg-[#101628] rounded-lg text-white text-[11px] border border-[#00d9ff] outline-none font-bold"
+                          />
+                          <button
+                            type="button"
+                            disabled={groupActionLoading}
+                            onClick={() => handleUpdateGroup(grp.id)}
+                            className="p-1.5 rounded bg-[#00ff9d]/20 text-[#00ff9d] hover:bg-[#00ff9d]/30 cursor-pointer"
+                            title="Save"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingGroupId(null)}
+                            className="p-1.5 rounded bg-white/5 text-[#8b9bb4] hover:text-white cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
                         </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-extrabold text-white text-[12px] truncate">
+                              {grp.name}
+                            </span>
+                            <span className="font-mono text-[8.5px] px-1.5 py-0.5 rounded bg-white/5 text-[#8b9bb4] border border-white/10">
+                              {attachedSizes.length} sizes
+                            </span>
+                          </div>
 
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingGroupId(grp.id);
-                              setEditingGroupName(grp.name);
-                            }}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] transition-colors"
-                            title="Edit Group Name"
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingGroupId(grp.id);
+                                setEditingGroupName(grp.name);
+                              }}
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] transition-colors cursor-pointer"
+                              title="Edit Group Name"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteGroup(grp.id, grp.name)}
+                              className="p-1.5 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b] transition-colors cursor-pointer"
+                              title="Delete Group"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* SIZES PILLS PREVIEW FOR THIS GROUP */}
+                    <div className="flex flex-wrap gap-1 pt-1 border-t border-white/5">
+                      {attachedSizes.length === 0 ? (
+                        <span className="text-[9px] font-mono text-[#8b9bb4]/60 italic">
+                          No sizes created under this group yet.
+                        </span>
+                      ) : (
+                        attachedSizes.map((s) => (
+                          <span
+                            key={s.id}
+                            className="px-2 py-0.5 rounded-md bg-[#101628] border border-white/10 text-white font-mono font-bold text-[9.5px] shadow-sm flex items-center gap-1"
                           >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteGroup(grp.id, grp.name)}
-                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b] transition-colors"
-                            title="Delete Group"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </>
-                    )}
+                            <span>{s.name}</span>
+                            <span className="text-[7.5px] text-[#00d9ff]">({s.id})</span>
+                          </span>
+                        ))
+                      )}
+                    </div>
                   </div>
                 );
               })}
