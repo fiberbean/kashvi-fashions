@@ -372,7 +372,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
   // ACTION 2: PERMANENTLY DELETE FROM SYSTEM (Database row removed)
   const handleDeleteSizePermanently = async (sizeId: string, sName: string) => {
-    if (!window.confirm(`PERMANENTLY DELETE size "${sName}" (${sizeId}) from entire system? This cannot be undone.`)) return;
+    if (!window.confirm(`PERMANENTLY DELETE size "${sName}" from entire system? This cannot be undone.`)) return;
     setGroupActionLoading(true);
     setGroupError(null);
 
@@ -669,7 +669,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         </form>
       </div>
 
-      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + SEPARATE REMOVE & DELETE CONTROLS */}
+      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST (WITHOUT ID LABELS) */}
       {showGroupManager && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-xl w-full shadow-2xl space-y-4 relative">
@@ -820,7 +820,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       )}
                     </div>
 
-                    {/* SIZES LIST: EDIT, REMOVE FROM GROUP & PERMANENT DELETE ICONS */}
+                    {/* SIZES LIST: ONLY NAME (NO ID) WITH EDIT, REMOVE & DELETE */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {attachedSizes.length === 0 ? (
                         <span className="text-[9.5px] font-mono text-[#8b9bb4]/60 italic py-1">
@@ -866,19 +866,15 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                               key={s.id}
                               className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded-xl bg-[#101628] border border-white/15 hover:border-[#00d9ff]/40 transition-all shadow-sm"
                             >
-                              <div className="flex items-baseline gap-1">
-                                <span className="text-white font-mono font-bold text-[11px]">
-                                  {s.name}
-                                </span>
-                                <span className="text-[7.5px] font-mono text-[#8b9bb4]">
-                                  ({s.id})
-                                </span>
-                              </div>
+                              {/* ONLY SIZE NAME DISPLAYED */}
+                              <span className="text-white font-mono font-bold text-[11px]">
+                                {s.name}
+                              </span>
 
-                              {/* 3 DISTINCT ACTION CONTROLS */}
+                              {/* Action controls */}
                               <div className="flex items-center gap-1 border-l border-white/15 pl-1.5 ml-0.5">
                                 
-                                {/* 1. Edit Label */}
+                                {/* 1. Edit Name */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -891,22 +887,22 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                   <Edit2 className="w-2.5 h-2.5" />
                                 </button>
                                 
-                                {/* 2. Remove From This Group Only (Minus / Unlink) */}
+                                {/* 2. Remove From This Group Only */}
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveFromGroupOnly(s.id, s.name)}
                                   className="text-[#ffa500] hover:bg-[#ffa500]/20 rounded p-0.5 cursor-pointer transition-colors"
-                                  title={`Remove ${s.name} from "${grp.name}" only (keep in global system)`}
+                                  title={`Remove ${s.name} from "${grp.name}" only`}
                                 >
                                   <MinusCircle className="w-3 h-3" />
                                 </button>
 
-                                {/* 3. Permanently Delete Record from Database (Trash) */}
+                                {/* 3. Permanently Delete */}
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteSizePermanently(s.id, s.name)}
                                   className="text-[#ff6b6b] hover:bg-[#ff6b6b]/20 rounded p-0.5 cursor-pointer transition-colors"
-                                  title={`PERMANENTLY DELETE ${s.name} from database`}
+                                  title={`Permanently delete ${s.name}`}
                                 >
                                   <Trash2 className="w-3 h-3" />
                                 </button>
@@ -1054,4 +1050,4 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
       )}
     </div>
   );
-}
+}   
