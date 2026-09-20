@@ -10,7 +10,8 @@ import {
   Pipette,
   Tag,
   Trash2,
-  ZoomIn
+  Sparkles,
+  Layers
 } from 'lucide-react';
 
 export interface TaggedColor {
@@ -192,39 +193,43 @@ export default function ImageOptimizerModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md select-none font-sans animate-in fade-in">
-      <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-5xl w-full max-h-[94vh] overflow-y-auto shadow-2xl border border-[#dce6e1] flex flex-col gap-4 text-xs">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-6 bg-[#0a0e17]/85 backdrop-blur-xl select-none font-sans animate-in fade-in">
+      {/* Floating Glassmorphic Container with Neon Accent Glow */}
+      <div className="bg-[#101628]/95 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 max-w-5xl w-full max-h-[94vh] overflow-y-auto shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_30px_rgba(109,74,255,0.2)] border border-white/10 flex flex-col gap-4 text-xs relative">
         
+        {/* Ambient Top Glow Line */}
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#6d4aff] via-[#00d9ff] to-[#ff6b6b] rounded-t-3xl" />
+
         {/* Header */}
-        <div className="flex justify-between items-center border-b border-[#edf2ef] pb-3 sticky top-0 bg-white z-20">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#e4efe9] text-[#0b3b2c] flex items-center justify-center">
-              <HardDrive className="w-4 h-4 text-[#0b3b2c]" />
+        <div className="flex justify-between items-center border-b border-white/10 pb-3 sticky top-0 bg-[#101628]/90 backdrop-blur-md z-20">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] text-white flex items-center justify-center shadow-lg shadow-[#6d4aff]/30">
+              <HardDrive className="w-4 h-4 text-[#00d9ff]" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-[#0b3b2c] flex items-center gap-2">
+              <h2 className="text-base font-extrabold text-white flex items-center gap-2 tracking-tight">
                 <span>HD Product Image Optimizer</span>
-                <span className="px-2 py-0.5 rounded-full bg-[#0b3b2c] text-white text-[9px] font-mono tracking-wider uppercase">
+                <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white text-[9px] font-mono tracking-wider uppercase shadow-xs">
                   WebP + Color Tagging
                 </span>
               </h2>
-              <p className="text-[10px] text-[#4d6960]">
-                Optimizes to lightweight WebP, shows preview instantly, and allows direct point-and-click color tagging.
+              <p className="text-[10px] text-[#8b9bb4]">
+                Lossless local compression with point-and-click color spectrum detection.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-full hover:bg-neutral-100 cursor-pointer"
+            className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white transition-all cursor-pointer"
           >
-            <X className="w-5 h-5 text-neutral-400" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* 1. Upload State */}
         {!originalImage ? (
-          <div className="min-h-[320px] flex flex-col items-center justify-center border-2 border-dashed border-[#c5d6ce] rounded-3xl bg-[#f8faf9] p-8 text-center">
+          <div className="min-h-[320px] flex flex-col items-center justify-center border-2 border-dashed border-[#6d4aff]/30 rounded-3xl bg-[#0a0e17]/50 p-8 text-center relative group">
             <input
               ref={fileInputRef}
               type="file"
@@ -233,18 +238,20 @@ export default function ImageOptimizerModal({
               className="hidden"
               id="raw-optimize-upload"
             />
-            <div className="w-16 h-16 rounded-3xl bg-white shadow-xs border border-[#dce6e1] flex items-center justify-center mb-3">
-              <Upload className="w-7 h-7 text-[#0b3b2c]" />
+            <div className="w-16 h-16 rounded-3xl bg-[#151c33] shadow-xl border border-white/10 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+              <Upload className="w-7 h-7 text-[#6d4aff]" />
             </div>
-            <h3 className="font-bold text-sm text-[#0b3b2c]">Upload Product Photo</h3>
-            <p className="text-[11px] text-[#4d6960] max-w-sm mt-1 mb-4">
-              Select product image. It will compress to lightweight HD WebP and open directly for color picking and tagging.
+            <h3 className="font-extrabold text-sm text-white tracking-tight">
+              Upload Product Photo
+            </h3>
+            <p className="text-[11px] text-[#8b9bb4] max-w-sm mt-1 mb-5 leading-relaxed">
+              Select product image. Compresses locally to lightweight WebP (&lt;150KB) and lets you point-and-click to tag real gemstone and polish colors.
             </p>
             <label
               htmlFor="raw-optimize-upload"
-              className="px-6 py-2.5 rounded-2xl bg-[#0b3b2c] text-white font-bold text-xs shadow-xs hover:bg-[#124b39] transition-all cursor-pointer flex items-center gap-2"
+              className="px-7 py-3 rounded-2xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold text-xs shadow-lg shadow-[#6d4aff]/35 transition-all cursor-pointer flex items-center gap-2 hover:-translate-y-0.5 active:translate-y-0"
             >
-              <Camera className="w-4 h-4 text-[#e5c07b]" />
+              <Camera className="w-4 h-4 text-[#00d9ff]" />
               <span>Choose Photo to Optimize & Tag</span>
             </label>
           </div>
@@ -252,31 +259,31 @@ export default function ImageOptimizerModal({
           <div className="space-y-4">
             
             {/* Top Toolbar: File Size & Color Tagging Switch */}
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-[#f8faf9] rounded-2xl border border-[#dce6e1]">
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-[#0a0e17]/60 rounded-2xl border border-white/10 backdrop-blur-md">
               <div className="flex items-center gap-3">
-                <span className="font-bold text-[11px] text-[#0b3b2c] uppercase tracking-wider flex items-center gap-1.5">
-                  <Pipette className="w-4 h-4 text-[#0b3b2c]" /> Interactive Color Tagging
+                <span className="font-extrabold text-[11px] text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Pipette className="w-4 h-4 text-[#00d9ff]" /> Interactive Color Tagging
                 </span>
                 <button
                   type="button"
                   onClick={() => setActivePickerMode(!activePickerMode)}
                   className={`px-3 py-1 rounded-xl text-[10.5px] font-bold border transition-all cursor-pointer ${
                     activePickerMode
-                      ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]'
-                      : 'bg-white text-neutral-600 border-neutral-300'
+                      ? 'bg-[#6d4aff] text-white border-[#6d4aff] shadow-md shadow-[#6d4aff]/30'
+                      : 'bg-[#151c33] text-[#8b9bb4] border-white/10'
                   }`}
                 >
-                  {activePickerMode ? '✓ Click-to-Tag Mode ON' : 'Paused (Click to enable)'}
+                  {activePickerMode ? '✓ Point-and-Click ON' : 'Paused (Click to enable)'}
                 </button>
               </div>
 
               {fileSizeInfo && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] text-neutral-400 line-through">
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="text-[10px] text-[#8b9bb4] line-through">
                     Raw: {fileSizeInfo.original}
                   </span>
-                  <span className="font-mono text-[10.5px] text-emerald-800 bg-emerald-100 border border-emerald-200 px-2.5 py-0.5 rounded-lg font-bold">
-                    WebP: {fileSizeInfo.optimized}
+                  <span className="text-[10.5px] text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-2.5 py-0.5 rounded-lg font-bold shadow-xs">
+                    Optimized WebP: {fileSizeInfo.optimized}
                   </span>
                 </div>
               )}
@@ -288,12 +295,12 @@ export default function ImageOptimizerModal({
               {/* Left 2 Cols: Optimized HD Image with Interactive Pins */}
               <div
                 ref={imageContainerRef}
-                className="lg:col-span-2 rounded-2xl border border-[#dce6e1] bg-neutral-900/5 min-h-[380px] max-h-[520px] flex items-center justify-center p-4 relative overflow-hidden"
+                className="lg:col-span-2 rounded-2xl border border-white/10 bg-[#0a0e17]/50 min-h-[380px] max-h-[520px] flex items-center justify-center p-4 relative overflow-hidden backdrop-blur-md"
               >
                 {isProcessing ? (
                   <div className="flex flex-col items-center justify-center gap-2 text-center">
-                    <RefreshCw className="w-7 h-7 animate-spin text-[#0b3b2c]" />
-                    <span className="text-xs font-bold text-[#0b3b2c]">Optimizing image in full HD...</span>
+                    <RefreshCw className="w-7 h-7 animate-spin text-[#6d4aff]" />
+                    <span className="text-xs font-bold text-white">Optimizing image in full HD...</span>
                   </div>
                 ) : optimizedImage ? (
                   <div className="relative inline-block max-h-full max-w-full">
@@ -302,7 +309,7 @@ export default function ImageOptimizerModal({
                       src={optimizedImage}
                       alt="Optimized product for tagging"
                       onClick={handleImageClick}
-                      className={`max-h-[460px] max-w-full object-contain rounded-xl shadow-md select-none ${
+                      className={`max-h-[460px] max-w-full object-contain rounded-2xl shadow-2xl select-none ${
                         activePickerMode ? 'cursor-crosshair' : 'cursor-default'
                       }`}
                     />
@@ -316,13 +323,13 @@ export default function ImageOptimizerModal({
                       >
                         <div
                           style={{ backgroundColor: tag.hex }}
-                          className="w-5 h-5 rounded-full border-2 border-white shadow-lg ring-1 ring-black/30 flex items-center justify-center animate-bounce"
+                          className="w-5 h-5 rounded-full border-2 border-white shadow-lg ring-2 ring-[#6d4aff]/60 flex items-center justify-center animate-bounce"
                         >
-                          <span className="text-[8px] font-bold text-white drop-shadow-sm">
+                          <span className="text-[8px] font-extrabold text-white drop-shadow-sm">
                             {idx + 1}
                           </span>
                         </div>
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[9px] px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#0a0e17]/95 text-white text-[9px] px-2 py-0.5 rounded-md whitespace-nowrap border border-white/20 shadow-md">
                           {tag.name} ({tag.hex})
                         </div>
                       </div>
@@ -332,51 +339,51 @@ export default function ImageOptimizerModal({
               </div>
 
               {/* Right Col: Tagged Colors List & Naming */}
-              <div className="rounded-2xl border border-[#dce6e1] bg-[#f8faf9] p-4 flex flex-col justify-between">
+              <div className="rounded-2xl border border-white/10 bg-[#101628]/70 p-4 flex flex-col justify-between backdrop-blur-md">
                 <div>
-                  <div className="flex items-center justify-between border-b border-[#edf2ef] pb-2 mb-3">
-                    <span className="font-bold text-[11px] text-[#0b3b2c] flex items-center gap-1.5 uppercase tracking-wider">
-                      <Tag className="w-3.5 h-3.5" /> Tagged Colors ({colorTags.length})
+                  <div className="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3">
+                    <span className="font-extrabold text-[11px] text-white flex items-center gap-1.5 uppercase tracking-wider">
+                      <Tag className="w-3.5 h-3.5 text-[#6d4aff]" /> Tagged Colors ({colorTags.length})
                     </span>
                     {colorTags.length > 0 && (
                       <button
                         type="button"
                         onClick={() => setColorTags([])}
-                        className="text-[10px] text-rose-600 font-bold hover:underline cursor-pointer"
+                        className="text-[10px] text-[#ff6b6b] font-bold hover:underline cursor-pointer"
                       >
                         Clear All
                       </button>
                     )}
                   </div>
 
-                  <p className="text-[10px] text-[#4d6960] mb-3">
+                  <p className="text-[10px] text-[#8b9bb4] mb-3">
                     {activePickerMode
                       ? '👉 Click anywhere on the image (stones, gold polish, beads) to tag a color.'
-                      : 'Click "Click-to-Tag Mode ON" above to add more tags.'}
+                      : 'Click "Point-and-Click ON" above to add more tags.'}
                   </p>
 
                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                     {colorTags.length === 0 ? (
-                      <div className="text-center py-8 text-neutral-400 text-[11px]">
+                      <div className="text-center py-8 text-[#8b9bb4]/70 text-[11px]">
                         No colors tagged yet.<br />Click on the jewellery to pick colors.
                       </div>
                     ) : (
-                      colorTags.map((tag, idx) => (
+                      colorTags.map((tag) => (
                         <div
                           key={tag.id}
-                          className="flex items-center justify-between p-2 rounded-xl bg-white border border-[#dce6e1] shadow-2xs gap-2"
+                          className="flex items-center justify-between p-2.5 rounded-xl bg-[#151c33] border border-white/10 shadow-xs gap-2"
                         >
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className="w-4 h-4 rounded-full border border-black/20 shrink-0 shadow-2xs" style={{ backgroundColor: tag.hex }} />
+                            <span className="w-4 h-4 rounded-full border border-black/30 shrink-0 shadow-xs ring-1 ring-white" style={{ backgroundColor: tag.hex }} />
                             <div className="flex-1 min-w-0">
                               <input
                                 type="text"
                                 value={tag.name}
                                 onChange={(e) => handleUpdateTagName(tag.id, e.target.value)}
                                 placeholder="Color label"
-                                className="font-bold text-neutral-800 text-[11px] w-full bg-transparent outline-none border-b border-transparent focus:border-[#0b3b2c]"
+                                className="font-bold text-white text-[11px] w-full bg-transparent outline-none border-b border-transparent focus:border-[#6d4aff]"
                               />
-                              <span className="font-mono text-[9px] text-neutral-400 block">
+                              <span className="font-mono text-[9px] text-[#8b9bb4] block">
                                 {tag.hex}
                               </span>
                             </div>
@@ -384,7 +391,7 @@ export default function ImageOptimizerModal({
                           <button
                             type="button"
                             onClick={() => handleRemoveTag(tag.id)}
-                            className="p-1 text-neutral-400 hover:text-rose-600 cursor-pointer"
+                            className="p-1 text-[#8b9bb4] hover:text-[#ff6b6b] transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -394,9 +401,9 @@ export default function ImageOptimizerModal({
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-[#edf2ef] mt-3">
-                  <span className="text-[9.5px] text-[#4d6960] block text-center">
-                    These color tags will be attached to the product for filter and customer display.
+                <div className="pt-3 border-t border-white/10 mt-3">
+                  <span className="text-[9.5px] text-[#8b9bb4] block text-center">
+                    These color tags attach directly to product specs for customer filter search.
                   </span>
                 </div>
               </div>
@@ -404,11 +411,11 @@ export default function ImageOptimizerModal({
             </div>
 
             {/* Bottom Actions */}
-            <div className="flex items-center justify-between pt-2 border-t border-[#edf2ef]">
+            <div className="flex items-center justify-between pt-2 border-t border-white/10">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-[11px] font-bold text-[#0b3b2c] underline cursor-pointer"
+                className="text-[11px] font-bold text-[#6d4aff] hover:text-[#00d9ff] underline cursor-pointer"
               >
                 Choose Different Photo
               </button>
@@ -424,7 +431,7 @@ export default function ImageOptimizerModal({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl text-neutral-500 font-bold hover:bg-neutral-100 cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white hover:bg-white/5 font-bold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
@@ -432,9 +439,9 @@ export default function ImageOptimizerModal({
                   type="button"
                   disabled={!optimizedImage || isProcessing}
                   onClick={handleConfirm}
-                  className="px-6 py-2 rounded-xl bg-[#0b3b2c] text-white font-bold flex items-center gap-1.5 shadow-xs hover:bg-[#124b39] transition-all cursor-pointer disabled:opacity-50"
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold flex items-center gap-1.5 shadow-lg shadow-[#6d4aff]/30 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  <Check className="w-4 h-4 text-[#e5c07b]" />
+                  <Check className="w-4 h-4 text-[#00ff9d]" />
                   <span>Accept Image & Colors</span>
                 </button>
               </div>
