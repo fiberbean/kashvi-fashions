@@ -34,6 +34,21 @@ interface TaggedImage {
   size_bytes?: string;
 }
 
+// Helper to determine brightness of hex color for text contrast
+function isColorLight(hexInput?: string | null): boolean {
+  if (!hexInput) return false;
+  let hex = hexInput.replace('#', '').trim();
+  if (hex.length === 3) {
+    hex = hex.split('').map((char) => char + char).join('');
+  }
+  if (hex.length !== 6) return false;
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness > 155;
+}
+
 export default function ProductMasterModal({ onClose }: ProductMasterModalProps) {
   const [categories, setCategories] = useState<CategoryRecord[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategoryRecord[]>([]);
@@ -144,12 +159,9 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     });
   }, [categories, brand]);
 
-  // Filter Sub-Categories:
-  // For Fashion: Filter by selected Category
-  // For Jewellery: Robust lookup for all Jewellery related sub-categories
+  // Filter Sub-Categories for Fashion and Jewellery
   const filteredSubCats = useMemo(() => {
     if (brand === 'jewellery') {
-      // 1. Identify all Jewellery Categories
       const jewelleryCategoryIds = new Set(
         categories
           .filter((c) => {
@@ -160,7 +172,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
           .map((c) => String(c.id))
       );
 
-      // 2. Filter Subcategories linked to these categories or explicitly tagged with jewellery
       let list = subCategories.filter((sc) => {
         const scDept = ((sc as any).department || '').toLowerCase().trim();
         if (scDept.includes('jewel')) return true;
@@ -168,7 +179,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         return false;
       });
 
-      // Fallback: If no subcategories matched category_id, check if subcategory name or parent hints jewellery
       if (list.length === 0) {
         list = subCategories.filter((sc) => {
           const parent = categories.find((c) => String(c.id) === String(sc.category_id));
@@ -186,7 +196,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         });
       }
 
-      // If still empty (e.g. fresh DB setup with 1 generic category), show all subcategories that are not fashion
       if (list.length === 0 && subCategories.length > 0) {
         list = subCategories.filter((sc) => {
           const parent = categories.find((c) => String(c.id) === String(sc.category_id));
@@ -200,7 +209,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
       );
     }
 
-    // For Fashions
     if (!selectedCategory) return [];
     const list = subCategories.filter((sc) => String(sc.category_id) === String(selectedCategory));
     return [...list].sort((a, b) =>
@@ -216,22 +224,18 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     );
   }, [filteredSubCats, subCatSearch]);
 
-  // Selected sub-category object
   const activeSubCategoryObj = useMemo(() => {
     return subCategories.find((sc) => String(sc.id) === String(selectedSubCategory));
   }, [subCategories, selectedSubCategory]);
 
-  // Strictly linked sizes filtering
   const availableSizes = useMemo(() => {
     if (!selectedSubCategory) return [];
 
-    // 1. Direct sub_category_id match
     const directMatches = sizes.filter(
       (sz) => sz.sub_category_id && String(sz.sub_category_id) === String(selectedSubCategory)
     );
     if (directMatches.length > 0) return directMatches;
 
-    // 2. Multi-group match via size_group
     if (activeSubCategoryObj?.size_group) {
       const targetGroup = activeSubCategoryObj.size_group.toLowerCase().trim();
       const groupMatches = sizes.filter(
@@ -251,7 +255,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     }
   };
 
-  // Toggle All Sizes for quick assignment
   const handleToggleAllSizes = () => {
     if (selectedSizes.length === availableSizes.length && availableSizes.length > 0) {
       setSelectedSizes([]);
@@ -260,7 +263,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     }
   };
 
-  // Direct fast photo upload with Auto-WebP Compression
   const handleQuickImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -390,7 +392,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
           </div>
 
           <div className="flex items-center gap-3">
-            {/* PRODUCT CODE: BIGGER & PROMINENT */}
             <div className="bg-[#0a0e17]/90 px-4 py-1.5 rounded-2xl border border-white/15 text-right shadow-inner min-w-[125px]">
               <span className="text-[8.5px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] block">PRODUCT CODE</span>
               <span className="font-mono text-base font-extrabold text-[#00ff9d] tracking-wide leading-tight block">
@@ -415,7 +416,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
 
         <form onSubmit={handleSave} className="space-y-4">
           
-          {/* Brand Domain Selector: Clean "Fashion" & "Jewellery" Names */}
+          {/* Brand Domain Selector */}
           <div>
             <label className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
               Brand Domain *
@@ -489,10 +490,10 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             </div>
           </div>
 
-          {/* Category / Sub-Category / Unit (Dynamically adjusts for Fashion vs Jewellery) */}
+          {/* Category / Sub-Category / Unit */}
           <div className={`grid grid-cols-1 ${brand === 'fashions' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
             
-            {/* Category: Only shown when Fashion is selected */}
+            {/* Category: Only for Fashion */}
             {brand === 'fashions' && (
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
@@ -517,7 +518,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             )}
 
-            {/* Sub-Category Searchable Dropdown (Directly available for Jewellery) */}
+            {/* Sub-Category Searchable Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5 flex items-center justify-between">
                 <span>{brand === 'jewellery' ? 'Jewellery Sub-Category *' : 'Sub-Category *'}</span>
@@ -612,7 +613,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
             </span>
             
-            {/* UNIVERSAL COLOURS */}
+            {/* UNIVERSAL COLOURS WITH DYNAMIC COLOR PREVIEW ON SELECTION */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-mono font-bold text-[#8b9bb4] flex items-center gap-1">
@@ -622,21 +623,51 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                   {selectedColors.length} selected
                 </span>
               </div>
-              <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto pr-1 custom-scrollbar">
+              <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1 custom-scrollbar">
                 {colours.map((c) => {
                   const active = selectedColors.includes(c.name);
+                  const rawHex = (c as any).hex || (c as any).code || (c as any).color_code || '';
+                  const validHex = rawHex.startsWith('#') ? rawHex : (rawHex ? `#${rawHex}` : '');
+                  const isLight = isColorLight(validHex);
+
                   return (
                     <button
                       key={c.id}
                       type="button"
                       onClick={() => toggleSelection(c.name, selectedColors, setSelectedColors)}
-                      className={`px-3 py-1 rounded-xl text-[10.5px] font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                      style={
+                        active && validHex
+                          ? {
+                              backgroundColor: validHex,
+                              borderColor: validHex,
+                              color: isLight ? '#0a0e17' : '#ffffff',
+                              boxShadow: `0 4px 14px ${validHex}55`
+                            }
+                          : {}
+                      }
+                      className={`px-3 py-1.5 rounded-xl text-[10.5px] font-bold flex items-center gap-1.5 border transition-all cursor-pointer active:scale-95 ${
                         active
-                          ? 'bg-[#6d4aff] text-white border-[#6d4aff] shadow-md shadow-[#6d4aff]/40'
-                          : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white'
+                          ? validHex
+                            ? '' // Handled by inline style
+                            : 'bg-[#6d4aff] text-white border-[#6d4aff] shadow-md shadow-[#6d4aff]/40'
+                          : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/20'
                       }`}
                     >
-                      {active && <Check className="w-3 h-3 text-[#00ff9d]" />}
+                      {/* Color Preview Swatch */}
+                      {validHex && (
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full border shrink-0 transition-transform ${
+                            active
+                              ? isLight ? 'border-black/30 scale-110' : 'border-white/40 scale-110'
+                              : 'border-white/20'
+                          }`}
+                          style={{ backgroundColor: validHex }}
+                        />
+                      )}
+                      
+                      {active && (
+                        <Check className={`w-3 h-3 ${validHex && isLight ? 'text-black' : 'text-[#00ff9d]'}`} />
+                      )}
                       <span>{c.name}</span>
                     </button>
                   );
@@ -699,7 +730,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                         key={s.id}
                         type="button"
                         onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
-                        className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer active:scale-95 ${
                           active
                             ? 'bg-[#00d9ff] text-neutral-950 border-[#00d9ff] shadow-md shadow-[#00d9ff]/30'
                             : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white'
@@ -714,7 +745,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             </div>
 
-            {/* Fabrics: Optional (Mainly for Fashion) */}
+            {/* Fabrics */}
             <div>
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] block mb-1.5 flex items-center gap-1">
                 <Scissors className="w-3 h-3 text-[#00ff9d]" /> Fabrics:
