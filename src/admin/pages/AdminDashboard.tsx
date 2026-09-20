@@ -15,7 +15,10 @@ import {
   Sparkles,
   Flame,
   Award,
-  Volume2
+  Volume2,
+  Activity,
+  ArrowUpRight,
+  ShieldAlert
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { OrderRecord, AbandonedCartUser, AdminStaffUser } from '../types';
@@ -171,7 +174,6 @@ export default function AdminDashboard({
         ).length;
         setNewOrdersCount(freshOrders);
 
-        // Pending/Initiated orders as leads (404 cart_sessions table avoidance)
         const pendingLeads = orders
           .filter((o) => o.payment_status === 'payment_pending' || o.order_status === 'payment_pending')
           .slice(0, 10)
@@ -387,11 +389,11 @@ export default function AdminDashboard({
     const rowsHtml = topSellingItems
       .map(
         (item, idx) => `
-      <tr style="border-bottom: 1px solid #e5e7eb; font-size: 12px;">
-        <td style="padding: 10px 12px; font-weight: bold; text-align: center; color: #667eea;">#${idx + 1}</td>
-        <td style="padding: 10px 12px; font-weight: 600; color: #111827;">${item.name}</td>
-        <td style="padding: 10px 12px; text-align: center; font-weight: bold; color: #ff6b6b;">${item.unitsSold} Units</td>
-        <td style="padding: 10px 12px; text-align: right; font-weight: bold; color: #667eea;">₹${item.totalRevenue.toLocaleString('en-IN')}</td>
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 12px;">
+        <td style="padding: 12px 14px; font-weight: bold; text-align: center; color: #00d9ff;">#${idx + 1}</td>
+        <td style="padding: 12px 14px; font-weight: 600; color: #ffffff;">${item.name}</td>
+        <td style="padding: 12px 14px; text-align: center; font-weight: bold; color: #ff6b6b;">${item.unitsSold} Units</td>
+        <td style="padding: 12px 14px; text-align: right; font-weight: bold; color: #00ff9d;">₹${item.totalRevenue.toLocaleString('en-IN')}</td>
       </tr>
     `
       )
@@ -401,62 +403,68 @@ export default function AdminDashboard({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Kashvi Fashions Management System - Top Selling Items Report</title>
+          <title>Kashvi Command OS - Top Demand Analytics</title>
           <style>
             @media print {
               body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             }
             body {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-              padding: 30px;
-              color: #1f2937;
-              max-width: 800px;
+              padding: 35px;
+              background-color: #0a0e17;
+              color: #ffffff;
+              max-width: 850px;
               margin: 0 auto;
             }
             .header {
               display: flex;
               justify-content: space-between;
               align-items: center;
-              border-bottom: 2px solid #667eea;
-              padding-bottom: 15px;
-              margin-bottom: 20px;
+              border-bottom: 2px solid #6d4aff;
+              padding-bottom: 18px;
+              margin-bottom: 24px;
             }
             .logo {
-              font-family: serif;
               font-size: 22px;
               font-weight: 900;
-              color: #667eea;
+              letter-spacing: 1px;
+              background: linear-gradient(135deg, #00d9ff, #6d4aff);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
             }
             .sub {
-              font-size: 11px;
-              color: #6b7280;
-              margin-top: 3px;
+              font-size: 12px;
+              color: #8b9bb4;
+              margin-top: 4px;
             }
             table {
               width: 100%;
               border-collapse: collapse;
               margin-top: 15px;
+              background: rgba(16, 22, 40, 0.7);
+              border-radius: 12px;
+              overflow: hidden;
             }
             th {
-              background-color: #f3f4f6;
-              color: #374151;
-              padding: 10px 12px;
+              background-color: rgba(109, 74, 255, 0.15);
+              color: #00d9ff;
+              padding: 12px 14px;
               font-size: 11px;
               text-transform: uppercase;
-              letter-spacing: 0.05em;
-              border-bottom: 1px solid #d1d5db;
+              letter-spacing: 0.08em;
+              border-bottom: 1px solid rgba(109, 74, 255, 0.3);
             }
           </style>
         </head>
         <body>
           <div class="header">
             <div>
-              <div class="logo">KASHVI FASHIONS MANAGEMENT SYSTEM</div>
-              <div class="sub">Top Selling Items Demand Report (${filterLabels[itemTimeFilter]})</div>
+              <div class="logo">KASHVI COMMAND DECK</div>
+              <div class="sub">Top Demand Performance Stream (${filterLabels[itemTimeFilter]})</div>
             </div>
-            <div style="text-align: right; font-size: 11px; color: #4b5563;">
-              <div><strong>Generated by:</strong> ${currentUser?.full_name || 'Admin'}</div>
-              <div><strong>Date:</strong> ${new Date().toLocaleString('en-IN')}</div>
+            <div style="text-align: right; font-size: 11px; color: #8b9bb4;">
+              <div><strong>Operator:</strong> ${currentUser?.full_name || 'Terminal Admin'}</div>
+              <div><strong>Generated:</strong> ${new Date().toLocaleString('en-IN')}</div>
             </div>
           </div>
 
@@ -464,18 +472,18 @@ export default function AdminDashboard({
             <thead>
               <tr>
                 <th style="width: 50px; text-align: center;">Rank</th>
-                <th style="text-align: left;">Item Description</th>
+                <th style="text-align: left;">Product Spec</th>
                 <th style="text-align: center; width: 120px;">Units Sold</th>
                 <th style="text-align: right; width: 140px;">Gross Revenue</th>
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="4" style="text-align:center; padding: 20px; color:#9ca3af;">No items sold during this period.</td></tr>'}
+              ${rowsHtml || '<tr><td colspan="4" style="text-align:center; padding: 25px; color:#8b9bb4;">No item telemetry recorded in timeframe.</td></tr>'}
             </tbody>
           </table>
 
-          <div style="margin-top: 30px; border-top: 1px solid #e5e7eb; padding-top: 15px; font-size: 10px; color: #9ca3af; text-align: center;">
-            Kashvi Fashions Management System • Confidential Internal Sales Ledger
+          <div style="margin-top: 35px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 15px; font-size: 10px; color: #8b9bb4; text-align: center;">
+            Kashvi Hyper OS • Encrypted Telemetry Ledger
           </div>
 
           <script>
@@ -493,116 +501,191 @@ export default function AdminDashboard({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-cyan-50 p-4 space-y-4.5 animate-in fade-in duration-200 select-none font-sans relative overflow-hidden">
-      {/* Animated Background Blobs */}
+    <div className="min-h-screen bg-[#0a0e17] text-white p-4 space-y-5 select-none font-sans relative overflow-hidden">
+      {/* Background Animated Neon Mesh Orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-[#6d4aff]/20 rounded-full blur-[130px] animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-[500px] h-[500px] bg-[#00d9ff]/15 rounded-full blur-[130px] animate-pulse delay-1000" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#ff6b6b]/10 rounded-full blur-[140px] animate-pulse delay-500" />
+        <div 
+          className="absolute inset-0 opacity-[0.03]" 
+          style={{ 
+            backgroundImage: `radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 0)`, 
+            backgroundSize: '28px 28px' 
+          }} 
+        />
       </div>
 
+      {/* Audio & Alert Notice Bar */}
       {!audioReady && (
         <div
           onClick={handleEnableAlerts}
-          className="group relative bg-white/80 backdrop-blur-lg rounded-2xl p-4 border border-white/40 shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
+          className="relative z-10 bg-gradient-to-r from-[#6d4aff]/20 via-[#00d9ff]/20 to-[#6d4aff]/20 border border-[#00d9ff]/40 p-3 rounded-2xl flex items-center justify-between cursor-pointer hover:shadow-[0_0_25px_rgba(0,217,255,0.25)] transition-all backdrop-blur-xl group"
         >
-          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-cyan-500/5 rounded-2xl"></div>
-          <div className="relative flex items-center justify-between">
-            <div className="flex items-center gap-3 text-sm font-bold text-gray-700">
-              <Volume2 className="w-5 h-5 text-purple-600 animate-bounce" />
-              <span>Click to enable Order Dispatch Sound & Notifications 🔔</span>
+          <div className="flex items-center gap-2.5 text-xs font-semibold text-white">
+            <div className="w-7 h-7 rounded-xl bg-[#00d9ff]/20 flex items-center justify-center border border-[#00d9ff]/40">
+              <Volume2 className="w-4 h-4 text-[#00d9ff] group-hover:scale-110 transition-transform animate-bounce" />
             </div>
-            <span className="text-xs font-bold bg-gradient-to-r from-purple-600 to-cyan-600 text-white px-4 py-1.5 rounded-full shadow-lg group-hover:scale-110 transition-transform">
-              Test Sound
-            </span>
+            <span>Initialize Dispatch Audio Frequency & Push Alert Stream</span>
           </div>
+          <span className="text-[10px] font-extrabold uppercase tracking-wider bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white px-3.5 py-1.5 rounded-xl shadow-md border border-white/20">
+            Arm Audio 🔔
+          </span>
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'New Orders', value: newOrdersCount, icon: BellRing, color: 'from-rose-500 to-pink-500', bg: 'bg-rose-50' },
-          { label: "Today's Sales", value: `₹${todaySales.toLocaleString('en-IN')}`, icon: IndianRupee, color: 'from-green-500 to-teal-500', bg: 'bg-green-50' },
-          { label: 'In Carts', value: abandonedCarts.length, icon: ShoppingCart, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-50' },
-          { label: 'Avg Basket', value: `₹${aov.toLocaleString('en-IN')}`, icon: Package, color: 'from-purple-500 to-cyan-500', bg: 'bg-purple-50' },
-        ].map((stat, idx) => (
-          <div key={idx} className="group relative bg-white/80 backdrop-blur-lg rounded-2xl p-5 border border-white/40 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 overflow-hidden">
-            <div className={`absolute inset-0 bg-gradient-to-br ${stat.color} opacity-5 rounded-2xl`}></div>
-            <div className="relative flex items-start justify-between">
-              <div className="flex-1">
-                <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-              </div>
-              <div className={`p-2.5 rounded-xl bg-gradient-to-br ${stat.color} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
-                <stat.icon className="w-5 h-5 text-white" />
-              </div>
+      {/* 4 Stat Cards: Floating Glassmorphism Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 relative z-10">
+        
+        {/* New Orders */}
+        <div className="bg-[rgba(16,22,40,0.85)] backdrop-blur-xl rounded-2xl p-4 border border-[#ff6b6b]/30 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:border-[#ff6b6b]/60 transition-all duration-300 group">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#ff6b6b] flex items-center gap-1">
+              <Activity className="w-3 h-3 animate-pulse" /> New Orders
+            </span>
+            <div className="w-7 h-7 rounded-xl bg-[#ff6b6b]/15 text-[#ff6b6b] border border-[#ff6b6b]/30 flex items-center justify-center">
+              <BellRing className="w-3.5 h-3.5" />
             </div>
           </div>
-        ))}
+          <div className="mt-2 flex items-baseline justify-between">
+            <div className="text-2xl font-extrabold text-white tracking-tight">
+              {newOrdersCount}
+            </div>
+            <span className="text-[9.5px] font-mono text-[#ff6b6b] bg-[#ff6b6b]/10 px-2 py-0.5 rounded-md border border-[#ff6b6b]/20">
+              Awaiting Pack
+            </span>
+          </div>
+        </div>
+
+        {/* Today's Sales */}
+        <div className="bg-[rgba(16,22,40,0.85)] backdrop-blur-xl rounded-2xl p-4 border border-[#00ff9d]/30 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:border-[#00ff9d]/60 transition-all duration-300 group">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#00ff9d] flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" /> Today's Sales
+            </span>
+            <div className="w-7 h-7 rounded-xl bg-[#00ff9d]/15 text-[#00ff9d] border border-[#00ff9d]/30 flex items-center justify-center">
+              <IndianRupee className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <div className="text-2xl font-extrabold text-white tracking-tight">
+              ₹{todaySales.toLocaleString('en-IN')}
+            </div>
+            <span className="text-[9.5px] font-mono text-[#00ff9d] bg-[#00ff9d]/10 px-2 py-0.5 rounded-md border border-[#00ff9d]/20">
+              Verified Stream
+            </span>
+          </div>
+        </div>
+
+        {/* In Carts */}
+        <div className="bg-[rgba(16,22,40,0.85)] backdrop-blur-xl rounded-2xl p-4 border border-[#ffa500]/30 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:border-[#ffa500]/60 transition-all duration-300 group">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#ffa500] flex items-center gap-1">
+              <ShoppingCart className="w-3 h-3" /> In Carts
+            </span>
+            <div className="w-7 h-7 rounded-xl bg-[#ffa500]/15 text-[#ffa500] border border-[#ffa500]/30 flex items-center justify-center">
+              <ShoppingCart className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <div className="text-2xl font-extrabold text-white tracking-tight">
+              {abandonedCarts.length} <span className="text-xs font-normal text-[#8b9bb4]">Users</span>
+            </div>
+            <span className="text-[9.5px] font-mono text-[#ffa500] bg-[#ffa500]/10 px-2 py-0.5 rounded-md border border-[#ffa500]/20">
+              Recovery Leads
+            </span>
+          </div>
+        </div>
+
+        {/* Average Order Value (AOV) */}
+        <div className="bg-[rgba(16,22,40,0.85)] backdrop-blur-xl rounded-2xl p-4 border border-[#00d9ff]/30 shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:border-[#00d9ff]/60 transition-all duration-300 group">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#00d9ff] flex items-center gap-1">
+              <Package className="w-3 h-3" /> Basket (AOV)
+            </span>
+            <div className="w-7 h-7 rounded-xl bg-[#00d9ff]/15 text-[#00d9ff] border border-[#00d9ff]/30 flex items-center justify-center">
+              <Package className="w-3.5 h-3.5" />
+            </div>
+          </div>
+          <div className="mt-2 flex items-baseline justify-between">
+            <div className="text-2xl font-extrabold text-white tracking-tight">
+              ₹{aov.toLocaleString('en-IN')}
+            </div>
+            <span className="text-[9.5px] font-mono text-[#00d9ff] bg-[#00d9ff]/10 px-2 py-0.5 rounded-md border border-[#00d9ff]/20">
+              {totalOrdersToday} Placed
+            </span>
+          </div>
+        </div>
+
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-7 xl:col-span-8 group relative bg-white/80 backdrop-blur-lg rounded-2xl border border-white/40 shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-cyan-500/5 pointer-events-none"></div>
-          <div className="relative px-4 py-2.5 border-b border-white/30 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 p-0.5 bg-white/50 backdrop-blur-sm rounded-full">
+      {/* Main Grid: Orders Telemetry Table & Top Sellers Leaderboard */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative z-10">
+        
+        {/* Left Table Section */}
+        <div className="lg:col-span-7 xl:col-span-8 bg-[rgba(16,22,40,0.88)] backdrop-blur-2xl rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden">
+          {/* Table Tab Bar */}
+          <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between gap-3 bg-white/[0.02]">
+            <div className="flex items-center gap-1.5 p-1 bg-[#0a0e17]/80 rounded-2xl border border-white/10">
               <button
                 type="button"
                 onClick={() => setTableTab('orders')}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-2 group relative overflow-hidden ${
-                  tableTab === 'orders' 
-                    ? 'bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-lg' 
-                    : 'bg-white/50 text-gray-600 hover:text-purple-600 hover:bg-purple-50'
+                className={`px-3.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  tableTab === 'orders'
+                    ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-[0_0_15px_rgba(109,74,255,0.4)]'
+                    : 'text-[#8b9bb4] hover:text-white'
                 }`}
               >
-                <ShoppingBag className="w-4 h-4" />
+                <ShoppingBag className="w-3.5 h-3.5" />
                 <span>Live Orders ({recentOrders.length})</span>
-                {tableTab === 'orders' && <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-purple-600 opacity-20 blur-md"></div>}
               </button>
 
               <button
                 type="button"
                 onClick={() => setTableTab('abandoned')}
-                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-2 group relative overflow-hidden ${
-                  tableTab === 'abandoned' 
-                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg' 
-                    : 'bg-white/50 text-gray-600 hover:text-amber-600 hover:bg-amber-50'
+                className={`px-3.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  tableTab === 'abandoned'
+                    ? 'bg-[#ffa500] text-neutral-950 font-extrabold shadow-[0_0_15px_rgba(255,165,0,0.4)]'
+                    : 'text-[#8b9bb4] hover:text-white'
                 }`}
               >
-                <ShoppingCart className="w-4 h-4" />
+                <ShoppingCart className="w-3.5 h-3.5" />
                 <span>Abandoned ({abandonedCarts.length})</span>
-                {tableTab === 'abandoned' && <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-500 opacity-20 blur-md"></div>}
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
-              <span>Role: <strong className="uppercase text-gray-700">{role}</strong></span>
+            <div className="flex items-center gap-2 text-[10.5px] font-mono text-[#8b9bb4]">
+              <span>ROLE:</span>
+              <span className="px-2 py-0.5 rounded-md bg-[#6d4aff]/20 border border-[#6d4aff]/40 text-[#00d9ff] uppercase font-bold tracking-wider">
+                {role}
+              </span>
             </div>
           </div>
 
           {tableTab === 'orders' && (
-            <div className="overflow-x-auto relative">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-sans">
-                <thead className="bg-white/50 backdrop-blur-sm text-gray-500 uppercase text-[9px] font-bold tracking-wider border-b border-white/30">
+                <thead className="bg-[#0a0e17]/60 text-[#8b9bb4] uppercase text-[9px] font-mono tracking-wider border-b border-white/10">
                   <tr>
-                    <th className="py-2.5 px-4">Order ID</th>
-                    <th className="py-2.5 px-4">Customer</th>
-                    <th className="py-2.5 px-4">Amount</th>
-                    <th className="py-2.5 px-4">Payment</th>
-                    <th className="py-2.5 px-4">Status</th>
-                    <th className="py-2.5 px-4 text-right">Actions</th>
+                    <th className="py-3 px-4">Order ID</th>
+                    <th className="py-3 px-4">Customer Identity</th>
+                    <th className="py-3 px-4">Amount</th>
+                    <th className="py-3 px-4">Payment</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/30">
+                <tbody className="divide-y divide-white/5">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-400 font-medium">
-                        Syncing store orders...
+                      <td colSpan={6} className="py-10 text-center text-[#8b9bb4] font-medium">
+                        Syncing live store telemetry...
                       </td>
                     </tr>
                   ) : recentOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-gray-400 font-medium">
-                        No orders placed yet.
+                      <td colSpan={6} className="py-10 text-center text-[#8b9bb4] font-medium">
+                        No orders recorded in queue.
                       </td>
                     </tr>
                   ) : (
@@ -612,44 +695,45 @@ export default function AdminDashboard({
                         <tr
                           key={ord.id}
                           onClick={() => setSelectedOrder(ord)}
-                          className={`relative cursor-pointer transition-all duration-300 hover:bg-purple-50/50 hover:shadow-inner ${isNew ? 'bg-rose-50/30 hover:bg-rose-100/50' : ''}`}
+                          className={`hover:bg-white/[0.04] transition-colors cursor-pointer group ${
+                            isNew ? 'bg-[#ff6b6b]/[0.06]' : ''
+                          }`}
                         >
-                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/0 to-purple-500/0 group-hover:from-purple-500/5 group-hover:via-purple-500/2 group-hover:to-purple-500/5 transition-all duration-300"></div>
-                          <td className="py-2.5 px-4 font-mono font-bold text-gray-800 group-hover:text-purple-600 relative z-10">
-                            <div className="flex items-center gap-1.5">
-                              {isNew && <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-ping"></span>}
+                          <td className="py-3 px-4 font-mono font-bold text-[#00d9ff] group-hover:text-white transition-colors">
+                            <div className="flex items-center gap-2">
+                              {isNew && <span className="w-1.5 h-1.5 rounded-full bg-[#ff6b6b] animate-ping" />}
                               <span>{ord.id}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 px-4 relative z-10">
-                            <div className="font-bold text-gray-800 leading-tight">{ord.customer_name || 'Guest'}</div>
-                            <div className="text-[9.5px] text-gray-400 font-mono">{ord.customer_phone}</div>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-white leading-tight">{ord.customer_name || 'Guest'}</div>
+                            <div className="text-[10px] text-[#8b9bb4] font-mono mt-0.5">{ord.customer_phone}</div>
                           </td>
-                          <td className="py-2.5 px-4 font-bold text-gray-800 text-xs relative z-10">
+                          <td className="py-3 px-4 font-bold text-white text-xs font-mono">
                             ₹{Number(ord.total_amount).toLocaleString('en-IN')}
                           </td>
-                          <td className="py-2.5 px-4 relative z-10">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                          <td className="py-3 px-4">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold font-mono uppercase tracking-wide border ${
                               ord.payment_status === 'paid'
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                                ? 'bg-[#00ff9d]/10 text-[#00ff9d] border-[#00ff9d]/30'
+                                : 'bg-[#ffa500]/10 text-[#ffa500] border-[#ffa500]/30'
                             }`}>
                               {ord.payment_status || 'PENDING'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-4 relative z-10">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold capitalize border ${
+                          <td className="py-3 px-4">
+                            <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold capitalize border ${
                               isNew
-                                ? 'bg-rose-100 text-pink-600 border-rose-200'
-                                : 'bg-gray-50 text-gray-700 border-gray-200'
+                                ? 'bg-[#ff6b6b]/15 text-[#ff6b6b] border-[#ff6b6b]/30'
+                                : 'bg-white/10 text-[#00d9ff] border-white/15'
                             }`}>
                               {ord.order_status || 'New'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-4 text-right relative z-10">
+                          <td className="py-3 px-4 text-right">
                             <div className="inline-flex items-center gap-2">
-                              <span className="text-[10.5px] font-bold text-gray-700 group-hover:text-purple-600">
-                                View
+                              <span className="text-[11px] font-bold text-[#6d4aff] group-hover:text-[#00d9ff] transition-colors flex items-center gap-0.5">
+                                Inspect <ArrowUpRight className="w-3 h-3" />
                               </span>
 
                               {canEdit && (
@@ -660,10 +744,10 @@ export default function AdminDashboard({
                                     setEditingOrderId(ord.id);
                                     setSelectedNewStatus(ord.order_status || 'new');
                                   }}
-                                  className="p-2 rounded-lg hover:bg-purple-100 text-gray-500 hover:text-purple-600 transition-all duration-300 group-hover:scale-110"
-                                  title="Edit Status"
+                                  className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white transition-colors cursor-pointer"
+                                  title="Edit Order Status"
                                 >
-                                  <Edit2 className="w-4 h-4" />
+                                  <Edit2 className="w-3 h-3" />
                                 </button>
                               )}
 
@@ -671,10 +755,10 @@ export default function AdminDashboard({
                                 <button
                                   type="button"
                                   onClick={(e) => handleDeleteOrder(ord.id, e)}
-                                  className="p-2 rounded-lg hover:bg-rose-100 text-gray-500 hover:text-rose-600 transition-all duration-300 group-hover:scale-110"
+                                  className="p-1.5 rounded-lg bg-[#ff6b6b]/10 hover:bg-[#ff6b6b]/20 text-[#ff6b6b] transition-colors cursor-pointer"
                                   title="Delete Order"
                                 >
-                                  <Trash2 className="w-4 h-4" />
+                                  <Trash2 className="w-3 h-3" />
                                 </button>
                               )}
                             </div>
@@ -689,17 +773,292 @@ export default function AdminDashboard({
           )}
 
           {tableTab === 'abandoned' && (
-            <div className="overflow-x-auto relative">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-sans">
-                <thead className="bg-white/50 backdrop-blur-sm text-gray-500 uppercase text-[9px] font-bold tracking-wider border-b border-white/30">
+                <thead className="bg-[#0a0e17]/60 text-[#8b9bb4] uppercase text-[9px] font-mono tracking-wider border-b border-white/10">
                   <tr>
-                    <th className="py-2.5 px-4">Cart ID</th>
-                    <th className="py-2.5 px-4">Customer</th>
-                    <th className="py-2.5 px-4">Items</th>
-                    <th className="py-2.5 px-4">Value</th>
-                    <th className="py-2.5 px-4 text-right">Action</th>
+                    <th className="py-3 px-4">Lead ID</th>
+                    <th className="py-3 px-4">Customer</th>
+                    <th className="py-3 px-4">Items Trapped</th>
+                    <th className="py-3 px-4">Value</th>
+                    <th className="py-3 px-4 text-right">Recovery Dispatch</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/30">
+                <tbody className="divide-y divide-white/5">
                   {abandonedCarts.map((cart) => (
-                    <tr key={cart.id} className="hover:bg-amber-50
+                    <tr key={cart.id} className="hover:bg-white/[0.04] transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-[#00d9ff]">{cart.id}</td>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-white">{cart.customer_name}</div>
+                        <div className="text-[10px] text-[#8b9bb4] font-mono">{cart.customer_phone}</div>
+                      </td>
+                      <td className="py-3 px-4 text-[11px] text-[#8b9bb4] truncate max-w-xs">
+                        {cart.items_preview}
+                      </td>
+                      <td className="py-3 px-4 font-bold text-[#ffa500] font-mono">
+                        ₹{cart.cart_value.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <a
+                          href={`https://wa.me/91${cart.customer_phone.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(cart.customer_name)},%20we%20noticed%20you%20left%20items%20in%20your%20Kashvi%20cart!`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#00ff9d]/20 hover:bg-[#00ff9d]/30 text-[#00ff9d] border border-[#00ff9d]/40 font-bold text-[10px] shadow-sm transition-all"
+                        >
+                          <MessageCircle className="w-3 h-3" />
+                          <span>WhatsApp Ping</span>
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Right Section: Top Selling Items Leaderboard */}
+        <div className="lg:col-span-5 xl:col-span-4 bg-[rgba(16,22,40,0.88)] backdrop-blur-2xl rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-xl bg-[#ff6b6b]/15 text-[#ff6b6b] border border-[#ff6b6b]/30 flex items-center justify-center">
+                <Flame className="w-4 h-4" />
+              </div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                Top Demand Index
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadPDF}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white text-[10px] font-bold shadow-md shadow-[#6d4aff]/30 transition-all cursor-pointer active:scale-95 border border-white/10"
+              title="Download Leaderboard PDF Report"
+            >
+              <Download className="w-3 h-3 text-[#00d9ff]" />
+              <span>PDF Report</span>
+            </button>
+          </div>
+
+          {/* Timeframe Filter Switcher */}
+          <div className="px-4 py-2.5 border-b border-white/10 bg-[#0a0e17]/50 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-[10px] text-[#8b9bb4] font-semibold">
+              <Calendar className="w-3.5 h-3.5 text-[#00d9ff]" />
+              <span>Timeframe:</span>
+            </div>
+
+            <select
+              value={itemTimeFilter}
+              onChange={(e) => setItemTimeFilter(e.target.value as TimeRangeFilter)}
+              className="px-3 py-1 rounded-xl border border-white/10 bg-[#101628] text-[10.5px] font-semibold text-white outline-none cursor-pointer focus:border-[#00d9ff] shadow-inner"
+            >
+              <option value="today">Today (Ee Roju)</option>
+              <option value="yesterday">Yesterday (Ninna)</option>
+              <option value="3days">Last 3 Days</option>
+              <option value="1week">One Week (7 Days)</option>
+              <option value="half_month">Half Month (15 Days)</option>
+              <option value="full_month">Full Month (30 Days)</option>
+              <option value="3months">Last 3 Months (Quarter)</option>
+              <option value="half_year">Half Year (6 Months)</option>
+              <option value="year">Full Year (365 Days)</option>
+            </select>
+          </div>
+
+          {/* Leaderboard Scroll List */}
+          <div className="divide-y divide-white/5 overflow-y-auto max-h-[420px] flex-1">
+            {topSellingItems.length === 0 ? (
+              <div className="p-10 text-center text-xs text-[#8b9bb4] space-y-2">
+                <Package className="w-8 h-8 mx-auto text-[#8b9bb4]/40" />
+                <p>No sales metrics recorded in timeframe.</p>
+                <span className="text-[10px] text-[#8b9bb4]/60">Switch the timeframe filter above.</span>
+              </div>
+            ) : (
+              topSellingItems.map((item, idx) => {
+                const isTop1 = idx === 0;
+                const isTop2 = idx === 1;
+                const isTop3 = idx === 2;
+
+                return (
+                  <div
+                    key={item.name + idx}
+                    className="p-3.5 hover:bg-white/[0.04] transition-colors flex items-center justify-between gap-3 group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Rank Indicator */}
+                      <div
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-[11px] shrink-0 border ${
+                          isTop1
+                            ? 'bg-[#ffa500]/20 text-[#ffa500] border-[#ffa500]/50 shadow-[0_0_12px_rgba(255,165,0,0.35)]'
+                            : isTop2
+                            ? 'bg-[#00d9ff]/20 text-[#00d9ff] border-[#00d9ff]/40'
+                            : isTop3
+                            ? 'bg-[#6d4aff]/20 text-[#6d4aff] border-[#6d4aff]/40'
+                            : 'bg-white/5 text-[#8b9bb4] border-white/10'
+                        }`}
+                      >
+                        {isTop1 ? <Award className="w-4 h-4 text-[#ffa500]" /> : `#${idx + 1}`}
+                      </div>
+
+                      {item.image && (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-9 h-11 object-cover object-top rounded-xl border border-white/10 shrink-0 shadow-md"
+                        />
+                      )}
+
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-xs text-white group-hover:text-[#00d9ff] transition-colors truncate leading-tight">
+                          {item.name}
+                        </h4>
+                        <div className="text-[10px] text-[#8b9bb4] font-mono mt-0.5">
+                          {item.ordersCount} checkout{item.ordersCount > 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <div className="text-xs font-extrabold text-[#ff6b6b] font-mono">
+                        {item.unitsSold} {item.unitsSold === 1 ? 'Unit' : 'Units'}
+                      </div>
+                      <div className="text-[10.5px] font-bold text-[#00ff9d] font-mono mt-0.5">
+                        ₹{item.totalRevenue.toLocaleString('en-IN')}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Leaderboard Footer */}
+          <div className="px-4 py-2.5 border-t border-white/10 bg-[#0a0e17]/60 flex items-center justify-between text-[10px] text-[#8b9bb4] font-mono">
+            <span>PRODUCTS: <strong className="text-white">{topSellingItems.length}</strong></span>
+            <span className="text-[#00ff9d] font-bold">
+              TOTAL UNITS: {topSellingItems.reduce((acc, curr) => acc + curr.unitsSold, 0)}
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Status Editor Modal (Futuristic Glass Popup) */}
+      {editingOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0a0e17]/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#101628]/95 border border-[#6d4aff]/40 rounded-3xl p-5 max-w-xs w-full shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_30px_rgba(109,74,255,0.2)] space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+              <h3 className="font-bold text-xs text-white tracking-wide">Update Order State</h3>
+              <button
+                type="button"
+                onClick={() => setEditingOrderId(null)}
+                className="p-1 text-[#8b9bb4] hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <select
+              value={selectedNewStatus}
+              onChange={(e) => setSelectedNewStatus(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-white/15 text-xs font-semibold text-white bg-[#0a0e17] outline-none focus:border-[#00d9ff] transition-colors"
+            >
+              <option value="new">New (Awaiting)</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="processing">Processing</option>
+              <option value="shipped">Shipped</option>
+              <option value="delivered">Delivered</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setEditingOrderId(null)}
+                className="px-3.5 py-1.5 rounded-xl text-xs text-[#8b9bb4] hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUpdateOrderStatus(editingOrderId)}
+                className="px-4 py-1.5 rounded-xl text-xs font-bold bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white shadow-md shadow-[#6d4aff]/30 transition-all cursor-pointer"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Order Drawer (Futuristic Glass Flyout) */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
+          <div
+            onClick={() => setSelectedOrder(null)}
+            className="absolute inset-0 bg-[#0a0e17]/80 backdrop-blur-sm cursor-pointer"
+          />
+
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-8">
+            <div className="w-screen max-w-sm bg-[#101628]/95 backdrop-blur-2xl shadow-[0_0_50px_rgba(0,0,0,0.8)] flex flex-col border-l border-[#6d4aff]/30">
+              {/* Drawer Header */}
+              <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/[0.02]">
+                <div>
+                  <span className="text-[9px] font-mono font-bold text-[#00d9ff] uppercase tracking-wider block">
+                    Order Telemetry Inspect
+                  </span>
+                  <h3 className="font-mono font-bold text-sm text-white mt-0.5">
+                    {selectedOrder.id}
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(null)}
+                  className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white cursor-pointer transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Drawer Content */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs font-sans">
+                {/* Customer Details Box */}
+                <div className="bg-[#0a0e17]/80 p-4 rounded-2xl border border-white/10 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-sm text-white">{selectedOrder.customer_name}</div>
+                      <div className="text-[#8b9bb4] text-[11px] font-mono mt-0.5">{selectedOrder.customer_phone}</div>
+                    </div>
+                    <a
+                      href={`https://wa.me/91${selectedOrder.customer_phone?.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(selectedOrder.customer_name || 'Customer')},%20thank%20you%20for%20your%20Kashvi%20order%20(${selectedOrder.id})!`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl bg-[#00ff9d]/20 hover:bg-[#00ff9d]/30 text-[#00ff9d] border border-[#00ff9d]/40 shadow-sm transition-all cursor-pointer"
+                      title="Direct WhatsApp Ping"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                    </a>
+                  </div>
+                  {selectedOrder.shipping_address && (
+                    <div className="pt-2 border-t border-white/10 text-[11px] text-[#8b9bb4] leading-relaxed">
+                      <strong className="text-white">Shipping Coordinates:</strong> {selectedOrder.shipping_address}
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount Paid Box */}
+                <div className="bg-gradient-to-br from-[#667eea]/20 to-[#764ba2]/20 p-4 rounded-2xl border border-[#6d4aff]/40 flex justify-between items-center shadow-lg shadow-[#6d4aff]/15">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#00d9ff]">Gross Captured:</span>
+                  <span className="text-base font-extrabold text-white font-mono">
+                    ₹{Number(selectedOrder.total_amount).toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

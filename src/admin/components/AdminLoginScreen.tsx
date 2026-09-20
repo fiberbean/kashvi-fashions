@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Eye, EyeOff, ShieldCheck, AlertCircle, Sparkles } from 'lucide-react';
+import { Lock, Eye, EyeOff, ShieldCheck, AlertCircle, Sparkles, Terminal } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { AdminStaffUser } from '../types';
 
@@ -61,57 +61,84 @@ export default function AdminLoginScreen({ onLoginSuccess }: AdminLoginScreenPro
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-cyan-50 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Animated Background Elements */}
+    <div className="min-h-screen bg-[#0a0e17] flex items-center justify-center p-4 relative overflow-hidden select-none font-sans">
+      {/* Background Animated Neon Mesh & Floating Orbs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-purple-500/30 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-cyan-500/30 rounded-full blur-3xl animate-pulse delay-1000"></div>
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-pink-500/20 rounded-full blur-3xl animate-pulse delay-500"></div>
+        <div className="absolute -top-36 -right-36 w-[450px] h-[450px] bg-[#6d4aff]/25 rounded-full blur-[110px] animate-pulse" />
+        <div className="absolute -bottom-36 -left-36 w-[450px] h-[450px] bg-[#00d9ff]/20 rounded-full blur-[110px] animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-[#ff6b6b]/15 rounded-full blur-[120px] animate-pulse delay-700" />
+        
+        {/* Subtle Futuristic Background Grid Pattern */}
+        <div 
+          className="absolute inset-0 opacity-[0.04]" 
+          style={{ 
+            backgroundImage: `radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 0)`, 
+            backgroundSize: '32px 32px' 
+          }} 
+        />
       </div>
 
       <div className="w-full max-w-sm relative z-10">
-        {/* Glass Card */}
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-8 border border-white/40 shadow-2xl hover:shadow-3xl transition-all duration-500 animate-in fade-in zoom-in-95">
+        {/* Floating Glassmorphic Container */}
+        <div className="relative bg-[rgba(16,22,40,0.92)] backdrop-blur-2xl rounded-3xl p-7 sm:p-8 border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.6),0_0_30px_rgba(109,74,255,0.15)] hover:border-[#6d4aff]/40 transition-all duration-500 animate-in fade-in zoom-in-95">
           
+          {/* Top Edge Neon Accent Line */}
+          <div className="absolute top-0 left-8 right-8 h-[2px] bg-gradient-to-r from-transparent via-[#00d9ff] to-transparent opacity-80" />
+
           {/* Logo & Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-7">
             <div className="relative w-16 h-16 mx-auto mb-4 group">
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl rotate-6 group-hover:rotate-12 transition-transform duration-300 shadow-lg"></div>
-              <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl -rotate-6 group-hover:-rotate-12 transition-transform duration-300"></div>
-              <div className="relative w-full h-full bg-gradient-to-r from-purple-600 to-cyan-600 rounded-2xl flex items-center justify-center font-serif font-black text-2xl text-white shadow-xl">
-                KF
+              {/* Outer Glow Halo */}
+              <div className="absolute inset-0 bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] rounded-2xl blur-md opacity-60 group-hover:opacity-100 transition-opacity duration-500" />
+              
+              {/* Rotated Backing Cards */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-[#667eea] to-[#764ba2] rounded-2xl rotate-6 group-hover:rotate-12 transition-transform duration-300 opacity-60" />
+              <div className="absolute inset-0 bg-gradient-to-bl from-[#00d9ff] to-[#6d4aff] rounded-2xl -rotate-6 group-hover:-rotate-12 transition-transform duration-300 opacity-60" />
+              
+              {/* Main Badge */}
+              <div className="relative w-full h-full bg-[#101628] border border-white/20 rounded-2xl flex items-center justify-center font-serif font-black text-2xl text-white shadow-2xl overflow-hidden">
+                <span className="bg-gradient-to-r from-white via-slate-100 to-[#00d9ff] bg-clip-text text-transparent">
+                  KF
+                </span>
+                <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
               </div>
-              <Sparkles className="absolute -top-1 -right-1 w-6 h-6 text-yellow-400 animate-bounce" />
+              <Sparkles className="absolute -top-1.5 -right-1.5 w-5 h-5 text-[#00d9ff] animate-bounce" />
             </div>
 
-            <h2 className="font-serif font-bold text-2xl text-gray-800 tracking-tight mb-1">
-  Kashvi Fashions Management System
-</h2>
-<p className="text-xs text-gray-500 mt-1.5 font-medium">
-  Employee Dashboard Portal
-</p>
-            
-            {/* Welcome Badge */}
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-100/80 border border-purple-200/50">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-xs font-semibold text-purple-700">Welcome Back!</span>
+            <h2 className="font-serif font-bold text-xl text-white tracking-tight">
+              Kashvi Command Deck
+            </h2>
+            <p className="text-[11px] text-[#8b9bb4] mt-1 font-mono tracking-wide">
+              ADMIN CONTROL CENTER
+            </p>
+
+            {/* Futuristic Status Badge */}
+            <div className="mt-3.5 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#6d4aff]/15 border border-[#6d4aff]/30 backdrop-blur-md">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00ff9d] opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00ff9d]" />
+              </span>
+              <span className="text-[10.5px] font-semibold text-[#00d9ff] tracking-wide">
+                System Online • Duty Node
+              </span>
             </div>
           </div>
 
           {/* Error Message */}
           {errorMsg && (
-            <div className="mb-5 p-3.5 rounded-2xl bg-red-50/90 backdrop-blur-sm border border-red-200/50 flex items-start gap-3 text-red-700 text-xs font-semibold animate-in slide-in-from-top-2">
+            <div className="mb-5 p-3 rounded-2xl bg-[#ff6b6b]/10 border border-[#ff6b6b]/30 flex items-start gap-2.5 text-[#ff6b6b] text-xs font-semibold backdrop-blur-md animate-in slide-in-from-top-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+              <span className="leading-snug">{errorMsg}</span>
             </div>
           )}
 
           {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-5">
-            {/* Employee ID Input */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Employee ID */}
             <div className="group">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-gray-600 block mb-2">
-                Employee User ID
+              <label className="text-[10px] font-mono uppercase tracking-wider text-[#8b9bb4] block mb-1.5 flex items-center justify-between">
+                <span>Employee Identity</span>
+                <span className="text-[9px] text-[#00d9ff]/70 group-focus-within:text-[#00d9ff]">SECURE AUTH</span>
               </label>
               <div className="relative">
                 <input
@@ -119,17 +146,18 @@ export default function AdminLoginScreen({ onLoginSuccess }: AdminLoginScreenPro
                   required
                   value={employeeId}
                   onChange={(e) => setEmployeeId(e.target.value)}
-                  placeholder="e.g. ABHI"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200/50 bg-white/50 backdrop-blur-sm text-sm font-semibold text-gray-800 uppercase tracking-wider outline-none focus:border-purple-500 focus:bg-white/80 focus:shadow-lg transition-all duration-300 placeholder:text-gray-400"
+                  placeholder="E.G. ABHI"
+                  className="w-full px-4 py-3 rounded-2xl border border-white/10 bg-[#0a0e17]/80 text-sm font-semibold text-white uppercase tracking-wider outline-none transition-all duration-300 placeholder:text-slate-600 focus:border-[#00d9ff] focus:bg-[#0a0e17] focus:shadow-[0_0_20px_rgba(0,217,255,0.25)]"
                 />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-purple-500 opacity-0 group-focus-within:opacity-100 transition-opacity"></div>
+                <Terminal className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none group-focus-within:text-[#00d9ff] transition-colors" />
               </div>
             </div>
 
             {/* PIN Input */}
             <div className="group">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-gray-600 block mb-2">
-                Duty PIN (4-6 Digits)
+              <label className="text-[10px] font-mono uppercase tracking-wider text-[#8b9bb4] block mb-1.5 flex items-center justify-between">
+                <span>Passcode (4-8 Digits)</span>
+                <span className="text-[9px] text-slate-500">ENCRYPTED PIN</span>
               </label>
               <div className="relative">
                 <input
@@ -139,12 +167,12 @@ export default function AdminLoginScreen({ onLoginSuccess }: AdminLoginScreenPro
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
                   placeholder="••••"
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200/50 bg-white/50 backdrop-blur-sm text-sm font-semibold text-gray-800 outline-none focus:border-purple-500 focus:bg-white/80 focus:shadow-lg transition-all duration-300 placeholder:text-gray-400 font-mono pr-12"
+                  className="w-full px-4 py-3 rounded-2xl border border-white/10 bg-[#0a0e17]/80 text-sm font-semibold text-white tracking-widest outline-none transition-all duration-300 placeholder:text-slate-600 font-mono pr-12 focus:border-[#6d4aff] focus:bg-[#0a0e17] focus:shadow-[0_0_20px_rgba(109,74,255,0.3)]"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-purple-600 cursor-pointer transition-colors p-1"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#00d9ff] cursor-pointer transition-colors p-1"
                 >
                   {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -155,27 +183,27 @@ export default function AdminLoginScreen({ onLoginSuccess }: AdminLoginScreenPro
             <button
               type="submit"
               disabled={submitting}
-              className="relative w-full mt-3 py-3.5 rounded-full bg-gradient-to-r from-purple-600 to-cyan-600 text-white font-bold text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-105 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group"
+              className="relative w-full mt-2 py-3.5 rounded-2xl bg-gradient-to-r from-[#667eea] via-[#764ba2] to-[#6d4aff] hover:from-[#764ba2] hover:to-[#00d9ff] text-white font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2 shadow-[0_8px_25px_rgba(109,74,255,0.4)] hover:shadow-[0_10px_35px_rgba(0,217,255,0.45)] hover:-translate-y-0.5 active:translate-y-0 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed overflow-hidden group cursor-pointer"
             >
-              <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-cyan-600 to-purple-600 opacity-0 group-hover:opacity-20 blur-md transition-opacity"></span>
-              <Lock className="w-4 h-4 text-yellow-300 relative z-10" />
+              <span className="absolute inset-0 w-full h-full bg-white/15 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Lock className="w-3.5 h-3.5 text-[#00ff9d] relative z-10" />
               <span className="relative z-10">
-                {submitting ? 'Authenticating...' : 'Sign In to Shift'}
+                {submitting ? 'Authenticating...' : 'Authorize Shift Login'}
               </span>
             </button>
           </form>
 
-          {/* Footer */}
-          <div className="mt-6 pt-5 border-t border-gray-200/50 text-center text-[10px] text-gray-500 flex items-center justify-center gap-2 font-medium">
-            <ShieldCheck className="w-3.5 h-3.5 text-green-600" />
-            <span>Encrypted duty session access • Secure & Protected</span>
+          {/* Footer Security Badge */}
+          <div className="mt-6 pt-4 border-t border-white/10 text-center text-[10px] text-[#8b9bb4] flex items-center justify-center gap-1.5 font-medium">
+            <ShieldCheck className="w-3.5 h-3.5 text-[#00ff9d]" />
+            <span>256-Bit Hardware Encrypted Terminal Access</span>
           </div>
         </div>
 
-        {/* Bottom Info */}
-        <div className="text-center mt-6">
-          <p className="text-[10px] text-gray-400 font-medium">
-            Authorized personnel only • Protected by Kashvi Command OS
+        {/* Bottom OS Info */}
+        <div className="text-center mt-5">
+          <p className="text-[10px] text-[#8b9bb4]/60 font-mono tracking-wider">
+            KASHVI FASHIONS COMMAND OS • v2.6 HYPER
           </p>
         </div>
       </div>
