@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Loader2, ShieldCheck, Sparkles } from 'lucide-react';
+import { Loader2, ShieldCheck, Sparkles, TrendingUp, ShoppingCart, Receipt, BarChart3, Wrench } from 'lucide-react';
 import AdminNavbar, { MasterSectionType } from './admin/components/AdminNavbar';
 import AdminLoginScreen from './admin/components/AdminLoginScreen';
 import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
@@ -15,8 +15,16 @@ import ColorMasterModal from './admin/components/modals/ColorMasterModal';
 import SizeMasterModal from './admin/components/modals/SizeMasterModal';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
-// Added 'orders' to AdminViewType
-export type AdminViewType = 'dashboard' | 'orders' | 'products' | 'staff';
+// Supported view types
+export type AdminViewType = 
+  | 'dashboard' 
+  | 'orders' 
+  | 'sales' 
+  | 'purchase' 
+  | 'expenses' 
+  | 'reports' 
+  | 'products' 
+  | 'staff';
 
 export default function AdminApp() {
   const location = useLocation();
@@ -148,30 +156,23 @@ export default function AdminApp() {
     return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
-  // Robust Normalization for Section matching (Handles color, colors, colour, colours, size, sizes)
   const normalizedSection = selectedMasterSection ? String(selectedMasterSection).toLowerCase().trim() : '';
-
   const isCategorySection = normalizedSection === 'category' || normalizedSection === 'categories';
-
   const isSubCategorySection = 
     normalizedSection === 'sub_category' || 
     normalizedSection === 'sub-category' || 
     normalizedSection === 'subcategory' ||
     normalizedSection === 'subcategories';
-
   const isColorSection = 
     normalizedSection === 'color' || 
     normalizedSection === 'colors' || 
     normalizedSection === 'colour' || 
     normalizedSection === 'colours';
-
-  const isSizeSection = 
-    normalizedSection === 'size' || 
-    normalizedSection === 'sizes';
+  const isSizeSection = normalizedSection === 'size' || normalizedSection === 'sizes';
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
-      {/* Global Background Neon Glow Matrix */}
+      {/* Background Neon Glow Matrix */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute -top-48 -right-48 w-[500px] h-[500px] bg-[#6d4aff]/15 rounded-full blur-[130px] animate-pulse" />
         <div className="absolute top-1/2 -left-48 w-[450px] h-[450px] bg-[#00d9ff]/10 rounded-full blur-[130px] animate-pulse delay-1000" />
@@ -205,54 +206,38 @@ export default function AdminApp() {
         />
       </div>
 
-      {/* Realtime Alert Stream */}
+      {/* Realtime Order Alerts */}
       <StickyOrderAlerts
         notifications={activeAlerts}
         onDismiss={handleDismissAlert}
       />
 
-      {/* Product Master Modal Popup */}
+      {/* Masters Modals */}
       {normalizedSection === 'product' && (
         <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
       )}
-
-      {/* Category Master Modal Popup */}
       {isCategorySection && (
         <CategoryMasterModal
           onClose={() => setSelectedMasterSection(null)}
-          onSuccess={() => {
-            handleManualSync();
-          }}
+          onSuccess={() => handleManualSync()}
         />
       )}
-
-      {/* Sub-Category Master Modal Popup */}
       {isSubCategorySection && (
         <SubCategoryMasterModal
           onClose={() => setSelectedMasterSection(null)}
-          onSuccess={() => {
-            handleManualSync();
-          }}
+          onSuccess={() => handleManualSync()}
         />
       )}
-
-      {/* Color Master Modal Popup */}
       {isColorSection && (
         <ColorMasterModal
           onClose={() => setSelectedMasterSection(null)}
-          onSuccess={() => {
-            handleManualSync();
-          }}
+          onSuccess={() => handleManualSync()}
         />
       )}
-
-      {/* Size Master Modal Popup */}
       {isSizeSection && (
         <SizeMasterModal
           onClose={() => setSelectedMasterSection(null)}
-          onSuccess={() => {
-            handleManualSync();
-          }}
+          onSuccess={() => handleManualSync()}
         />
       )}
 
@@ -273,9 +258,60 @@ export default function AdminApp() {
             />
           )}
 
-          {/* Orders Manager View */}
           {currentView === 'orders' && (
             <OrdersManager />
+          )}
+
+          {/* Sales Placeholder View */}
+          {currentView === 'sales' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#00d9ff]/10 text-[#00d9ff] border border-[#00d9ff]/20 flex items-center justify-center mx-auto shadow-lg">
+                <TrendingUp className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Sales Management Deck</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                POS billing, offline counter sales, custom discounts, customer loyalty points and transaction ledgers.
+              </p>
+            </div>
+          )}
+
+          {/* Purchase Placeholder View */}
+          {currentView === 'purchase' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#ffa500]/10 text-[#ffa500] border border-[#ffa500]/20 flex items-center justify-center mx-auto shadow-lg">
+                <ShoppingCart className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Purchase & Stock Inward Hub</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                Supplier bills, purchase orders, bulk variant inwards, inventory updates and vendor payment trackings.
+              </p>
+            </div>
+          )}
+
+          {/* Expenses Placeholder View */}
+          {currentView === 'expenses' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#ff6b6b]/10 text-[#ff6b6b] border border-[#ff6b6b]/20 flex items-center justify-center mx-auto shadow-lg">
+                <Receipt className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Operating Expenses Tracker</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                Store rent, staff salaries, electricity bills, packaging, transport and everyday operational costs.
+              </p>
+            </div>
+          )}
+
+          {/* Reports Placeholder View */}
+          {currentView === 'reports' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20 flex items-center justify-center mx-auto shadow-lg">
+                <BarChart3 className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Analytics & Financial Reports</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                Profit & loss statements, GST filing summaries, fast-moving items analysis and monthly sales trends.
+              </p>
+            </div>
           )}
 
           {currentView === 'products' && (
