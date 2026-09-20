@@ -17,10 +17,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
-interface ColorRecord {
+export interface ColorRecord {
   id: string;
   name: string;
-  hex_code: string;
+  hex_code?: string;
   display_order?: number;
   active?: boolean;
   created_at?: string;
@@ -48,13 +48,13 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 1. Fetch Colors list
+  // 1. Fetch Colors list from 'colours' table
   const loadColors = async () => {
     setLoadingList(true);
     setFetchError(null);
     try {
       const { data, error } = await supabase
-        .from('colors')
+        .from('colours')
         .select('*');
 
       if (error) throw error;
@@ -69,8 +69,8 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
         setColors(sorted);
       }
     } catch (err: any) {
-      console.error('Error fetching colors:', err);
-      setFetchError(err.message || 'Failed to load color masters.');
+      console.error('Error fetching colours:', err);
+      setFetchError(err.message || 'Failed to load colours.');
     } finally {
       setLoadingList(false);
     }
@@ -80,7 +80,7 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
   const generateColorCode = async () => {
     try {
       const { data } = await supabase
-        .from('colors')
+        .from('colours')
         .select('id')
         .like('id', 'COL%');
 
@@ -122,7 +122,7 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     setOriginalId(color.id);
     setColorCode(color.id);
     setName(color.name);
-    setHexCode(color.hex_code || '#000000');
+    setHexCode(color.hex_code || '#6d4aff');
     setDisplayOrder(Number(color.display_order) || 0);
     setIsActive(color.active ?? true);
   };
@@ -136,10 +136,10 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
 
   const handleDeleteColor = async (e: React.MouseEvent, id: string, colorName: string) => {
     e.stopPropagation();
-    if (!window.confirm(`Color "${colorName}" (${id}) ni delete cheyala?`)) return;
+    if (!window.confirm(`Are you sure you want to delete color "${colorName}" (${id})?`)) return;
 
     try {
-      const { error } = await supabase.from('colors').delete().eq('id', id);
+      const { error } = await supabase.from('colours').delete().eq('id', id);
       if (error) throw error;
 
       if (originalId === id) resetForm();
@@ -157,7 +157,7 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
 
     const targetId = colorCode.trim();
     if (!targetId) {
-      setErrorMsg('Color ID ivvali.');
+      setErrorMsg('Color ID cannot be empty.');
       setSubmitting(false);
       return;
     }
@@ -165,12 +165,12 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     try {
       if (editingMode && originalId) {
         if (targetId !== originalId) {
-          const { data: exists } = await supabase.from('colors').select('id').eq('id', targetId).maybeSingle();
+          const { data: exists } = await supabase.from('colours').select('id').eq('id', targetId).maybeSingle();
           if (exists) {
-            throw new Error(`Color ID "${targetId}" already exist ayyi undi.`);
+            throw new Error(`Color ID "${targetId}" already exists.`);
           }
 
-          const { error: insertErr } = await supabase.from('colors').insert([{
+          const { error: insertErr } = await supabase.from('colours').insert([{
             id: targetId,
             name: name.trim(),
             hex_code: hexCode.trim(),
@@ -180,12 +180,10 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
           }]);
           if (insertErr) throw insertErr;
 
-          // Cascade update in product_colors if references exist
-          await supabase.from('product_colors').update({ color_id: targetId }).eq('color_id', originalId);
-          await supabase.from('colors').delete().eq('id', originalId);
+          await supabase.from('colours').delete().eq('id', originalId);
         } else {
           const { error: updateErr } = await supabase
-            .from('colors')
+            .from('colours')
             .update({
               name: name.trim(),
               hex_code: hexCode.trim(),
@@ -197,7 +195,7 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
           if (updateErr) throw updateErr;
         }
       } else {
-        const { error: insertErr } = await supabase.from('colors').insert([{
+        const { error: insertErr } = await supabase.from('colours').insert([{
           id: targetId,
           name: name.trim(),
           hex_code: hexCode.trim(),
@@ -214,7 +212,7 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
       if (onSuccess) onSuccess();
     } catch (err: any) {
       console.error('Error saving color:', err);
-      setErrorMsg(err.message || 'Failed to save color master.');
+      setErrorMsg(err.message || 'Failed to save color.');
     } finally {
       setSubmitting(false);
     }
@@ -241,7 +239,7 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Manage universal color shade library and HEX codes
+                Manage universal color palette, HEX codes & order sequence
               </span>
             </div>
           </div>
@@ -296,11 +294,11 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
             <div className="flex-1 overflow-y-auto max-h-[58vh] pr-1.5 custom-scrollbar">
               {loadingList ? (
                 <div className="flex items-center justify-center p-12 text-[#8b9bb4]">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#00d9ff] mr-2" /> Colors load avthunnayi...
+                  <Loader2 className="w-6 h-6 animate-spin text-[#00d9ff] mr-2" /> Loading colors...
                 </div>
               ) : colors.length === 0 ? (
                 <div className="p-8 text-center text-[#8b9bb4] border border-dashed border-white/10 rounded-2xl">
-                  Colors em levu. Kotha color create cheyandi.
+                  No colors registered yet. Create one using the form.
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -344,14 +342,14 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
                           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0e17] via-transparent to-transparent opacity-80" />
                         </div>
 
-                        {/* 2. Swatch Kinda: Name and ID */}
+                        {/* 2. Name and ID */}
                         <div className="p-2.5 flex flex-col items-center text-center space-y-1 bg-[#101628]/60 flex-1 justify-between">
                           <div className="w-full">
                             <h3 className="font-bold text-white text-[12px] truncate w-full" title={c.name}>
                               {c.name}
                             </h3>
                             <span className="font-mono text-[9px] text-[#8b9bb4] block uppercase">
-                              {c.hex_code}
+                              {c.hex_code || '#------'}
                             </span>
                           </div>
 
@@ -467,7 +465,6 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
                 </span>
 
                 <div className="flex items-center gap-3">
-                  {/* HTML5 Native Color input + Swatch Preview */}
                   <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-white/20 shrink-0 shadow-md">
                     <input
                       type="color"
