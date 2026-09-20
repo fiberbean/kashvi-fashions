@@ -56,10 +56,8 @@ export const compressImageToWebP = (
         canvas.width = width;
         canvas.height = height;
 
-        // Draw crisp pixels directly
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convert directly to WebP Blob for storage upload
         canvas.toBlob(
           (blob) => {
             if (!blob) {
