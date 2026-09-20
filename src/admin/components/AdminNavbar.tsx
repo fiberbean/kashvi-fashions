@@ -12,7 +12,7 @@ import {
   Ruler,
   Scissors,
   Sparkles,
-  Radio
+  ShoppingBag
 } from 'lucide-react';
 import { AdminStaffUser } from '../types';
 import { AdminViewType } from '../../AdminApp';
@@ -118,7 +118,7 @@ export default function AdminNavbar({
             </div>
           </button>
 
-          {/* Nav Buttons (Dashboard & Masters) */}
+          {/* Nav Buttons (Dashboard, Orders & Masters) */}
           <div className="flex items-center gap-2 text-xs font-semibold">
             
             {/* Dashboard View Button */}
@@ -133,6 +133,20 @@ export default function AdminNavbar({
             >
               <LayoutDashboard className="w-3.5 h-3.5" />
               <span>Dashboard</span>
+            </button>
+
+            {/* Orders View Button */}
+            <button
+              type="button"
+              onClick={() => handleSelectView('orders')}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-2xl transition-all cursor-pointer border ${
+                currentView === 'orders'
+                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
+                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-[#00ff9d]" />
+              <span>Orders</span>
             </button>
 
             {/* Masters Dropdown */}
