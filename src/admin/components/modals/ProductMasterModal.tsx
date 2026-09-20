@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   Package,
   Building2,
@@ -12,11 +12,14 @@ import {
   Palette,
   Ruler,
   Scissors,
-  Check
+  Check,
+  Upload,
+  AlertCircle
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
 import ImageOptimizerModal, { TaggedColor } from './ImageOptimizerModal';
+import { compressImageToWebP } from '../../utils/imageOptimizer';
 
 interface ProductMasterModalProps {
   onClose: () => void;
@@ -26,6 +29,7 @@ interface TaggedImage {
   id: string;
   url: string;
   color_tag: string;
+  size_bytes?: string;
 }
 
 export default function ProductMasterModal({ onClose }: ProductMasterModalProps) {
@@ -50,21 +54,25 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   const [openingStock, setOpeningStock] = useState<number>(0);
   const [images, setImages] = useState<TaggedImage[]>([]);
 
-  // Optimizer Modal State
+  // Fast WebP Compression Upload state
+  const [isCompressingQuickUpload, setIsCompressingQuickUpload] = useState<boolean>(false);
+
+  // Studio modal popup state
   const [showStudioModal, setShowStudioModal] = useState<boolean>(false);
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Load all Masters from Supabase DB
   useEffect(() => {
     const fetchMasters = async () => {
       try {
         const [catRes, subCatRes, colRes, sizeRes, fabRes, unitRes] = await Promise.all([
-          supabase.from('categories').select('*').order('name'),
-          supabase.from('sub_categories').select('*').order('name'),
-          supabase.from('colours').select('*').order('name'),
-          supabase.from('sizes').select('*').order('name'),
-          supabase.from('fabrics').select('*').order('name'),
+          supabase.from('categories').select('*').eq('active', true).order('name'),
+          supabase.from('sub_categories').select('*').eq('active', true).order('name'),
+          supabase.from('colours').select('*').eq('active', true).order('name'),
+          supabase.from('sizes').select('*').eq('active', true).order('display_order', { ascending: true }),
+          supabase.from('fabrics').select('*').eq('active', true).order('name'),
           supabase.from('units').select('*').order('name')
         ]);
 
@@ -84,6 +92,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     fetchMasters();
   }, []);
 
+  // Generate Next SKU Code automatically
   useEffect(() => {
     const generateProductCode = async () => {
       setCodeLoading(true);
@@ -112,6 +121,46 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     generateProductCode();
   }, [brand]);
 
+  // Filter Categories by selected Brand (Department)
+  const filteredCategories = useMemo(() => {
+    return categories.filter((c) => !c.department || c.department === brand);
+  }, [categories, brand]);
+
+  // Filter Sub-Categories by selected Main Category
+  const filteredSubCats = useMemo(() => {
+    if (!selectedCategory) return [];
+    return subCategories.filter((sc) => String(sc.category_id) === String(selectedCategory));
+  }, [subCategories, selectedCategory]);
+
+  // Selected sub-category object
+  const activeSubCategoryObj = useMemo(() => {
+    return subCategories.find((sc) => String(sc.id) === String(selectedSubCategory));
+  }, [subCategories, selectedSubCategory]);
+
+  // STRICT SIZES FILTERING:
+  // Sub-Category సెలెక్ట్ అయితేనే దానికి సంబంధించిన సైజులు మాత్రమే వస్తాయి!
+  const availableSizes = useMemo(() => {
+    if (!selectedSubCategory) {
+      return [];
+    }
+
+    // 1. Direct sub_category_id match from sizes table
+    const directMatches = sizes.filter(
+      (sz) => sz.sub_category_id && String(sz.sub_category_id) === String(selectedSubCategory)
+    );
+    if (directMatches.length > 0) return directMatches;
+
+    // 2. If sizes table has size_group matched with Sub-Category's size_group
+    if (activeSubCategoryObj?.size_group) {
+      const groupMatches = sizes.filter(
+        (sz) => sz.size_group === activeSubCategoryObj.size_group
+      );
+      if (groupMatches.length > 0) return groupMatches;
+    }
+
+    return [];
+  }, [sizes, selectedSubCategory, activeSubCategoryObj]);
+
   const toggleSelection = (item: string, list: string[], setList: (val: string[]) => void) => {
     if (list.includes(item)) {
       setList(list.filter((i) => i !== item));
@@ -120,14 +169,62 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     }
   };
 
+  // Direct fast photo upload with Auto-WebP Compression
+  const handleQuickImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsCompressingQuickUpload(true);
+    try {
+      const defaultTag = selectedColors[0] || colours[0]?.name || 'Universal';
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const result = await compressImageToWebP(file, 1400, 0.88);
+
+        const fileName = `prod_${Date.now()}_${i}.webp`;
+        const filePath = `products/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('store_assets')
+          .upload(filePath, result.blob, {
+            contentType: 'image/webp',
+            upsert: true
+          });
+
+        let finalUrl = result.dataUrl;
+        if (!uploadError) {
+          const { data } = supabase.storage.from('store_assets').getPublicUrl(filePath);
+          finalUrl = data.publicUrl;
+        }
+
+        setImages((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}_${i}`,
+            url: finalUrl,
+            color_tag: defaultTag,
+            size_bytes: result.sizeFormatted
+          }
+        ]);
+      }
+    } catch (err: any) {
+      console.error('Quick upload compression failed:', err);
+      setErrorMsg('Image compression failed.');
+    } finally {
+      setIsCompressingQuickUpload(false);
+      e.target.value = '';
+    }
+  };
+
+  // Studio Optimizer Callback
   const handleAcceptOptimizedImage = (processedDataUrl: string, detectedColors: TaggedColor[]) => {
-    // If tagged colors were detected, auto-add unique ones to selectedColors list
     if (detectedColors && detectedColors.length > 0) {
       const newColorNames = detectedColors.map((c) => c.name).filter(Boolean);
       setSelectedColors((prev) => Array.from(new Set([...prev, ...newColorNames])));
     }
 
-    const defaultTag = detectedColors?.[0]?.name || (selectedColors.length > 0 ? selectedColors[0] : (colours[0]?.name || 'General'));
+    const defaultTag = detectedColors?.[0]?.name || selectedColors[0] || (colours[0]?.name || 'Universal');
     setImages((prev) => [
       ...prev,
       { id: `${Date.now()}`, url: processedDataUrl, color_tag: defaultTag }
@@ -155,7 +252,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         sub_category_name: subCatObj?.name || null,
         unit_id: selectedUnit || null,
         stock_quantity: Number(openingStock) || 0,
-        variants: { colors: selectedColors, sizes: selectedSizes, fabrics: selectedFabrics },
+        variants: { 
+          colors: selectedColors, 
+          sizes: selectedSizes, 
+          fabrics: selectedFabrics 
+        },
         images: images,
         barcode: productCode,
         active: true,
@@ -175,16 +276,13 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   };
 
   const selectedCatObj = categories.find((c) => String(c.id) === String(selectedCategory));
-  const filteredSubCats = subCategories.filter((sc) => String(sc.category_id) === String(selectedCategory));
-  const filteredSizes = sizes.filter((sz) => !selectedCategory || !sz.category_id || String(sz.category_id) === String(selectedCategory));
 
   return (
     <>
       <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-6 bg-[#0a0e17]/85 backdrop-blur-xl select-none font-sans animate-in fade-in">
-        {/* Floating Glassmorphic Modal Window */}
         <div className="bg-[#101628]/95 backdrop-blur-2xl rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(109,74,255,0.2)] border border-white/10 space-y-4 text-xs relative">
           
-          {/* Top Neon Ambient Accent Line */}
+          {/* Top Neon Ambient Line */}
           <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#6d4aff] via-[#00d9ff] to-[#ff6b6b] rounded-t-3xl" />
 
           {/* Header */}
@@ -196,11 +294,13 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               <div>
                 <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
                   <span>Product Master Creator</span>
-                  <span className="px-2 py-0.5 rounded-full bg-[#6d4aff]/20 text-[#00d9ff] border border-[#6d4aff]/40 text-[9px] font-mono tracking-wider uppercase">
-                    Catalog Node
+                  <span className="px-2 py-0.5 rounded-full bg-[#6d4aff]/20 text-[#00d9ff] border border-[#6d4aff]/40 text-[9px] font-mono uppercase">
+                    SKU Matrix
                   </span>
                 </h2>
-                <span className="text-[10px] text-[#8b9bb4]">Provision new SKU with variants & WebP assets</span>
+                <span className="text-[10px] text-[#8b9bb4]">
+                  Universal colors with strictly linked Sub-Category sizes
+                </span>
               </div>
             </div>
 
@@ -229,7 +329,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
 
           <form onSubmit={handleSave} className="space-y-4">
             
-            {/* Brand Segmented Control */}
+            {/* Brand Domain Selector */}
             <div>
               <label className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
                 Brand Domain *
@@ -237,7 +337,12 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               <div className="inline-flex p-1 bg-[#0a0e17]/80 rounded-2xl border border-white/10">
                 <button
                   type="button"
-                  onClick={() => setBrand('fashions')}
+                  onClick={() => {
+                    setBrand('fashions');
+                    setSelectedCategory('');
+                    setSelectedSubCategory('');
+                    setSelectedSizes([]);
+                  }}
                   className={`px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     brand === 'fashions'
                       ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-md shadow-[#6d4aff]/40'
@@ -249,7 +354,12 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setBrand('jewellery')}
+                  onClick={() => {
+                    setBrand('jewellery');
+                    setSelectedCategory('');
+                    setSelectedSubCategory('');
+                    setSelectedSizes([]);
+                  }}
                   className={`px-6 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                     brand === 'jewellery'
                       ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-md shadow-[#6d4aff]/40'
@@ -262,7 +372,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             </div>
 
-            {/* Name & Description */}
+            {/* Title & Description */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
@@ -273,7 +383,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Pure Banarasi Silk Saree"
+                  placeholder="e.g. Kundan Chuda Bangles / Pure Banarasi Silk Saree"
                   className="w-full px-3.5 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17]/80 font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors placeholder:text-slate-600"
                 />
               </div>
@@ -285,13 +395,13 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Weaving specs, material blend..."
+                  placeholder="Fabric composition, care instructions, fit notes..."
                   className="w-full px-3.5 py-2 rounded-2xl border border-white/10 bg-[#0a0e17]/80 font-medium text-white outline-none focus:border-[#00d9ff] transition-colors placeholder:text-slate-600 resize-none"
                 />
               </div>
             </div>
 
-            {/* Category / SubCat / Unit / Stock */}
+            {/* Category / Sub-Category / Unit / Stock */}
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
@@ -308,19 +418,24 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                   className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors"
                 >
                   <option value="">Select Category</option>
-                  {categories.map((c) => (
+                  {filteredCategories.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
-                  Sub-Category
+                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5 flex items-center justify-between">
+                  <span>Sub-Category *</span>
+                  <span className="text-[9px] text-[#00d9ff]">CONTROLS SIZES</span>
                 </label>
                 <select
+                  required
                   value={selectedSubCategory}
-                  onChange={(e) => setSelectedSubCategory(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedSubCategory(e.target.value);
+                    setSelectedSizes([]); // Reset sizes when sub-category changes
+                  }}
                   disabled={!selectedCategory}
                   className="w-full px-3 py-2.5 rounded-2xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors disabled:opacity-40"
                 >
@@ -362,18 +477,23 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             </div>
 
-            {/* Variants Selector Matrix */}
-            <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-3">
+            {/* Variants Matrix */}
+            <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-4">
               <span className="text-[11px] font-mono font-bold text-[#00d9ff] block uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5" /> Configure Variant Matrix
+                <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
               </span>
               
-              {/* Colours */}
+              {/* UNIVERSAL COLOURS - All active colours available for any product */}
               <div>
-                <span className="text-[10px] font-mono font-bold text-[#8b9bb4] block mb-1.5 flex items-center gap-1">
-                  <Palette className="w-3 h-3 text-[#ff6b6b]" /> Colours:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-mono font-bold text-[#8b9bb4] flex items-center gap-1">
+                    <Palette className="w-3 h-3 text-[#ff6b6b]" /> Colours (Universal Selection):
+                  </span>
+                  <span className="text-[9px] font-mono text-[#8b9bb4]">
+                    {selectedColors.length} selected
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
                   {colours.map((c) => {
                     const active = selectedColors.includes(c.name);
                     return (
@@ -395,30 +515,52 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                 </div>
               </div>
 
-              {/* Sizes */}
-              <div>
-                <span className="text-[10px] font-mono font-bold text-[#8b9bb4] block mb-1.5 flex items-center gap-1">
-                  <Ruler className="w-3 h-3 text-[#00d9ff]" /> Sizes:
-                </span>
-                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
-                  {filteredSizes.map((s) => {
-                    const active = selectedSizes.includes(s.name);
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
-                        className={`px-3 py-1 rounded-xl text-[10.5px] font-semibold flex items-center gap-1.5 border transition-all cursor-pointer ${
-                          active
-                            ? 'bg-[#00d9ff] text-neutral-950 font-bold border-[#00d9ff] shadow-md shadow-[#00d9ff]/30'
-                            : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white'
-                        }`}
-                      >
-                        {active && <Check className="w-3 h-3 text-neutral-950" />}
-                        <span>{s.name}</span>
-                      </button>
-                    );
-                  })}
+              {/* STRICTLY LINKED SUB-CATEGORY SIZES */}
+              <div className="p-3 bg-[#101628] rounded-2xl border border-white/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-[#00d9ff] flex items-center gap-1 uppercase tracking-wider">
+                    <Ruler className="w-3.5 h-3.5" /> Sub-Category Sizes:
+                  </span>
+                  {activeSubCategoryObj ? (
+                    <span className="text-[9.5px] font-mono text-[#00ff9d] bg-[#00ff9d]/10 px-2 py-0.5 rounded-md border border-[#00ff9d]/30 font-bold">
+                      Linked to: {activeSubCategoryObj.name}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-mono text-[#ff6b6b] flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" /> Select Sub-Category Above
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 min-h-[42px] items-center">
+                  {!selectedSubCategory ? (
+                    <span className="text-[10.5px] text-[#8b9bb4] italic py-1">
+                      👉 ముందుగా Sub-Category ఎంచుకోండి. దానికి లింక్ అయిన సైజులు మాత్రమే ఇక్కడ కనిపిస్తాయి.
+                    </span>
+                  ) : availableSizes.length === 0 ? (
+                    <span className="text-[10.5px] text-[#ffa500] italic py-1">
+                      ఈ Sub-Category ({activeSubCategoryObj?.name}) కి సంబంధించి Sizes Table లో ఏ సైజులూ లింక్ అయి లేవు.
+                    </span>
+                  ) : (
+                    availableSizes.map((s) => {
+                      const active = selectedSizes.includes(s.name);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => toggleSelection(s.name, selectedSizes, setSelectedSizes)}
+                          className={`px-3 py-1.5 rounded-xl text-[10.5px] font-mono font-bold flex items-center gap-1.5 border transition-all cursor-pointer ${
+                            active
+                              ? 'bg-[#00d9ff] text-neutral-950 border-[#00d9ff] shadow-md shadow-[#00d9ff]/30'
+                              : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white'
+                          }`}
+                        >
+                          {active && <Check className="w-3 h-3 text-neutral-950" />}
+                          <span>{s.name}</span>
+                        </button>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
@@ -450,30 +592,49 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             </div>
 
-            {/* HD Optimizer & Asset Uploader */}
+            {/* Product Assets & HD WebP Compression */}
             <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-3.5">
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-[11px] font-mono font-bold text-white block uppercase tracking-wider flex items-center gap-1.5">
-                    <HardDrive className="w-3.5 h-3.5 text-[#00d9ff]" /> Product Assets & HD WebP Optimizer
+                    <HardDrive className="w-3.5 h-3.5 text-[#00d9ff]" /> Product Assets & HD WebP Compression
                   </span>
                   <p className="text-[10px] text-[#8b9bb4] mt-0.5">
-                    Lossless WebP compression (&lt;150KB) with automatic interactive gemstone & polish color tagging.
+                    Images are automatically compressed to lossless WebP (&lt;150KB) and stored in Supabase.
                   </p>
                 </div>
               </div>
 
-              {/* Trigger Optimizer Modal */}
-              <button
-                type="button"
-                onClick={() => setShowStudioModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold text-xs shadow-lg shadow-[#6d4aff]/30 transition-all cursor-pointer active:scale-95"
-              >
-                <Sparkles className="w-4 h-4 text-[#00d9ff]" />
-                <span>Optimize & Tag Product Photo</span>
-              </button>
+              {/* Upload Actions */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-bold text-xs cursor-pointer transition-all">
+                  {isCompressingQuickUpload ? (
+                    <Loader2 className="w-4 h-4 text-[#00d9ff] animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4 text-[#00ff9d]" />
+                  )}
+                  <span>Fast Upload (Auto-WebP)</span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleQuickImageUpload}
+                    disabled={isCompressingQuickUpload}
+                    className="hidden"
+                  />
+                </label>
 
-              {/* Gallery Grid of Optimized Images */}
+                <button
+                  type="button"
+                  onClick={() => setShowStudioModal(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold text-xs shadow-lg shadow-[#6d4aff]/30 transition-all cursor-pointer active:scale-95"
+                >
+                  <Sparkles className="w-4 h-4 text-[#00d9ff]" />
+                  <span>Color Detection Studio</span>
+                </button>
+              </div>
+
+              {/* Gallery Grid */}
               {images.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                   {images.map((img) => (
@@ -487,6 +648,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
+                        {img.size_bytes && (
+                          <span className="absolute bottom-1.5 left-1.5 text-[8.5px] font-mono bg-black/75 text-[#00ff9d] px-1.5 py-0.5 rounded-md border border-white/10">
+                            {img.size_bytes}
+                          </span>
+                        )}
                       </div>
                       <div className="p-2 bg-[#151c33] border-t border-white/10">
                         <select
@@ -521,7 +687,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || isCompressingQuickUpload}
                 className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold flex items-center gap-2 shadow-lg shadow-[#6d4aff]/30 transition-all cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (
@@ -536,7 +702,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         </div>
       </div>
 
-      {/* Futuristic Image Optimizer Modal Popup */}
       {showStudioModal && (
         <ImageOptimizerModal
           onClose={() => setShowStudioModal(false)}
