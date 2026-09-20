@@ -7,6 +7,7 @@ import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
 import AdminDashboard from './admin/pages/AdminDashboard';
 import AdminStaff from './admin/pages/AdminStaff';
 import AdminProducts from './admin/pages/AdminProducts';
+import OrdersManager from './admin/components/OrdersManager';
 import ProductMasterModal from './admin/components/modals/ProductMasterModal';
 import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
@@ -14,7 +15,8 @@ import ColorMasterModal from './admin/components/modals/ColorMasterModal';
 import SizeMasterModal from './admin/components/modals/SizeMasterModal';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
-export type AdminViewType = 'dashboard' | 'products' | 'staff';
+// Added 'orders' to AdminViewType
+export type AdminViewType = 'dashboard' | 'orders' | 'products' | 'staff';
 
 export default function AdminApp() {
   const location = useLocation();
@@ -193,7 +195,10 @@ export default function AdminApp() {
           onManualSync={handleManualSync}
           onLogout={logoutSession}
           currentView={currentView}
-          onViewChange={(view) => setCurrentView(view)}
+          onViewChange={(view) => {
+            setSelectedMasterSection(null);
+            setCurrentView(view);
+          }}
           onSelectMaster={(section) => {
             setSelectedMasterSection(section);
           }}
@@ -251,7 +256,7 @@ export default function AdminApp() {
         />
       )}
 
-      {/* Main Content Area: If a master section was selected but none matched, it falls back to dashboard instead of blank screen */}
+      {/* Main Content Area */}
       {(!selectedMasterSection || (
         !isCategorySection && 
         !isSubCategorySection && 
@@ -266,6 +271,11 @@ export default function AdminApp() {
               onNewOrderNotice={handleNewOrderAlert}
               syncTrigger={syncTrigger}
             />
+          )}
+
+          {/* Orders Manager View */}
+          {currentView === 'orders' && (
+            <OrdersManager />
           )}
 
           {currentView === 'products' && (
