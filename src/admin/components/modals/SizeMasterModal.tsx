@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Ruler,
   X,
@@ -14,7 +14,8 @@ import {
   Filter,
   Sparkles,
   Settings,
-  Check
+  Check,
+  Search
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SubCategoryRecord } from '../../types';
@@ -60,6 +61,12 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
   const [editingGroupName, setEditingGroupName] = useState<string>('');
   const [groupActionLoading, setGroupActionLoading] = useState<boolean>(false);
   const [groupError, setGroupError] = useState<string | null>(null);
+  
+  // Adding size directly from inside group manager
+  const [quickSizeInputs, setQuickSizeInputs] = useState<{ [groupId: string]: string }>({});
+
+  // Sub Category Search State
+  const [subCatSearch, setSubCatSearch] = useState<string>('');
 
   // Size Form State
   const [sizeCode, setSizeCode] = useState<string>('');
@@ -164,6 +171,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     setOriginalId(null);
     setName('');
     setSelectedSubCatId('');
+    setSubCatSearch('');
     setSizeGroup(sizeGroups.length > 0 ? sizeGroups[0].id : 'apparel');
     setDisplayOrder(sizes.length > 0 ? sizes.length + 1 : 1);
     setIsActive(true);
@@ -185,15 +193,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     } else {
       const freshCode = await fetchNextSizeCode();
       setSizeCode(freshCode);
-    }
-  };
-
-  const handleSubCategoryChange = (subCatId: string) => {
-    setSelectedSubCatId(subCatId);
-    if (!subCatId) return;
-    const found = subCategories.find((s) => String(s.id) === String(subCatId));
-    if (found && found.size_group) {
-      setSizeGroup(found.size_group);
     }
   };
 
@@ -274,6 +273,35 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
+  // Add Size Directly inside Group Manager
+  const handleQuickAddSizeToGroup = async (groupId: string) => {
+    const val = quickSizeInputs[groupId]?.trim();
+    if (!val) return;
+
+    setGroupActionLoading(true);
+    setGroupError(null);
+    try {
+      const nextId = await fetchNextSizeCode();
+      const { error } = await supabase.from('sizes').insert([{
+        id: nextId,
+        name: val.toUpperCase(),
+        size_group: groupId,
+        display_order: sizes.length + 1,
+        active: true,
+        created_at: new Date().toISOString()
+      }]);
+
+      if (error) throw error;
+
+      setQuickSizeInputs((prev) => ({ ...prev, [groupId]: '' }));
+      await loadData();
+    } catch (err: any) {
+      setGroupError(err.message || 'Failed to add size to group.');
+    } finally {
+      setGroupActionLoading(false);
+    }
+  };
+
   const handleDeleteSize = async (e: React.MouseEvent, id: string, sizeName: string) => {
     e.stopPropagation();
     if (!window.confirm(`Are you sure you want to delete size "${sizeName}" (${id})?`)) return;
@@ -303,7 +331,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
 
     if (!name.trim()) {
-      setErrorMsg('Size label is required.');
+      setErrorMsg('Size is required.');
       setSubmitting(false);
       return;
     }
@@ -381,6 +409,14 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     return s.size_group === filterGroup;
   });
 
+  // Filter Sub Categories for dropdown via search
+  const searchedSubCategories = useMemo(() => {
+    if (!subCatSearch.trim()) return subCategories;
+    return subCategories.filter((sc) =>
+      sc.name.toLowerCase().includes(subCatSearch.toLowerCase())
+    );
+  }, [subCategories, subCatSearch]);
+
   const isLegacyMigration = editingMode && originalId && !isSizeSeries(originalId);
 
   return (
@@ -439,13 +475,13 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   Size Matrix ({filteredSizes.length})
                 </span>
 
-                {/* Filter Dropdown */}
-                <div className="flex items-center gap-1 bg-[#0a0e17] px-2 py-1 rounded-xl border border-white/10">
+                {/* Filter Dropdown (Fixed White Background Bug) */}
+                <div className="flex items-center gap-1 bg-[#0a0e17] px-2.5 py-1 rounded-xl border border-white/10">
                   <Filter className="w-3 h-3 text-[#00d9ff]" />
                   <select
                     value={filterGroup}
                     onChange={(e) => setFilterGroup(e.target.value)}
-                    className="bg-transparent text-[9.5px] font-mono text-white outline-none cursor-pointer uppercase"
+                    className="bg-[#0a0e17] text-[10px] font-mono text-white outline-none cursor-pointer uppercase [&>option]:bg-[#101628] [&>option]:text-white"
                   >
                     <option value="ALL">All Groups</option>
                     {sizeGroups.map((g) => (
@@ -475,7 +511,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
               </div>
             )}
 
-            {/* COMPACT SIZES GRID */}
+            {/* SUPER COMPACT SIZES GRID */}
             <div className="flex-1 overflow-y-auto max-h-[58vh] pr-1.5 custom-scrollbar">
               {loadingList ? (
                 <div className="flex items-center justify-center p-12 text-[#8b9bb4]">
@@ -496,45 +532,44 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       <div
                         key={s.id}
                         onClick={() => handleSelectCard(s)}
-                        className={`group p-2.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between relative min-h-[78px] ${
+                        className={`group px-2.5 py-2 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative min-h-[64px] ${
                           isSelected
-                            ? 'bg-[#6d4aff]/25 border-[#6d4aff] shadow-lg shadow-[#6d4aff]/30 scale-[1.02]'
+                            ? 'bg-[#6d4aff]/25 border-[#6d4aff] shadow-md shadow-[#6d4aff]/30 scale-[1.01]'
                             : 'bg-[#0a0e17]/80 border-white/10 hover:border-[#00d9ff]/50 hover:bg-[#151c33]/80'
                         }`}
                       >
                         {/* RIGHT TOP: LED LIGHT INDICATOR & DELETE */}
-                        <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
-                          {/* LED Light Bulb */}
+                        <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                          {/* LED Bulb */}
                           <div
                             className={`w-2 h-2 rounded-full transition-all ${
                               s.active
                                 ? 'bg-[#00ff9d] shadow-[0_0_8px_#00ff9d]'
                                 : 'bg-[#ff6b6b] shadow-[0_0_8px_#ff6b6b]'
                             }`}
-                            title={s.active ? 'Status: Active' : 'Status: Deactive'}
+                            title={s.active ? 'Active' : 'Deactive'}
                           />
 
-                          {/* Delete on hover */}
                           <button
                             type="button"
                             onClick={(e) => handleDeleteSize(e, s.id, s.name)}
-                            className="p-1 rounded-md bg-white/5 hover:bg-[#ff6b6b] text-[#8b9bb4] hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100 ml-1"
-                            title="Delete Size"
+                            className="p-0.5 rounded bg-white/5 hover:bg-[#ff6b6b] text-[#8b9bb4] hover:text-white transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+                            title="Delete"
                           >
                             <Trash2 className="w-2.5 h-2.5" />
                           </button>
                         </div>
 
-                        {/* TOP: SIZE NAME (BIG & BOLD) */}
-                        <div className="pr-8">
-                          <span className="text-[17px] font-extrabold text-white tracking-wide font-mono block leading-tight">
+                        {/* BIG & BOLD SIZE VALUE */}
+                        <div className="pr-6">
+                          <span className="text-[16px] font-extrabold text-white tracking-wide font-mono block leading-none">
                             {s.name}
                           </span>
                         </div>
 
-                        {/* BOTTOM: SIZE ID + GROUP PILL */}
-                        <div className="flex items-center justify-between pt-1.5 border-t border-white/5 mt-1">
-                          <span className={`font-mono text-[9px] font-extrabold px-1.5 py-0.5 rounded border tracking-wider flex items-center gap-1 ${
+                        {/* BOTTOM: SIZE ID + GROUP */}
+                        <div className="flex items-center justify-between pt-1 border-t border-white/5 mt-1">
+                          <span className={`font-mono text-[8.5px] font-extrabold px-1.5 py-0.2 rounded border tracking-wider flex items-center gap-0.5 ${
                             isLocked
                               ? 'bg-[#00ff9d]/10 text-[#00ff9d] border-[#00ff9d]/30'
                               : 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/40'
@@ -543,7 +578,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                             {s.id}
                           </span>
 
-                          <span className="font-mono text-[8px] text-[#8b9bb4] uppercase truncate max-w-[75px]">
+                          <span className="font-mono text-[8px] text-[#8b9bb4] uppercase truncate max-w-[70px]">
                             {grp?.name || s.size_group}
                           </span>
                         </div>
@@ -556,7 +591,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
           </div>
 
           {/* RIGHT PANE: FORM (5 COLS) */}
-          <div className="lg:col-span-5 bg-[#0a0e17]/60 p-4 rounded-3xl border border-white/10 space-y-3.5">
+          <div className="lg:col-span-5 bg-[#0a0e17]/60 p-4 rounded-3xl border border-white/10 space-y-3">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <span className="font-mono font-bold text-[#00d9ff] text-[11px] uppercase tracking-wider flex items-center gap-1.5">
                 {editingMode ? <Edit2 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
@@ -579,8 +614,8 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
               </div>
             )}
 
-            <form onSubmit={handleSave} className="space-y-3.5">
-              {/* Size ID (Strictly Auto-Assigned & Non-Editable) */}
+            <form onSubmit={handleSave} className="space-y-3">
+              {/* Size ID */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1 flex items-center justify-between">
                   <span>Size ID *</span>
@@ -608,10 +643,10 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 </div>
               </div>
 
-              {/* Size Label / Value */}
+              {/* SIZE FIELD (Cleaned up from "Size Label / Value") */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
-                  Size Label / Value *
+                  Size *
                 </label>
                 <input
                   type="text"
@@ -623,7 +658,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 />
               </div>
 
-              {/* SIZE GROUP DROPDOWN + POPUP TRIGGER */}
+              {/* SIZE GROUP DROPDOWN + MANAGE GROUPS POPUP */}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider">
@@ -643,7 +678,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   required
                   value={sizeGroup}
                   onChange={(e) => setSizeGroup(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer"
+                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer [&>option]:bg-[#101628] [&>option]:text-white"
                 >
                   {sizeGroups.map((g) => (
                     <option key={g.id} value={g.id}>
@@ -653,20 +688,40 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 </select>
               </div>
 
-              {/* Linked Sub-Category */}
-              <div>
-                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
+              {/* LINKED SUB-CATEGORY (Only Names with Live Search Filter) */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block">
                   Linked Sub-Category (Optional)
                 </label>
+
+                {/* Search box for sub categories */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={subCatSearch}
+                    onChange={(e) => setSubCatSearch(e.target.value)}
+                    placeholder="Search sub-category by name..."
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-white/10 bg-[#0a0e17] text-white text-[10px] outline-none focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/50"
+                  />
+                  <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                </div>
+
                 <select
                   value={selectedSubCatId}
-                  onChange={(e) => handleSubCategoryChange(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedSubCatId(val);
+                    if (val) {
+                      const found = subCategories.find((s) => String(s.id) === String(val));
+                      if (found && found.size_group) setSizeGroup(found.size_group);
+                    }
+                  }}
+                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer [&>option]:bg-[#101628] [&>option]:text-white"
                 >
                   <option value="">-- Universal (Applicable to All) --</option>
-                  {subCategories.map((sc) => (
+                  {searchedSubCategories.map((sc) => (
                     <option key={sc.id} value={sc.id}>
-                      {sc.name} ({sc.id})
+                      {sc.name}
                     </option>
                   ))}
                 </select>
@@ -727,7 +782,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         </div>
       </div>
 
-      {/* POPUP MODAL: SIZE GROUPS MANAGER WITH ATTACHED SIZES PILLS */}
+      {/* POPUP MODAL: SIZE GROUPS MANAGER WITH DIRECT SIZE CREATION */}
       {showGroupManager && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-lg w-full shadow-2xl space-y-4 relative">
@@ -735,7 +790,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
               <div className="flex items-center gap-2">
                 <Settings className="w-4 h-4 text-[#00d9ff]" />
                 <h3 className="font-extrabold text-white text-sm tracking-wide">
-                  Manage Size Groups & View Assigned Sizes
+                  Manage Groups & Add Sizes
                 </h3>
               </div>
               <button
@@ -776,21 +831,20 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
               </button>
             </form>
 
-            {/* Existing Groups List with Attached Sizes Preview */}
-            <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1 custom-scrollbar">
+            {/* Existing Groups with Attached Sizes & Quick Add Size Box */}
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1 custom-scrollbar">
               <span className="text-[10px] font-mono text-[#8b9bb4] uppercase tracking-wider block">
                 Existing Groups ({sizeGroups.length})
               </span>
 
               {sizeGroups.map((grp) => {
                 const isEditing = editingGroupId === grp.id;
-                // Get all sizes attached to this group
                 const attachedSizes = sizes.filter((s) => s.size_group === grp.id);
 
                 return (
                   <div
                     key={grp.id}
-                    className="p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10 hover:border-white/20 space-y-2 transition-all"
+                    className="p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10 space-y-2.5 transition-all"
                   >
                     <div className="flex items-center justify-between gap-2">
                       {isEditing ? (
@@ -826,7 +880,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                             <span className="font-extrabold text-white text-[12px] truncate">
                               {grp.name}
                             </span>
-                            <span className="font-mono text-[8.5px] px-1.5 py-0.5 rounded bg-white/5 text-[#8b9bb4] border border-white/10">
+                            <span className="font-mono text-[8.5px] px-1.5 py-0.5 rounded bg-white/5 text-[#00d9ff] border border-white/10">
                               {attachedSizes.length} sizes
                             </span>
                           </div>
@@ -856,23 +910,44 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       )}
                     </div>
 
-                    {/* SIZES PILLS PREVIEW FOR THIS GROUP */}
-                    <div className="flex flex-wrap gap-1 pt-1 border-t border-white/5">
+                    {/* SIZES PILLS LIST FOR THIS GROUP */}
+                    <div className="flex flex-wrap gap-1">
                       {attachedSizes.length === 0 ? (
                         <span className="text-[9px] font-mono text-[#8b9bb4]/60 italic">
-                          No sizes created under this group yet.
+                          No sizes under this group yet.
                         </span>
                       ) : (
                         attachedSizes.map((s) => (
                           <span
                             key={s.id}
-                            className="px-2 py-0.5 rounded-md bg-[#101628] border border-white/10 text-white font-mono font-bold text-[9.5px] shadow-sm flex items-center gap-1"
+                            className="px-2 py-0.5 rounded-md bg-[#101628] border border-white/10 text-white font-mono font-bold text-[9px] shadow-sm"
                           >
-                            <span>{s.name}</span>
-                            <span className="text-[7.5px] text-[#00d9ff]">({s.id})</span>
+                            {s.name}
                           </span>
                         ))
                       )}
+                    </div>
+
+                    {/* QUICK ADD SIZE INTO THIS GROUP */}
+                    <div className="flex items-center gap-1.5 pt-1 border-t border-white/5">
+                      <input
+                        type="text"
+                        placeholder={`Add new size to ${grp.name} (e.g. XL, 38, 2.6)...`}
+                        value={quickSizeInputs[grp.id] || ''}
+                        onChange={(e) =>
+                          setQuickSizeInputs((prev) => ({ ...prev, [grp.id]: e.target.value }))
+                        }
+                        className="flex-1 px-2.5 py-1 bg-[#101628] rounded-lg text-white text-[10px] outline-none border border-white/10 focus:border-[#00d9ff]"
+                      />
+                      <button
+                        type="button"
+                        disabled={groupActionLoading || !quickSizeInputs[grp.id]?.trim()}
+                        onClick={() => handleQuickAddSizeToGroup(grp.id)}
+                        className="px-2.5 py-1 bg-[#00ff9d]/20 hover:bg-[#00ff9d]/30 text-[#00ff9d] rounded-lg font-mono font-bold text-[9.5px] border border-[#00ff9d]/40 flex items-center gap-1 cursor-pointer disabled:opacity-30"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Size</span>
+                      </button>
                     </div>
                   </div>
                 );
