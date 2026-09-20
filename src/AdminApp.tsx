@@ -11,6 +11,7 @@ import ProductMasterModal from './admin/components/modals/ProductMasterModal';
 import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
 import ColorMasterModal from './admin/components/modals/ColorMasterModal';
+import SizeMasterModal from './admin/components/modals/SizeMasterModal';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
 export type AdminViewType = 'dashboard' | 'products' | 'staff';
@@ -145,7 +146,7 @@ export default function AdminApp() {
     return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
-  // Robust Normalization for Section matching (Handles color, colors, colour, colours)
+  // Robust Normalization for Section matching (Handles color, colors, colour, colours, size, sizes)
   const normalizedSection = selectedMasterSection ? String(selectedMasterSection).toLowerCase().trim() : '';
 
   const isCategorySection = normalizedSection === 'category' || normalizedSection === 'categories';
@@ -161,6 +162,10 @@ export default function AdminApp() {
     normalizedSection === 'colors' || 
     normalizedSection === 'colour' || 
     normalizedSection === 'colours';
+
+  const isSizeSection = 
+    normalizedSection === 'size' || 
+    normalizedSection === 'sizes';
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
@@ -236,8 +241,24 @@ export default function AdminApp() {
         />
       )}
 
+      {/* Size Master Modal Popup */}
+      {isSizeSection && (
+        <SizeMasterModal
+          onClose={() => setSelectedMasterSection(null)}
+          onSuccess={() => {
+            handleManualSync();
+          }}
+        />
+      )}
+
       {/* Main Content Area: If a master section was selected but none matched, it falls back to dashboard instead of blank screen */}
-      {(!selectedMasterSection || (!isCategorySection && !isSubCategorySection && !isColorSection && normalizedSection !== 'product')) && (
+      {(!selectedMasterSection || (
+        !isCategorySection && 
+        !isSubCategorySection && 
+        !isColorSection && 
+        !isSizeSection && 
+        normalizedSection !== 'product'
+      )) && (
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-5 relative z-10">
           {currentView === 'dashboard' && (
             <AdminDashboard
