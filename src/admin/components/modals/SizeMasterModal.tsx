@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Ruler,
   X,
@@ -11,7 +11,8 @@ import {
   Settings,
   Check,
   Search,
-  Tag
+  Tag,
+  ChevronDown
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SubCategoryRecord } from '../../types';
@@ -64,8 +65,10 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
   const [groupActionLoading, setGroupActionLoading] = useState<boolean>(false);
   const [groupError, setGroupError] = useState<string | null>(null);
 
-  // Sub Category Search State
+  // Sub Category Searchable Dropdown State
+  const [isSubCatDropdownOpen, setIsSubCatDropdownOpen] = useState<boolean>(false);
   const [subCatSearch, setSubCatSearch] = useState<string>('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Main Form Selection State
   const [selectedSubCatId, setSelectedSubCatId] = useState<string>('');
@@ -74,6 +77,17 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [formMessage, setFormMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsSubCatDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // 1. Fetch Sizes, Groups, and SubCategories
   const loadData = async () => {
@@ -143,6 +157,13 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
   useEffect(() => {
     loadData();
   }, []);
+
+  const resetForm = () => {
+    setSelectedSubCatId('');
+    setSubCatSearch('');
+    setIsActive(true);
+    setFormMessage(null);
+  };
 
   // Group Actions: Create Group
   const handleCreateGroup = async (e: React.FormEvent) => {
@@ -310,7 +331,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
     try {
       if (selectedSubCatId) {
-        // Map all sizes in this group to selected sub-category
         const { error } = await supabase
           .from('sizes')
           .update({
@@ -322,7 +342,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
         if (error) throw error;
 
-        // Also update sub-category's default size_group
         await supabase
           .from('sub_categories')
           .update({ size_group: selectedGroupId })
@@ -331,7 +350,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
       setFormMessage({ 
         type: 'success', 
-        text: `Successfully mapped "${selectedGroupId.toUpperCase()}" with sub-category!` 
+        text: `Successfully linked "${selectedGroupId.toUpperCase()}" with sub-category!` 
       });
       await loadData();
       if (onSuccess) onSuccess();
@@ -343,13 +362,19 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Filter Sub Categories via search
-  const searchedSubCategories = useMemo(() => {
+  // Live filter Sub-Categories for dropdown via search
+  const filteredSubCategories = useMemo(() => {
     if (!subCatSearch.trim()) return subCategories;
     return subCategories.filter((sc) =>
       sc.name.toLowerCase().includes(subCatSearch.toLowerCase())
     );
   }, [subCategories, subCatSearch]);
+
+  const selectedSubCatName = useMemo(() => {
+    if (!selectedSubCatId) return '-- Universal (Applicable to All) --';
+    const found = subCategories.find((s) => String(s.id) === String(selectedSubCatId));
+    return found ? found.name : '-- Universal (Applicable to All) --';
+  }, [selectedSubCatId, subCategories]);
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-5 bg-[#0a0e17]/85 backdrop-blur-xl select-none font-sans animate-in fade-in">
@@ -413,7 +438,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
           </div>
         )}
 
-        {/* MAIN SCREEN: 1. Group & Sub-Category Selection */}
+        {/* MAIN SCREEN FORM */}
         <form onSubmit={handleSaveMapping} className="mt-4 space-y-4">
           
           {/* SIZE GROUP SELECTION */}
@@ -446,36 +471,84 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
             </select>
           </div>
 
-          {/* SUB-CATEGORY SELECTION */}
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block">
+          {/* SUB-CATEGORY SELECTION: CUSTOM SEARCHABLE DROPDOWN */}
+          <div className="relative" ref={dropdownRef}>
+            <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
               Select Sub-Category *
             </label>
 
-            <div className="relative">
-              <input
-                type="text"
-                value={subCatSearch}
-                onChange={(e) => setSubCatSearch(e.target.value)}
-                placeholder="Search sub-category by name..."
-                className="w-full pl-8 pr-3 py-2 rounded-xl border border-white/10 bg-[#0a0e17] text-white text-[10.5px] outline-none focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/50"
-              />
-              <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+            {/* Trigger Button */}
+            <div
+              onClick={() => setIsSubCatDropdownOpen(!isSubCatDropdownOpen)}
+              className="w-full px-3 py-2.5 rounded-xl border border-white/10 bg-[#0a0e17] font-semibold text-white flex items-center justify-between cursor-pointer hover:border-[#00d9ff]/50 transition-colors"
+            >
+              <span className="truncate">{selectedSubCatName}</span>
+              <ChevronDown className={`w-4 h-4 text-[#8b9bb4] transition-transform ${isSubCatDropdownOpen ? 'rotate-180' : ''}`} />
             </div>
 
-            <select
-              required
-              value={selectedSubCatId}
-              onChange={(e) => setSelectedSubCatId(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#0a0e17] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer [&>option]:bg-[#101628] [&>option]:text-white"
-            >
-              <option value="">-- Choose Sub-Category --</option>
-              {searchedSubCategories.map((sc) => (
-                <option key={sc.id} value={sc.id}>
-                  {sc.name}
-                </option>
-              ))}
-            </select>
+            {/* Dropdown Menu with Live Search Inside */}
+            {isSubCatDropdownOpen && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#101628] border border-white/15 rounded-2xl p-2.5 shadow-2xl space-y-2 animate-in fade-in">
+                
+                {/* Search Input Inside Dropdown Menu */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={subCatSearch}
+                    onChange={(e) => setSubCatSearch(e.target.value)}
+                    placeholder="Type to search sub-category..."
+                    className="w-full pl-8 pr-3 py-2 bg-[#0a0e17] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/50"
+                  />
+                  <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                </div>
+
+                {/* Sub-Category Filtered Options List */}
+                <div className="max-h-48 overflow-y-auto space-y-1 pr-1 custom-scrollbar">
+                  <div
+                    onClick={() => {
+                      setSelectedSubCatId('');
+                      setIsSubCatDropdownOpen(false);
+                      setSubCatSearch('');
+                    }}
+                    className={`px-3 py-2 rounded-xl text-[11px] font-medium cursor-pointer transition-colors flex items-center justify-between ${
+                      selectedSubCatId === ''
+                        ? 'bg-[#6d4aff]/30 text-[#00d9ff] font-bold'
+                        : 'text-[#8b9bb4] hover:bg-white/5 hover:text-white'
+                    }`}
+                  >
+                    <span>-- Universal (Applicable to All) --</span>
+                    {selectedSubCatId === '' && <Check className="w-3.5 h-3.5 text-[#00d9ff]" />}
+                  </div>
+
+                  {filteredSubCategories.length === 0 ? (
+                    <div className="p-3 text-center text-[#8b9bb4] text-[10px] italic">
+                      No sub-categories matched your search.
+                    </div>
+                  ) : (
+                    filteredSubCategories.map((sc) => (
+                      <div
+                        key={sc.id}
+                        onClick={() => {
+                          setSelectedSubCatId(sc.id);
+                          if (sc.size_group) setSelectedGroupId(sc.size_group);
+                          setIsSubCatDropdownOpen(false);
+                          setSubCatSearch('');
+                        }}
+                        className={`px-3 py-2 rounded-xl text-[11px] font-medium cursor-pointer transition-colors flex items-center justify-between ${
+                          selectedSubCatId === sc.id
+                            ? 'bg-[#6d4aff]/30 text-[#00d9ff] font-bold'
+                            : 'text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="truncate">{sc.name}</span>
+                        {selectedSubCatId === sc.id && <Check className="w-3.5 h-3.5 text-[#00d9ff]" />}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* STATUS TOGGLE */}
@@ -519,7 +592,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         </form>
       </div>
 
-      {/* POPUP MODAL: 2. MANAGE GROUPS & GROUP-WISE SIZE LIST + ADD NEW SIZE */}
+      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + ADD NEW SIZE */}
       {showGroupManager && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-xl w-full shadow-2xl space-y-4 relative">
