@@ -13,8 +13,7 @@ import {
   Search,
   Tag,
   ChevronDown,
-  Layers,
-  Copy
+  Layers
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { SubCategoryRecord } from '../../types';
@@ -92,7 +91,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // 1. Fetch Sizes, Groups, and SubCategories (Including auto-merging distinct groups from sizes)
   const loadData = async () => {
     setLoadingData(true);
     setFetchError(null);
@@ -116,10 +114,8 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         setSubCategories(sortedSubCats);
       }
 
-      // Collect registered size groups
       let groupsList: SizeGroupItem[] = groupRes.data || [];
 
-      // Auto discover any groups present in sizes table but missing in size_groups
       const knownGroupIds = new Set(groupsList.map((g) => g.id.toLowerCase().trim()));
       loadedSizes.forEach((s) => {
         if (s.size_group && !knownGroupIds.has(s.size_group.toLowerCase().trim())) {
@@ -154,7 +150,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // 2. Fetch Next Series ID (SIZE0001)
   const fetchNextSizeCode = async () => {
     try {
       const { data } = await supabase
@@ -183,7 +178,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     loadData();
   }, []);
 
-  // Group Actions: Create Group
   const handleCreateGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newGroupName.trim()) return;
@@ -215,7 +209,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Group Actions: Update Group Name
   const handleUpdateGroup = async (groupId: string) => {
     if (!editingGroupName.trim()) return;
     setGroupActionLoading(true);
@@ -241,7 +234,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Group Actions: Delete Group
   const handleDeleteGroup = async (groupId: string, groupName: string) => {
     if (!window.confirm(`Are you sure you want to delete size group "${groupName}"?`)) return;
     setGroupActionLoading(true);
@@ -262,7 +254,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Size Actions inside Group Manager: Add Fresh New Size
   const handleAddNewSize = async (groupId: string) => {
     if (!newSizeValue.trim()) return;
     setGroupActionLoading(true);
@@ -291,12 +282,10 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Multi-Group Reuse: Copy/Add Existing Size into Target Group without removing from original group
   const handleAddExistingSizeToGroup = async (existingSizeName: string, targetGroupId: string) => {
     setGroupActionLoading(true);
     setGroupError(null);
 
-    // Check if this size label already exists in target group
     const alreadyInGroup = sizes.some(
       (s) =>
         (s.size_group || '').toLowerCase().trim() === targetGroupId.toLowerCase().trim() &&
@@ -331,7 +320,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Size Actions inside Group Manager: Update Existing Size
   const handleUpdateSizeInGroup = async (sizeId: string) => {
     if (!editingSizeName.trim()) return;
     setGroupActionLoading(true);
@@ -357,9 +345,8 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Size Actions inside Group Manager: Delete Size
-  const handleDeleteSizeInGroup = async (sizeId: string, sName: string) => {
-    if (!window.confirm(`Delete size "${sName}"?`)) return;
+  const handleRemoveSizeFromGroup = async (sizeId: string, sName: string) => {
+    if (!window.confirm(`Remove size "${sName}" from this group?`)) return;
     setGroupActionLoading(true);
     setGroupError(null);
 
@@ -369,13 +356,12 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
       setSizes((prev) => prev.filter((s) => s.id !== sizeId));
     } catch (err: any) {
-      setGroupError(err.message || 'Failed to delete size.');
+      setGroupError(err.message || 'Failed to remove size from group.');
     } finally {
       setGroupActionLoading(false);
     }
   };
 
-  // Main Screen: Save Group & Sub-Category Association
   const handleSaveMapping = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -420,7 +406,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  // Alphabetical (A to Z) filtered and sorted Sub-Categories list
   const filteredSubCategories = useMemo(() => {
     const list = subCatSearch.trim()
       ? subCategories.filter((sc) =>
@@ -439,7 +424,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     return found ? found.name : '-- Universal (Applicable to All) --';
   }, [selectedSubCatId, subCategories]);
 
-  // Unique list of all distinct size names across the system
   const distinctGlobalSizeNames = useMemo(() => {
     const set = new Set<string>();
     sizes.forEach((s) => {
@@ -659,7 +643,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         </form>
       </div>
 
-      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + MULTI-GROUP REUSE */}
+      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + REMOVE SIZE FROM GROUP */}
       {showGroupManager && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-xl w-full shadow-2xl space-y-4 relative">
@@ -713,10 +697,10 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
               </button>
             </form>
 
-            {/* Groups List with Sizes and "Add New Size" button */}
+            {/* Groups List with Sizes */}
             <div className="space-y-3.5 max-h-[62vh] overflow-y-auto pr-1 custom-scrollbar">
               <span className="text-[10px] font-mono text-[#8b9bb4] uppercase tracking-wider block">
-                Groups List ({sizeGroups.length}) — Click &quot;Add Existing Size&quot; or &quot;Add New Size&quot; to populate
+                Groups List ({sizeGroups.length})
               </span>
 
               {sizeGroups.map((grp) => {
@@ -724,7 +708,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                 const isAddingSizeToThisGroup = activeAddingGroupId === grp.id;
                 const isPickingExisting = showAssignPickerForGroupId === grp.id;
                 
-                // Matches case-insensitively
                 const attachedSizes = sizes.filter(
                   (s) => (s.size_group || '').toLowerCase().trim() === grp.id.toLowerCase().trim()
                 );
@@ -733,7 +716,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                   attachedSizes.map((s) => s.name.toLowerCase().trim())
                 );
 
-                // Distinct sizes available from other groups to reuse
                 const availableGlobalSizes = distinctGlobalSizeNames.filter((sName) => {
                   const matchesSearch = assignSearch
                     ? sName.toLowerCase().includes(assignSearch.toLowerCase())
@@ -746,7 +728,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                     key={grp.id}
                     className="p-3.5 rounded-2xl bg-[#0a0e17]/90 border border-white/10 space-y-3 transition-all"
                   >
-                    {/* Group Header: Group Name + Edit/Delete */}
+                    {/* Group Header */}
                     <div className="flex items-center justify-between gap-2">
                       {isEditingGroup ? (
                         <div className="flex items-center gap-2 flex-1 mr-2">
@@ -812,7 +794,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       )}
                     </div>
 
-                    {/* SIZES LIST FOR THIS GROUP */}
+                    {/* SIZES LIST: CLEAR REMOVE BUTTON FOR EACH SIZE */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {attachedSizes.length === 0 ? (
                         <span className="text-[9.5px] font-mono text-[#8b9bb4]/60 italic py-1">
@@ -836,14 +818,14 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                   type="button"
                                   disabled={groupActionLoading}
                                   onClick={() => handleUpdateSizeInGroup(s.id)}
-                                  className="text-[#00ff9d] hover:text-white"
+                                  className="text-[#00ff9d] hover:text-white cursor-pointer"
                                 >
                                   <Check className="w-3 h-3" />
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setEditingSizeId(null)}
-                                  className="text-[#8b9bb4] hover:text-white"
+                                  className="text-[#8b9bb4] hover:text-white cursor-pointer"
                                 >
                                   <X className="w-3 h-3" />
                                 </button>
@@ -854,35 +836,34 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                           return (
                             <div
                               key={s.id}
-                              className="group/pill flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#101628] border border-white/10 hover:border-[#00d9ff]/50 transition-all"
+                              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg bg-[#101628] border border-white/15 hover:border-[#ff6b6b]/40 transition-all shadow-sm"
                             >
-                              <span className="text-white font-mono font-bold text-[10.5px]">
+                              <span className="text-white font-mono font-bold text-[11px]">
                                 {s.name}
                               </span>
-                              <span className="text-[8px] text-[#8b9bb4] font-mono">
-                                ({s.id})
-                              </span>
 
-                              {/* Size Edit & Delete Buttons on Hover */}
-                              <div className="flex items-center gap-1 opacity-0 group-hover/pill:opacity-100 transition-opacity ml-1">
+                              {/* Action controls for this specific size */}
+                              <div className="flex items-center gap-1 border-l border-white/10 pl-1.5">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setEditingSizeId(s.id);
                                     setEditingSizeName(s.name);
                                   }}
-                                  className="text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer"
-                                  title="Edit size"
+                                  className="text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer p-0.5"
+                                  title="Edit size label"
                                 >
                                   <Edit2 className="w-2.5 h-2.5" />
                                 </button>
+                                
+                                {/* Always Visible Quick Remove Cross Button */}
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteSizeInGroup(s.id, s.name)}
-                                  className="text-[#8b9bb4] hover:text-[#ff6b6b] cursor-pointer"
-                                  title="Delete size"
+                                  onClick={() => handleRemoveSizeFromGroup(s.id, s.name)}
+                                  className="text-[#ff6b6b] hover:bg-[#ff6b6b]/20 rounded p-0.5 cursor-pointer transition-colors"
+                                  title="Remove size from this group"
                                 >
-                                  <Trash2 className="w-2.5 h-2.5" />
+                                  <X className="w-3 h-3" />
                                 </button>
                               </div>
                             </div>
@@ -891,13 +872,13 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       )}
                     </div>
 
-                    {/* REUSE EXISTING SIZES PICKER DRAWER (DOES NOT REMOVE FROM OTHER GROUPS) */}
+                    {/* REUSE EXISTING SIZES DRAWER */}
                     {isPickingExisting && (
                       <div className="p-3 bg-[#101628] rounded-xl border border-[#6d4aff]/40 space-y-2 animate-in fade-in">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
-                            <Copy className="w-3 h-3 text-[#00ff9d]" />
-                            Click any size to also add it into &quot;{grp.name}&quot;
+                            <Layers className="w-3 h-3 text-[#00ff9d]" />
+                            Click size to add into &quot;{grp.name}&quot;
                           </span>
                           <button
                             type="button"
@@ -905,7 +886,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                               setShowAssignPickerForGroupId(null);
                               setAssignSearch('');
                             }}
-                            className="text-[10px] text-[#8b9bb4] hover:text-white"
+                            className="text-[10px] text-[#8b9bb4] hover:text-white cursor-pointer"
                           >
                             Close
                           </button>
@@ -915,7 +896,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                           type="text"
                           value={assignSearch}
                           onChange={(e) => setAssignSearch(e.target.value)}
-                          placeholder="Filter existing sizes (e.g. 30A, 32B, XL, 2.6)..."
+                          placeholder="Search sizes to add (e.g. 30A, 32B, XL)..."
                           className="w-full px-2.5 py-1.5 bg-[#0a0e17] rounded-lg text-white text-[10px] outline-none border border-white/10 focus:border-[#00d9ff]"
                         />
 
@@ -931,7 +912,6 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                 type="button"
                                 onClick={() => handleAddExistingSizeToGroup(sizeVal, grp.id)}
                                 className="px-2.5 py-1 bg-[#0a0e17] hover:bg-[#6d4aff]/40 hover:border-[#6d4aff] border border-white/10 rounded-md text-white font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                                title={`Click to also add "${sizeVal}" into ${grp.name}`}
                               >
                                 <Plus className="w-3 h-3 text-[#00ff9d]" />
                                 <span>{sizeVal}</span>
@@ -942,7 +922,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       </div>
                     )}
 
-                    {/* ACTION BUTTONS: ADD NEW OR REUSE EXISTING */}
+                    {/* ACTION BUTTONS */}
                     <div className="pt-2 border-t border-white/5 flex flex-wrap items-center gap-2">
                       {isAddingSizeToThisGroup ? (
                         <div className="flex items-center gap-1.5 w-full animate-in fade-in">
@@ -969,7 +949,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                               setActiveAddingGroupId(null);
                               setNewSizeValue('');
                             }}
-                            className="px-2 py-1.5 bg-white/5 hover:bg-white/10 text-[#8b9bb4] rounded-xl text-[10px]"
+                            className="px-2 py-1.5 bg-white/5 hover:bg-white/10 text-[#8b9bb4] rounded-xl text-[10px] cursor-pointer"
                           >
                             Cancel
                           </button>
