@@ -345,8 +345,9 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
     }
   };
 
-  const handleRemoveSizeFromGroup = async (sizeId: string, sName: string) => {
-    if (!window.confirm(`Remove size "${sName}" from this group?`)) return;
+  // Direct Permanent Delete for Size Record
+  const handleDeleteSizePermanently = async (sizeId: string, sName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete size "${sName}" (${sizeId})?`)) return;
     setGroupActionLoading(true);
     setGroupError(null);
 
@@ -356,7 +357,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
 
       setSizes((prev) => prev.filter((s) => s.id !== sizeId));
     } catch (err: any) {
-      setGroupError(err.message || 'Failed to remove size from group.');
+      setGroupError(err.message || 'Failed to delete size.');
     } finally {
       setGroupActionLoading(false);
     }
@@ -643,7 +644,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
         </form>
       </div>
 
-      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + REMOVE SIZE FROM GROUP */}
+      {/* POPUP MODAL: MANAGE GROUPS & GROUP-WISE SIZE LIST + EXPLICIT DELETE TRASH BUTTON */}
       {showGroupManager && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-[#6d4aff]/40 rounded-3xl p-5 max-w-xl w-full shadow-2xl space-y-4 relative">
@@ -794,7 +795,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                       )}
                     </div>
 
-                    {/* SIZES LIST: CLEAR REMOVE BUTTON FOR EACH SIZE */}
+                    {/* SIZES LIST: CLEAR VISIBLE DELETE (TRASH) & EDIT BUTTONS */}
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {attachedSizes.length === 0 ? (
                         <span className="text-[9.5px] font-mono text-[#8b9bb4]/60 italic py-1">
@@ -819,6 +820,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                   disabled={groupActionLoading}
                                   onClick={() => handleUpdateSizeInGroup(s.id)}
                                   className="text-[#00ff9d] hover:text-white cursor-pointer"
+                                  title="Save"
                                 >
                                   <Check className="w-3 h-3" />
                                 </button>
@@ -826,6 +828,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                   type="button"
                                   onClick={() => setEditingSizeId(null)}
                                   className="text-[#8b9bb4] hover:text-white cursor-pointer"
+                                  title="Cancel"
                                 >
                                   <X className="w-3 h-3" />
                                 </button>
@@ -836,34 +839,38 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                           return (
                             <div
                               key={s.id}
-                              className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-lg bg-[#101628] border border-white/15 hover:border-[#ff6b6b]/40 transition-all shadow-sm"
+                              className="flex items-center gap-2 pl-2.5 pr-2 py-1 rounded-xl bg-[#101628] border border-white/15 hover:border-[#00d9ff]/40 transition-all shadow-sm"
                             >
-                              <span className="text-white font-mono font-bold text-[11px]">
-                                {s.name}
-                              </span>
+                              <div className="flex items-baseline gap-1">
+                                <span className="text-white font-mono font-bold text-[11px]">
+                                  {s.name}
+                                </span>
+                                <span className="text-[7.5px] font-mono text-[#8b9bb4]">
+                                  ({s.id})
+                                </span>
+                              </div>
 
-                              {/* Action controls for this specific size */}
-                              <div className="flex items-center gap-1 border-l border-white/10 pl-1.5">
+                              {/* Visible Edit and Delete Icons */}
+                              <div className="flex items-center gap-1.5 border-l border-white/15 pl-1.5 ml-0.5">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setEditingSizeId(s.id);
                                     setEditingSizeName(s.name);
                                   }}
-                                  className="text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer p-0.5"
-                                  title="Edit size label"
+                                  className="text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer p-0.5 transition-colors"
+                                  title={`Edit name of ${s.name}`}
                                 >
-                                  <Edit2 className="w-2.5 h-2.5" />
+                                  <Edit2 className="w-3 h-3" />
                                 </button>
                                 
-                                {/* Always Visible Quick Remove Cross Button */}
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveSizeFromGroup(s.id, s.name)}
+                                  onClick={() => handleDeleteSizePermanently(s.id, s.name)}
                                   className="text-[#ff6b6b] hover:bg-[#ff6b6b]/20 rounded p-0.5 cursor-pointer transition-colors"
-                                  title="Remove size from this group"
+                                  title={`Delete size ${s.name} permanently`}
                                 >
-                                  <X className="w-3 h-3" />
+                                  <Trash2 className="w-3 h-3" />
                                 </button>
                               </div>
                             </div>
@@ -912,6 +919,7 @@ export default function SizeMasterModal({ onClose, onSuccess }: SizeMasterModalP
                                 type="button"
                                 onClick={() => handleAddExistingSizeToGroup(sizeVal, grp.id)}
                                 className="px-2.5 py-1 bg-[#0a0e17] hover:bg-[#6d4aff]/40 hover:border-[#6d4aff] border border-white/10 rounded-md text-white font-mono text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                title={`Click to add "${sizeVal}" into ${grp.name}`}
                               >
                                 <Plus className="w-3 h-3 text-[#00ff9d]" />
                                 <span>{sizeVal}</span>
