@@ -2,19 +2,27 @@ import React from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import CustomerApp from './CustomerApp';
 import AdminApp from "./AdminApp";
+import AdminRouteGuard from './components/AdminRouteGuard';
 
 export default function App() {
   return (
     <Router>
       <Routes>
-        {/* కేవలం /kfmama ద్వారా మాత్రమే AdminApp యాక్సెస్ అవుతుంది */}
-        <Route path="/kfmama/*" element={<AdminApp />} />
+        {/* ADMIN ROUTES - Protected */}
+        <Route path="/kfmama/*" element={
+          <AdminRouteGuard>
+            <AdminApp />
+          </AdminRouteGuard>
+        } />
 
-        {/* సాధారణ కస్టమర్ స్టోర్‌ఫ్రంట్ రూట్లు */}
+        {/* CUSTOMER ROUTES - Public */}
         <Route path="/*" element={<CustomerApp />} />
 
-        {/* ఇతర ఏవైనా తప్పుడు అడ్మిన్ పాత్‌లు వస్తే హోమ్‌పేజీకి రీడైరెక్ట్ అవుతాయి */}
+        {/* Redirect old admin paths */}
         <Route path="/admin/*" element={<Navigate to="/" replace />} />
+
+        {/* Admin login page (public access) */}
+        <Route path="/login" element={<AdminApp />} />
       </Routes>
     </Router>
   );

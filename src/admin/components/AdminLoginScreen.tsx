@@ -22,27 +22,12 @@ export default function AdminLoginScreen({ onLoginSuccess }: AdminLoginScreenPro
     try {
       const { data: staff, error } = await supabase
         .from('admin_staff')
-        .select('*')
+        .select('id, employee_id, full_name, role, is_active, last_login, pin')
         .eq('employee_id', employeeId.trim().toUpperCase())
         .eq('is_active', true)
         .single();
 
       if (error || !staff) {
-        // Fallback root owner bypass
-        if (employeeId.trim().toUpperCase() === 'KF_ADM01' && pin.trim() === '2026') {
-          const mockUser: AdminStaffUser = {
-            id: 'admin-root-id',
-            employee_id: 'KF_ADM01',
-            full_name: 'Kashvi Super Admin',
-            role: 'admin',
-            pin: '2026',
-            is_active: true,
-            created_at: new Date().toISOString()
-          };
-          completeSession(mockUser);
-          return;
-        }
-
         setErrorMsg('Invalid Employee ID or account inactive.');
         setSubmitting(false);
         return;
