@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Plus,
   Tag,
-  Filter
+  Filter,
+  Lock
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { compressImageToWebP } from '../../utils/imageOptimizer';
@@ -126,7 +127,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     generateSubCategoryCode();
   }, []);
 
-  // Reset form to Create Mode
+  // Reset form to Create Mode (New creation is strictly auto-generated and read-only)
   const resetForm = () => {
     setEditingMode(false);
     setOriginalId(null);
@@ -205,7 +206,18 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     }
   };
 
-  // Save (Create or Update with ID Override)
+  // Check whether ID should be editable:
+  // - New Record: NOT editable (locked to auto-series)
+  // - Existing Record with SUBCAT series: NOT editable (locked permanently)
+  // - Existing Record with OLD/RANDOM ID: EDITABLE (so you can assign SUBCAT series)
+  const isSubCatSeries = (idString: string | null) => {
+    if (!idString) return false;
+    return /^SUBCAT\d+$/i.test(idString.trim());
+  };
+
+  const isIdEditable = editingMode && originalId ? !isSubCatSeries(originalId) : false;
+
+  // Save (Create or Update with ID Override for old IDs)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCategoryId) {
@@ -252,7 +264,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
         .replace(/(^-|-$)+/g, '');
 
       if (editingMode && originalId) {
-        // ID modification check
+        // Check if ID was migrated from old random ID to SUBCAT series
         if (targetId !== originalId) {
           const { data: exists } = await supabase.from('sub_categories').select('id').eq('id', targetId).maybeSingle();
           if (exists) {
@@ -272,12 +284,13 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
           }]);
           if (insertErr) throw insertErr;
 
-          // Cascade update sizes/products referencing old sub_category_id
+          // Cascade update sizes and products referencing old ID
           await supabase.from('sizes').update({ sub_category_id: targetId }).eq('sub_category_id', originalId);
           await supabase.from('products').update({ sub_category_id: targetId }).eq('sub_category_id', originalId);
 
           await supabase.from('sub_categories').delete().eq('id', originalId);
         } else {
+          // Standard Update
           const { error: updateErr } = await supabase
             .from('sub_categories')
             .update({
@@ -294,6 +307,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
           if (updateErr) throw updateErr;
         }
       } else {
+        // Insert brand new Sub-Category
         const { error: insertErr } = await supabase.from('sub_categories').insert([{
           id: targetId,
           category_id: selectedCategoryId,
@@ -433,6 +447,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                   {filteredSubCategories.map((sub) => {
                     const isSelected = editingMode && originalId === sub.id;
                     const parentCat = categories.find((c) => String(c.id) === String(sub.category_id));
+                    const isLockedSeries = isSubCatSeries(sub.id);
 
                     return (
                       <div
@@ -485,10 +500,15 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                           </div>
 
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-[#00d9ff]/10 text-[#00d9ff] border border-[#00d9ff]/30 tracking-wider">
+                            <span className={`font-mono text-[9px] font-extrabold px-1.5 py-0.5 rounded border tracking-wider flex items-center gap-1 ${
+                              isLockedSeries
+                                ? 'bg-[#00ff9d]/10 text-[#00ff9d] border-[#00ff9d]/30'
+                                : 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/40'
+                            }`}>
+                              {isLockedSeries && <Lock className="w-2.5 h-2.5" />}
                               {sub.id}
                             </span>
-                            <span className="font-mono text-[8.5px] px-1 py-0.5 rounded bg-white/5 text-[#00ff9d] border border-white/10 uppercase">
+                            <span className="font-mono text-[8.5px] px-1 py-0.5 rounded bg-white/5 text-[#00d9ff] border border-white/10 uppercase">
                               {sub.size_group || 'apparel'}
                             </span>
                           </div>
@@ -555,20 +575,44 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                 </select>
               </div>
 
-              {/* Sub-Category Custom ID (SUBCAT0001 series) */}
+              {/* Sub-Category ID Field (Conditional Editing Rules Applied) */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1 flex items-center justify-between">
                   <span>Sub-Category ID *</span>
-                  <span className="text-[8.5px] text-[#00ff9d]">CUSTOM EDITABLE</span>
+                  {isIdEditable ? (
+                    <span className="text-[8.5px] text-[#ffa500] font-mono font-bold">
+                      ASSIGN SUBCAT SERIES NOW
+                    </span>
+                  ) : (
+                    <span className="text-[8.5px] text-[#8b9bb4] font-mono flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5 text-[#00ff9d]" /> LOCKED & AUTO-GENERATED
+                    </span>
+                  )}
                 </label>
-                <input
-                  type="text"
-                  required
-                  value={subCategoryCode}
-                  onChange={(e) => setSubCategoryCode(e.target.value.toUpperCase())}
-                  placeholder="e.g. SUBCAT0001"
-                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-mono font-bold text-[#00ff9d] text-[11px] outline-none focus:border-[#00d9ff] transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    readOnly={!isIdEditable}
+                    value={subCategoryCode}
+                    onChange={(e) => {
+                      if (isIdEditable) {
+                        setSubCategoryCode(e.target.value.toUpperCase());
+                      }
+                    }}
+                    placeholder="e.g. SUBCAT0001"
+                    className={`w-full px-3 py-2 rounded-xl border font-mono font-bold text-[11px] outline-none transition-colors ${
+                      isIdEditable
+                        ? 'border-[#ffa500]/50 bg-[#101628] text-[#ffa500] focus:border-[#ffa500]'
+                        : 'border-white/10 bg-[#0a0e17]/60 text-[#00ff9d] cursor-not-allowed'
+                    }`}
+                  />
+                  {!isIdEditable && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8b9bb4]">
+                      <Lock className="w-3.5 h-3.5 text-[#8b9bb4]" />
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Sub-Category Name */}
