@@ -8,6 +8,7 @@ import AdminDashboard from './admin/pages/AdminDashboard';
 import AdminStaff from './admin/pages/AdminStaff';
 import AdminProducts from './admin/pages/AdminProducts';
 import ProductMasterModal from './admin/components/modals/ProductMasterModal';
+import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
 export type AdminViewType = 'dashboard' | 'products' | 'staff';
@@ -181,9 +182,19 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
-      {/* Product Master Modal Popup */}
+      {/* Product Master Modal Popup (On Hold) */}
       {selectedMasterSection === 'product' && (
         <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
+      )}
+
+      {/* Category Master Modal Popup */}
+      {selectedMasterSection === 'category' && (
+        <CategoryMasterModal
+          onClose={() => setSelectedMasterSection(null)}
+          onSuccess={() => {
+            handleManualSync();
+          }}
+        />
       )}
 
       {/* Main Content Area */}
