@@ -106,7 +106,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     fetchMasters();
   }, []);
 
-  // Generate Next SKU Code automatically
+  // Generate Next Product Code automatically
   useEffect(() => {
     const generateProductCode = async () => {
       setCodeLoading(true);
@@ -135,35 +135,67 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     generateProductCode();
   }, [brand]);
 
-  // Filter Categories by selected Brand (Department) - only applicable for fashions
+  // Filter Categories by selected Brand - applicable for Fashions
   const filteredCategories = useMemo(() => {
     if (brand === 'jewellery') return [];
-    return categories.filter((c) => !c.department || c.department === 'fashions');
+    return categories.filter((c) => {
+      const dept = (c.department || '').toLowerCase().trim();
+      return !dept || dept === 'fashions' || dept === 'fashion' || dept === 'apparel';
+    });
   }, [categories, brand]);
 
   // Filter Sub-Categories:
   // For Fashion: Filter by selected Category
-  // For Jewellery: Show all jewellery sub-categories directly (without category selection)
+  // For Jewellery: Robust lookup for all Jewellery related sub-categories
   const filteredSubCats = useMemo(() => {
     if (brand === 'jewellery') {
-      // Find categories that belong to jewellery or sub-categories with department/category matching jewellery
-      const jewelleryCatIds = new Set(
-        categories.filter((c) => c.department === 'jewellery').map((c) => String(c.id))
+      // 1. Identify all Jewellery Categories
+      const jewelleryCategoryIds = new Set(
+        categories
+          .filter((c) => {
+            const dept = (c.department || '').toLowerCase().trim();
+            const cName = (c.name || '').toLowerCase().trim();
+            return dept.includes('jewel') || cName.includes('jewel');
+          })
+          .map((c) => String(c.id))
       );
 
-      const list = subCategories.filter((sc) => {
-        if ((sc as any).department === 'jewellery') return true;
-        if (sc.category_id && jewelleryCatIds.has(String(sc.category_id))) return true;
+      // 2. Filter Subcategories linked to these categories or explicitly tagged with jewellery
+      let list = subCategories.filter((sc) => {
+        const scDept = ((sc as any).department || '').toLowerCase().trim();
+        if (scDept.includes('jewel')) return true;
+        if (sc.category_id && jewelleryCategoryIds.has(String(sc.category_id))) return true;
         return false;
       });
 
-      // If no explicit department tag, fallback to items matching jewellery category IDs or all non-fashion
-      const resultList = list.length > 0 ? list : subCategories.filter((sc) => {
-        const parentCat = categories.find((c) => String(c.id) === String(sc.category_id));
-        return parentCat?.department === 'jewellery';
-      });
+      // Fallback: If no subcategories matched category_id, check if subcategory name or parent hints jewellery
+      if (list.length === 0) {
+        list = subCategories.filter((sc) => {
+          const parent = categories.find((c) => String(c.id) === String(sc.category_id));
+          const parentName = (parent?.name || '').toLowerCase();
+          const scName = (sc.name || '').toLowerCase();
+          return (
+            parentName.includes('jewel') ||
+            parentName.includes('bangle') ||
+            scName.includes('bangle') ||
+            scName.includes('necklace') ||
+            scName.includes('earring') ||
+            scName.includes('chain') ||
+            scName.includes('ring')
+          );
+        });
+      }
 
-      return [...resultList].sort((a, b) =>
+      // If still empty (e.g. fresh DB setup with 1 generic category), show all subcategories that are not fashion
+      if (list.length === 0 && subCategories.length > 0) {
+        list = subCategories.filter((sc) => {
+          const parent = categories.find((c) => String(c.id) === String(sc.category_id));
+          const parentDept = (parent?.department || '').toLowerCase();
+          return parentDept !== 'fashions' && parentDept !== 'apparel';
+        });
+      }
+
+      return [...list].sort((a, b) =>
         (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
       );
     }
@@ -358,10 +390,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="bg-[#0a0e17]/80 px-4 py-1.5 rounded-2xl border border-white/10 text-right shadow-inner">
-              <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] block">SKU CODE</span>
-              <span className="font-mono text-xs font-extrabold text-[#00ff9d]">
-                {codeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00d9ff]" /> : productCode}
+            {/* PRODUCT CODE: BIGGER & PROMINENT */}
+            <div className="bg-[#0a0e17]/90 px-4 py-1.5 rounded-2xl border border-white/15 text-right shadow-inner min-w-[125px]">
+              <span className="text-[8.5px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] block">PRODUCT CODE</span>
+              <span className="font-mono text-base font-extrabold text-[#00ff9d] tracking-wide leading-tight block">
+                {codeLoading ? <Loader2 className="w-4 h-4 animate-spin text-[#00d9ff] ml-auto" /> : productCode}
               </span>
             </div>
             <button
@@ -488,7 +521,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             <div className="relative" ref={dropdownRef}>
               <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5 flex items-center justify-between">
                 <span>{brand === 'jewellery' ? 'Jewellery Sub-Category *' : 'Sub-Category *'}</span>
-                <span className="text-[8.5px] text-[#00d9ff] font-bold">A-Z SEARCH</span>
+                <span className="text-[8.5px] text-[#00d9ff] font-bold">A-Z SEARCH ({filteredSubCats.length})</span>
               </label>
               
               <div
