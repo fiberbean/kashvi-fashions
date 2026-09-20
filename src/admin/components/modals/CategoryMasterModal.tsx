@@ -345,7 +345,7 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                 onClick={resetForm}
                 className="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono text-[#00ff9d] flex items-center gap-1 transition-all cursor-pointer"
               >
-                <Plus className="w-3 h-3" /> New Form
+                <Plus className="w-3 h-3" /> Reset
               </button>
             </div>
 
