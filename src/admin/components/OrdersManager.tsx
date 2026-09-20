@@ -17,7 +17,8 @@ import {
   MapPin,
   CreditCard,
   Calendar,
-  Layers
+  Layers,
+  Loader2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -128,7 +129,7 @@ export default function OrdersManager() {
         setMasterPipelinePin(String(data.pipeline_pin));
       }
     } catch {
-      // Keep default 1234
+      // Default PIN
     }
   };
 
@@ -163,7 +164,7 @@ export default function OrdersManager() {
       const { error } = await supabase.from('orders').update(payload).eq('id', orderId);
       if (error) throw error;
 
-      // Update in local state
+      // Update local state
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, ...payload } : o))
       );
@@ -191,14 +192,14 @@ export default function OrdersManager() {
       return;
     }
 
-    // Special Requirement: Dispatched (Tracking Number)
+    // Special: Dispatched (Tracking Number)
     if (targetStatus === 'dispatched') {
       setDispatchOrderId(orderId);
       setTrackingNumber('');
       return;
     }
 
-    // Special Requirement: Cancelled (Refund UTR)
+    // Special: Cancelled (Refund UTR)
     if (targetStatus === 'cancelled') {
       setRefundOrderId(orderId);
       setRefundUtr('');
@@ -262,7 +263,7 @@ export default function OrdersManager() {
     setRefundUtr('');
   };
 
-  // 4. Print Shipping Label (India Post standard)
+  // 4. Print Shipping Label
   const printShippingLabel = (order: OrderRecord) => {
     const cust = order.customer || {};
     const ship = order.shipping || {};
