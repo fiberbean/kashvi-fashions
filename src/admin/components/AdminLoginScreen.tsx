@@ -85,11 +85,11 @@ export default function AdminLoginScreen({ onLoginSuccess }: AdminLoginScreenPro
             </div>
 
             <h2 className="font-serif font-bold text-2xl text-gray-800 tracking-tight mb-1">
-              Kashvi Command OS
-            </h2>
-            <p className="text-xs text-gray-500 mt-1.5 font-medium">
-              Staff Access & Duty Gateway
-            </p>
+  Kashvi Fashions Management System
+</h2>
+<p className="text-xs text-gray-500 mt-1.5 font-medium">
+  Employee Dashboard Portal
+</p>
             
             {/* Welcome Badge */}
             <div className="mt-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-100/80 border border-purple-200/50">

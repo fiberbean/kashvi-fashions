@@ -388,10 +388,10 @@ export default function AdminDashboard({
       .map(
         (item, idx) => `
       <tr style="border-bottom: 1px solid #e5e7eb; font-size: 12px;">
-        <td style="padding: 10px 12px; font-weight: bold; text-align: center; color: #0b3b2c;">#${idx + 1}</td>
+        <td style="padding: 10px 12px; font-weight: bold; text-align: center; color: #667eea;">#${idx + 1}</td>
         <td style="padding: 10px 12px; font-weight: 600; color: #111827;">${item.name}</td>
-        <td style="padding: 10px 12px; text-align: center; font-weight: bold; color: #ff4d6d;">${item.unitsSold} Units</td>
-        <td style="padding: 10px 12px; text-align: right; font-weight: bold; color: #0b3b2c;">₹${item.totalRevenue.toLocaleString('en-IN')}</td>
+        <td style="padding: 10px 12px; text-align: center; font-weight: bold; color: #ff6b6b;">${item.unitsSold} Units</td>
+        <td style="padding: 10px 12px; text-align: right; font-weight: bold; color: #667eea;">₹${item.totalRevenue.toLocaleString('en-IN')}</td>
       </tr>
     `
       )
@@ -401,7 +401,7 @@ export default function AdminDashboard({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Kashvi Command OS - Top Selling Items Report</title>
+          <title>Kashvi Fashions Management System - Top Selling Items Report</title>
           <style>
             @media print {
               body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -417,7 +417,7 @@ export default function AdminDashboard({
               display: flex;
               justify-content: space-between;
               align-items: center;
-              border-bottom: 2px solid #0b3b2c;
+              border-bottom: 2px solid #667eea;
               padding-bottom: 15px;
               margin-bottom: 20px;
             }
@@ -425,7 +425,7 @@ export default function AdminDashboard({
               font-family: serif;
               font-size: 22px;
               font-weight: 900;
-              color: #0b3b2c;
+              color: #667eea;
             }
             .sub {
               font-size: 11px;
@@ -451,7 +451,7 @@ export default function AdminDashboard({
         <body>
           <div class="header">
             <div>
-              <div class="logo">KASHVI STUDIO & COUTURE</div>
+              <div class="logo">KASHVI FASHIONS MANAGEMENT SYSTEM</div>
               <div class="sub">Top Selling Items Demand Report (${filterLabels[itemTimeFilter]})</div>
             </div>
             <div style="text-align: right; font-size: 11px; color: #4b5563;">
@@ -475,7 +475,7 @@ export default function AdminDashboard({
           </table>
 
           <div style="margin-top: 30px; border-top: 1px solid #e5e7eb; padding-top: 15px; font-size: 10px; color: #9ca3af; text-align: center;">
-            Kashvi Studio Operating System • Confidential Internal Sales Ledger
+            Kashvi Fashions Management System • Confidential Internal Sales Ledger
           </div>
 
           <script>
@@ -493,140 +493,96 @@ export default function AdminDashboard({
   };
 
   return (
-    <div className="space-y-4.5 animate-in fade-in duration-200 select-none font-sans">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-cyan-50 p-4 space-y-4.5 animate-in fade-in duration-200 select-none font-sans relative overflow-hidden">
+      {/* Animated Background Blobs */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+      </div>
+
       {!audioReady && (
         <div
           onClick={handleEnableAlerts}
-          className="bg-gradient-to-r from-amber-50 via-rose-50 to-amber-50 border border-amber-200 p-2.5 rounded-2xl flex items-center justify-between cursor-pointer hover:shadow-xs transition-all"
+          className="group relative bg-white/80 backdrop-blur-lg rounded-2xl p-4 border border-white/40 shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden"
         >
-          <div className="flex items-center gap-2 text-xs font-bold text-[#0b3b2c]">
-            <Volume2 className="w-4 h-4 text-[#ff4d6d] animate-bounce" />
-            <span>Click to test & allow Order Dispatch Bell Sound & Product Popups</span>
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-cyan-500/5 rounded-2xl"></div>
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-3 text-sm font-bold text-gray-700">
+              <Volume2 className="w-5 h-5 text-purple-600 animate-bounce" />
+              <span>Click to enable Order Dispatch Sound & Notifications 🔔</span>
+            </div>
+            <span className="text-xs font-bold bg-gradient-to-r from-purple-600 to-cyan-600 text-white px-4 py-1.5 rounded-full shadow-lg group-hover:scale-110 transition-transform">
+              Test Sound
+            </span>
           </div>
-          <span className="text-[10.5px] font-bold bg-[#0b3b2c] text-white px-3 py-1 rounded-full shadow-2xs">
-            Test Sound 🔔
-          </span>
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="bg-white rounded-xl p-3.5 border border-[#ffccd5] shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#ff4d6d]">
-              New Orders
-            </span>
-            <div className="w-6 h-6 rounded-lg bg-rose-50 text-[#ff4d6d] flex items-center justify-center">
-              <BellRing className="w-3 h-3" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'New Orders', value: newOrdersCount, icon: BellRing, color: 'from-rose-500 to-pink-500', bg: 'bg-rose-50' },
+          { label: "Today's Sales", value: `₹${todaySales.toLocaleString('en-IN')}`, icon: IndianRupee, color: 'from-green-500 to-teal-500', bg: 'bg-green-50' },
+          { label: 'In Carts', value: abandonedCarts.length, icon: ShoppingCart, color: 'from-amber-500 to-orange-500', bg: 'bg-amber-50' },
+          { label: 'Avg Basket', value: `₹${aov.toLocaleString('en-IN')}`, icon: Package, color: 'from-purple-500 to-cyan-500', bg: 'bg-purple-50' },
+        ].map((stat, idx) => (
+          <div key={idx} className="group relative bg-white/80 backdrop-blur-lg rounded-2xl p-5 border border-white/40 shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 overflow-hidden">
+            <div className={`absolute inset-0 bg-gradient-to-br ${stat.color} opacity-5 rounded-2xl`}></div>
+            <div className="relative flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">{stat.label}</p>
+                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+              </div>
+              <div className={`p-2.5 rounded-xl bg-gradient-to-br ${stat.color} shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                <stat.icon className="w-5 h-5 text-white" />
+              </div>
             </div>
           </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
-            <div className="text-xl font-bold text-[#ff4d6d] tracking-tight">
-              {newOrdersCount}
-            </div>
-            <span className="text-[9.5px] font-semibold text-neutral-500">
-              Awaiting Packing
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-3.5 border border-[#e2eae6] shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#4d6960]">
-              Today's Sales
-            </span>
-            <div className="w-6 h-6 rounded-lg bg-[#e4efe9] text-[#0b3b2c] flex items-center justify-center">
-              <IndianRupee className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
-            <div className="text-xl font-bold text-[#0b3b2c] tracking-tight">
-              ₹{todaySales.toLocaleString('en-IN')}
-            </div>
-            <span className="text-[9.5px] font-bold text-emerald-700">
-              Verified Today
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-3.5 border border-[#e2eae6] shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#4d6960]">
-              In Carts
-            </span>
-            <div className="w-6 h-6 rounded-lg bg-amber-50 text-[#c6933a] flex items-center justify-center">
-              <ShoppingCart className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
-            <div className="text-xl font-bold text-[#c6933a] tracking-tight">
-              {abandonedCarts.length} <span className="text-xs font-normal text-neutral-400">Users</span>
-            </div>
-            <span className="text-[9.5px] font-bold text-amber-700">
-              Recovery Leads
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl p-3.5 border border-[#e2eae6] shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#4d6960]">
-              Avg. Basket (AOV)
-            </span>
-            <div className="w-6 h-6 rounded-lg bg-[#f0f4f2] text-[#0b3b2c] flex items-center justify-center">
-              <Package className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="mt-1.5 flex items-baseline justify-between">
-            <div className="text-xl font-bold text-[#0b3b2c] tracking-tight">
-              ₹{aov.toLocaleString('en-IN')}
-            </div>
-            <span className="text-[9.5px] font-semibold text-neutral-500">
-              {totalOrdersToday} Placed
-            </span>
-          </div>
-        </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-[#edf2ef] flex items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 p-0.5 bg-[#f0f4f2] rounded-full">
+        <div className="lg:col-span-7 xl:col-span-8 group relative bg-white/80 backdrop-blur-lg rounded-2xl border border-white/40 shadow-xl hover:shadow-2xl transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-cyan-500/5 pointer-events-none"></div>
+          <div className="relative px-4 py-2.5 border-b border-white/30 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 p-0.5 bg-white/50 backdrop-blur-sm rounded-full">
               <button
                 type="button"
                 onClick={() => setTableTab('orders')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  tableTab === 'orders'
-                    ? 'bg-[#0b3b2c] text-white shadow-xs'
-                    : 'text-[#4d6960] hover:text-[#0b3b2c]'
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-2 group relative overflow-hidden ${
+                  tableTab === 'orders' 
+                    ? 'bg-gradient-to-r from-purple-600 to-cyan-600 text-white shadow-lg' 
+                    : 'bg-white/50 text-gray-600 hover:text-purple-600 hover:bg-purple-50'
                 }`}
               >
-                <ShoppingBag className="w-3 h-3" />
+                <ShoppingBag className="w-4 h-4" />
                 <span>Live Orders ({recentOrders.length})</span>
+                {tableTab === 'orders' && <div className="absolute inset-0 bg-gradient-to-r from-cyan-600 to-purple-600 opacity-20 blur-md"></div>}
               </button>
 
               <button
                 type="button"
                 onClick={() => setTableTab('abandoned')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                  tableTab === 'abandoned'
-                    ? 'bg-[#c6933a] text-white shadow-xs'
-                    : 'text-[#4d6960] hover:text-[#c6933a]'
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer flex items-center gap-2 group relative overflow-hidden ${
+                  tableTab === 'abandoned' 
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg' 
+                    : 'bg-white/50 text-gray-600 hover:text-amber-600 hover:bg-amber-50'
                 }`}
               >
-                <ShoppingCart className="w-3 h-3" />
+                <ShoppingCart className="w-4 h-4" />
                 <span>Abandoned ({abandonedCarts.length})</span>
+                {tableTab === 'abandoned' && <div className="absolute inset-0 bg-gradient-to-r from-orange-500 to-amber-500 opacity-20 blur-md"></div>}
               </button>
             </div>
 
-            <div className="flex items-center gap-1.5 text-[10px] text-neutral-500">
-              <span>Role: <strong className="uppercase text-[#0b3b2c]">{role}</strong></span>
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-500">
+              <span>Role: <strong className="uppercase text-gray-700">{role}</strong></span>
             </div>
           </div>
 
           {tableTab === 'orders' && (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto relative">
               <table className="w-full text-left text-xs font-sans">
-                <thead className="bg-[#fbfcfc] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                <thead className="bg-white/50 backdrop-blur-sm text-gray-500 uppercase text-[9px] font-bold tracking-wider border-b border-white/30">
                   <tr>
                     <th className="py-2.5 px-4">Order ID</th>
                     <th className="py-2.5 px-4">Customer</th>
@@ -636,16 +592,16 @@ export default function AdminDashboard({
                     <th className="py-2.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#edf2ef]">
+                <tbody className="divide-y divide-white/30">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-neutral-400 font-medium">
+                      <td colSpan={6} className="py-8 text-center text-gray-400 font-medium">
                         Syncing store orders...
                       </td>
                     </tr>
                   ) : recentOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-neutral-400 font-medium">
+                      <td colSpan={6} className="py-8 text-center text-gray-400 font-medium">
                         No orders placed yet.
                       </td>
                     </tr>
@@ -656,24 +612,23 @@ export default function AdminDashboard({
                         <tr
                           key={ord.id}
                           onClick={() => setSelectedOrder(ord)}
-                          className={`hover:bg-[#f4f7f5] transition-colors cursor-pointer group ${
-                            isNew ? 'bg-rose-50/20' : ''
-                          }`}
+                          className={`relative cursor-pointer transition-all duration-300 hover:bg-purple-50/50 hover:shadow-inner ${isNew ? 'bg-rose-50/30 hover:bg-rose-100/50' : ''}`}
                         >
-                          <td className="py-2.5 px-4 font-mono font-bold text-[#0c2b22] group-hover:text-[#ff4d6d]">
+                          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/0 via-purple-500/0 to-purple-500/0 group-hover:from-purple-500/5 group-hover:via-purple-500/2 group-hover:to-purple-500/5 transition-all duration-300"></div>
+                          <td className="py-2.5 px-4 font-mono font-bold text-gray-800 group-hover:text-purple-600 relative z-10">
                             <div className="flex items-center gap-1.5">
-                              {isNew && <span className="w-1.5 h-1.5 rounded-full bg-[#ff4d6d] animate-ping" />}
+                              {isNew && <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-ping"></span>}
                               <span>{ord.id}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 px-4">
-                            <div className="font-bold text-[#0c2b22] leading-tight">{ord.customer_name || 'Guest'}</div>
-                            <div className="text-[9.5px] text-neutral-400 font-mono">{ord.customer_phone}</div>
+                          <td className="py-2.5 px-4 relative z-10">
+                            <div className="font-bold text-gray-800 leading-tight">{ord.customer_name || 'Guest'}</div>
+                            <div className="text-[9.5px] text-gray-400 font-mono">{ord.customer_phone}</div>
                           </td>
-                          <td className="py-2.5 px-4 font-bold text-[#0b3b2c] text-xs">
+                          <td className="py-2.5 px-4 font-bold text-gray-800 text-xs relative z-10">
                             ₹{Number(ord.total_amount).toLocaleString('en-IN')}
                           </td>
-                          <td className="py-2.5 px-4">
+                          <td className="py-2.5 px-4 relative z-10">
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
                               ord.payment_status === 'paid'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -682,18 +637,18 @@ export default function AdminDashboard({
                               {ord.payment_status || 'PENDING'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-4">
+                          <td className="py-2.5 px-4 relative z-10">
                             <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold capitalize border ${
                               isNew
-                                ? 'bg-rose-100 text-[#ff4d6d] border-rose-200'
-                                : 'bg-[#f0f4f2] text-[#0b3b2c] border-[#dce6e1]'
+                                ? 'bg-rose-100 text-pink-600 border-rose-200'
+                                : 'bg-gray-50 text-gray-700 border-gray-200'
                             }`}>
                               {ord.order_status || 'New'}
                             </span>
                           </td>
-                          <td className="py-2.5 px-4 text-right">
-                            <div className="inline-flex items-center gap-1.5">
-                              <span className="text-[10.5px] font-bold text-[#0b3b2c] group-hover:text-[#ff4d6d]">
+                          <td className="py-2.5 px-4 text-right relative z-10">
+                            <div className="inline-flex items-center gap-2">
+                              <span className="text-[10.5px] font-bold text-gray-700 group-hover:text-purple-600">
                                 View
                               </span>
 
@@ -705,10 +660,10 @@ export default function AdminDashboard({
                                     setEditingOrderId(ord.id);
                                     setSelectedNewStatus(ord.order_status || 'new');
                                   }}
-                                  className="p-1 rounded-md hover:bg-neutral-200 text-neutral-500 transition-colors"
+                                  className="p-2 rounded-lg hover:bg-purple-100 text-gray-500 hover:text-purple-600 transition-all duration-300 group-hover:scale-110"
                                   title="Edit Status"
                                 >
-                                  <Edit2 className="w-3 h-3" />
+                                  <Edit2 className="w-4 h-4" />
                                 </button>
                               )}
 
@@ -716,10 +671,10 @@ export default function AdminDashboard({
                                 <button
                                   type="button"
                                   onClick={(e) => handleDeleteOrder(ord.id, e)}
-                                  className="p-1 rounded-md hover:bg-rose-100 text-rose-600 transition-colors"
+                                  className="p-2 rounded-lg hover:bg-rose-100 text-gray-500 hover:text-rose-600 transition-all duration-300 group-hover:scale-110"
                                   title="Delete Order"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               )}
                             </div>
@@ -734,9 +689,9 @@ export default function AdminDashboard({
           )}
 
           {tableTab === 'abandoned' && (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto relative">
               <table className="w-full text-left text-xs font-sans">
-                <thead className="bg-[#fbfcfc] text-[#809c93] uppercase text-[9px] font-bold tracking-wider border-b border-[#edf2ef]">
+                <thead className="bg-white/50 backdrop-blur-sm text-gray-500 uppercase text-[9px] font-bold tracking-wider border-b border-white/30">
                   <tr>
                     <th className="py-2.5 px-4">Cart ID</th>
                     <th className="py-2.5 px-4">Customer</th>
@@ -745,267 +700,6 @@ export default function AdminDashboard({
                     <th className="py-2.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#edf2ef]">
+                <tbody className="divide-y divide-white/30">
                   {abandonedCarts.map((cart) => (
-                    <tr key={cart.id} className="hover:bg-[#fcfaf4] transition-colors">
-                      <td className="py-2.5 px-4 font-mono font-bold text-[#0c2b22]">{cart.id}</td>
-                      <td className="py-2.5 px-4">
-                        <div className="font-bold text-[#0c2b22]">{cart.customer_name}</div>
-                        <div className="text-[9.5px] text-neutral-400 font-mono">{cart.customer_phone}</div>
-                      </td>
-                      <td className="py-2.5 px-4 text-[11px] text-neutral-700 truncate max-w-xs">
-                        {cart.items_preview}
-                      </td>
-                      <td className="py-2.5 px-4 font-bold text-[#c6933a]">
-                        ₹{cart.cart_value.toLocaleString('en-IN')}
-                      </td>
-                      <td className="py-2.5 px-4 text-right">
-                        <a
-                          href={`https://wa.me/91${cart.customer_phone.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(cart.customer_name)},%20we%20noticed%20you%20left%20items%20in%20your%20Kashvi%20cart!`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-xs transition-colors"
-                        >
-                          <MessageCircle className="w-3 h-3" />
-                          <span>Ping</span>
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-[#e2eae6] shadow-xs overflow-hidden flex flex-col">
-          <div className="px-3.5 py-2.5 border-b border-[#edf2ef] flex items-center justify-between bg-[#fbfcfc]">
-            <div className="flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-[#ff4d6d]" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#0b3b2c]">
-                Top Selling Items
-              </h3>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleDownloadPDF}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#0b3b2c] hover:bg-[#06231a] text-white text-[10px] font-bold shadow-2xs transition-all cursor-pointer active:scale-95"
-              title="Download Leaderboard PDF"
-            >
-              <Download className="w-3 h-3 text-[#e5c07b]" />
-              <span>PDF Report</span>
-            </button>
-          </div>
-
-          <div className="px-3.5 py-2 border-b border-[#edf2ef] bg-[#f8faf9] flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-[10px] text-neutral-500 font-semibold">
-              <Calendar className="w-3 h-3 text-[#c6933a]" />
-              <span>Timeframe:</span>
-            </div>
-
-            <select
-              value={itemTimeFilter}
-              onChange={(e) => setItemTimeFilter(e.target.value as TimeRangeFilter)}
-              className="px-2.5 py-1 rounded-lg border border-[#dce6e1] bg-white text-[10.5px] font-bold text-[#0b3b2c] outline-none cursor-pointer focus:border-[#0b3b2c] shadow-2xs"
-            >
-              <option value="today">Today (Ee Roju)</option>
-              <option value="yesterday">Yesterday (Ninna)</option>
-              <option value="3days">Last 3 Days</option>
-              <option value="1week">One Week (7 Days)</option>
-              <option value="half_month">Half Month (15 Days)</option>
-              <option value="full_month">Full Month (30 Days)</option>
-              <option value="3months">Last 3 Months (Quarter)</option>
-              <option value="half_year">Half Year (6 Months)</option>
-              <option value="year">Full Year (365 Days)</option>
-            </select>
-          </div>
-
-          <div className="divide-y divide-[#edf2ef] overflow-y-auto max-h-[420px] flex-1">
-            {topSellingItems.length === 0 ? (
-              <div className="p-8 text-center text-xs text-neutral-400 space-y-1">
-                <Package className="w-7 h-7 mx-auto text-neutral-300" />
-                <p>No sales recorded in this timeframe.</p>
-                <span className="text-[10px] text-neutral-400">Try changing the filter above.</span>
-              </div>
-            ) : (
-              topSellingItems.map((item, idx) => {
-                const isTop1 = idx === 0;
-                const isTop2 = idx === 1;
-                const isTop3 = idx === 2;
-
-                return (
-                  <div
-                    key={item.name + idx}
-                    className="p-3 hover:bg-[#f8faf9] transition-colors flex items-center justify-between gap-2.5 group"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div
-                        className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[10.5px] shrink-0 ${
-                          isTop1
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs'
-                            : isTop2
-                            ? 'bg-neutral-200 text-neutral-800'
-                            : isTop3
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-neutral-100 text-neutral-500'
-                        }`}
-                      >
-                        {isTop1 ? <Award className="w-3.5 h-3.5 text-amber-600" /> : `#${idx + 1}`}
-                      </div>
-
-                      {item.image && (
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-8 h-10 object-cover object-top rounded-md border border-neutral-200 shrink-0"
-                        />
-                      )}
-
-                      <div className="min-w-0">
-                        <h4 className="font-bold text-xs text-[#0c2b22] group-hover:text-[#ff4d6d] truncate leading-tight">
-                          {item.name}
-                        </h4>
-                        <div className="text-[9.5px] text-neutral-400 flex items-center gap-1.5 mt-0.5">
-                          <span>{item.ordersCount} checkout{item.ordersCount > 1 ? 's' : ''}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0">
-                      <div className="text-xs font-bold text-[#ff4d6d] font-mono">
-                        {item.unitsSold} {item.unitsSold === 1 ? 'Unit' : 'Units'}
-                      </div>
-                      <div className="text-[10px] font-bold text-[#0b3b2c]">
-                        ₹{item.totalRevenue.toLocaleString('en-IN')}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="px-3.5 py-2 border-t border-[#edf2ef] bg-[#fbfcfc] flex items-center justify-between text-[10px] text-neutral-500 font-semibold">
-            <span>Total Unique Products: <strong>{topSellingItems.length}</strong></span>
-            <span className="text-[#0b3b2c] font-bold">
-              Total Sold:{' '}
-              {topSellingItems.reduce((acc, curr) => acc + curr.unitsSold, 0)} Units
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {editingOrderId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
-          <div className="bg-white rounded-2xl p-5 max-w-xs w-full shadow-2xl border border-[#dce6e1] space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-xs text-[#0b3b2c]">Update Status</h3>
-              <button
-                type="button"
-                onClick={() => setEditingOrderId(null)}
-                className="p-1 text-neutral-400 hover:text-neutral-700"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <select
-              value={selectedNewStatus}
-              onChange={(e) => setSelectedNewStatus(e.target.value)}
-              className="w-full px-3 py-1.5 rounded-xl border border-[#dce6e1] text-xs font-semibold text-[#0c2b22] bg-[#f8faf9] outline-none"
-            >
-              <option value="new">New (Awaiting)</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="processing">Processing</option>
-              <option value="shipped">Shipped</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-
-            <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setEditingOrderId(null)}
-                className="px-3 py-1 rounded-full text-xs text-neutral-500 hover:bg-neutral-100"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleUpdateOrderStatus(editingOrderId)}
-                className="px-3.5 py-1 rounded-full text-xs font-bold bg-[#0b3b2c] text-white"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50 overflow-hidden animate-in fade-in duration-200">
-          <div
-            onClick={() => setSelectedOrder(null)}
-            className="absolute inset-0 bg-black/40 backdrop-blur-2xs cursor-pointer"
-          />
-
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-8">
-            <div className="w-screen max-w-sm bg-white shadow-2xl flex flex-col border-l border-[#dce6e1]">
-              <div className="p-4 border-b border-[#edf2ef] flex items-center justify-between bg-[#f8faf9]">
-                <div>
-                  <span className="text-[9px] font-bold text-[#809c93] uppercase tracking-wider block">
-                    Order Details
-                  </span>
-                  <h3 className="font-mono font-bold text-xs text-[#0b3b2c]">
-                    {selectedOrder.id}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedOrder(null)}
-                  className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs font-sans">
-                <div className="bg-[#f0f4f2] p-3 rounded-xl border border-[#dce6e1] space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-bold text-xs text-[#0c2b22]">{selectedOrder.customer_name}</div>
-                      <div className="text-neutral-500 text-[11px] font-mono">{selectedOrder.customer_phone}</div>
-                    </div>
-                    <a
-                      href={`https://wa.me/91${selectedOrder.customer_phone?.replace(/\D/g, '')}?text=Hi%20${encodeURIComponent(selectedOrder.customer_name || 'Customer')},%20thank%20you%20for%20your%20Kashvi%20order%20(${selectedOrder.id})!`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                      title="Direct WhatsApp Ping"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                  {selectedOrder.shipping_address && (
-                    <div className="pt-1.5 border-t border-[#dce6e1]/70 text-[10px] text-[#4d6960]">
-                      <strong>Address:</strong> {selectedOrder.shipping_address}
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-[#dce6e1] flex justify-between items-center">
-                  <span className="text-xs font-bold text-[#0b3b2c]">Total Paid:</span>
-                  <span className="text-sm font-bold text-[#0b3b2c]">
-                    ₹{Number(selectedOrder.total_amount).toLocaleString('en-IN')}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-    </div>
-  );
-}
+                    <tr key={cart.id} className="hover:bg-amber-50
