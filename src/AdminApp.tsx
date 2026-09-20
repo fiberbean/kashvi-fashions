@@ -122,7 +122,6 @@ export default function AdminApp() {
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-[#0a0e17] flex flex-col items-center justify-center text-xs font-mono text-[#00d9ff] relative overflow-hidden select-none">
-        {/* Ambient Neon Blobs */}
         <div className="absolute -top-32 -right-32 w-80 h-80 bg-[#6d4aff]/20 rounded-full blur-3xl animate-pulse pointer-events-none" />
         <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-[#00d9ff]/15 rounded-full blur-3xl animate-pulse delay-700 pointer-events-none" />
 
@@ -145,6 +144,12 @@ export default function AdminApp() {
     return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
+  // Safe helper to match sub-category key
+  const isSubCategorySection = 
+    selectedMasterSection === 'sub_category' || 
+    (selectedMasterSection as string) === 'sub-category' ||
+    (selectedMasterSection as string) === 'subcategory';
+
   return (
     <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
       {/* Global Background Neon Glow Matrix */}
@@ -153,7 +158,6 @@ export default function AdminApp() {
         <div className="absolute top-1/2 -left-48 w-[450px] h-[450px] bg-[#00d9ff]/10 rounded-full blur-[130px] animate-pulse delay-1000" />
         <div className="absolute -bottom-48 right-1/4 w-[450px] h-[450px] bg-[#ff6b6b]/10 rounded-full blur-[140px] animate-pulse delay-500" />
         
-        {/* Futuristic Subtle Grid Overlay */}
         <div 
           className="absolute inset-0 opacity-[0.03]" 
           style={{ 
@@ -173,7 +177,10 @@ export default function AdminApp() {
           onLogout={logoutSession}
           currentView={currentView}
           onViewChange={(view) => setCurrentView(view)}
-          onSelectMaster={(section) => setSelectedMasterSection(section)}
+          onSelectMaster={(section) => {
+            console.log('Selected Master Section:', section);
+            setSelectedMasterSection(section);
+          }}
         />
       </div>
 
@@ -183,7 +190,7 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
-      {/* Product Master Modal Popup (On Hold) */}
+      {/* Product Master Modal Popup */}
       {selectedMasterSection === 'product' && (
         <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
       )}
@@ -198,8 +205,8 @@ export default function AdminApp() {
         />
       )}
 
-      {/* Sub-Category Master Modal Popup */}
-      {selectedMasterSection === 'sub_category' && (
+      {/* Sub-Category Master Modal Popup (Handles all naming variants) */}
+      {isSubCategorySection && (
         <SubCategoryMasterModal
           onClose={() => setSelectedMasterSection(null)}
           onSuccess={() => {
