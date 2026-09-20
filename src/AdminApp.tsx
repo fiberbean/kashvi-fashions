@@ -123,7 +123,6 @@ export default function AdminApp() {
   if (checkingAuth) {
     return (
       <div className="min-h-screen bg-[#0a0e17] flex flex-col items-center justify-center text-xs font-mono text-[#00d9ff] relative overflow-hidden select-none">
-        {/* Ambient Neon Blobs */}
         <div className="absolute -top-32 -right-32 w-80 h-80 bg-[#6d4aff]/20 rounded-full blur-3xl animate-pulse pointer-events-none" />
         <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-[#00d9ff]/15 rounded-full blur-3xl animate-pulse delay-700 pointer-events-none" />
 
@@ -146,14 +145,22 @@ export default function AdminApp() {
     return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
+  // Robust Normalization for Section matching (Handles color, colors, colour, colours)
+  const normalizedSection = selectedMasterSection ? String(selectedMasterSection).toLowerCase().trim() : '';
+
+  const isCategorySection = normalizedSection === 'category' || normalizedSection === 'categories';
+
   const isSubCategorySection = 
-    selectedMasterSection === 'sub_category' || 
-    (selectedMasterSection as string) === 'sub-category' ||
-    (selectedMasterSection as string) === 'subcategory';
+    normalizedSection === 'sub_category' || 
+    normalizedSection === 'sub-category' || 
+    normalizedSection === 'subcategory' ||
+    normalizedSection === 'subcategories';
 
   const isColorSection = 
-    selectedMasterSection === 'color' || 
-    (selectedMasterSection as string) === 'colors';
+    normalizedSection === 'color' || 
+    normalizedSection === 'colors' || 
+    normalizedSection === 'colour' || 
+    normalizedSection === 'colours';
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
@@ -163,7 +170,6 @@ export default function AdminApp() {
         <div className="absolute top-1/2 -left-48 w-[450px] h-[450px] bg-[#00d9ff]/10 rounded-full blur-[130px] animate-pulse delay-1000" />
         <div className="absolute -bottom-48 right-1/4 w-[450px] h-[450px] bg-[#ff6b6b]/10 rounded-full blur-[140px] animate-pulse delay-500" />
         
-        {/* Futuristic Subtle Grid Overlay */}
         <div 
           className="absolute inset-0 opacity-[0.03]" 
           style={{ 
@@ -183,7 +189,9 @@ export default function AdminApp() {
           onLogout={logoutSession}
           currentView={currentView}
           onViewChange={(view) => setCurrentView(view)}
-          onSelectMaster={(section) => setSelectedMasterSection(section)}
+          onSelectMaster={(section) => {
+            setSelectedMasterSection(section);
+          }}
         />
       </div>
 
@@ -193,13 +201,13 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
-      {/* Product Master Modal Popup (On Hold) */}
-      {selectedMasterSection === 'product' && (
+      {/* Product Master Modal Popup */}
+      {normalizedSection === 'product' && (
         <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
       )}
 
       {/* Category Master Modal Popup */}
-      {selectedMasterSection === 'category' && (
+      {isCategorySection && (
         <CategoryMasterModal
           onClose={() => setSelectedMasterSection(null)}
           onSuccess={() => {
@@ -228,8 +236,8 @@ export default function AdminApp() {
         />
       )}
 
-      {/* Main Content Area */}
-      {!selectedMasterSection && (
+      {/* Main Content Area: If a master section was selected but none matched, it falls back to dashboard instead of blank screen */}
+      {(!selectedMasterSection || (!isCategorySection && !isSubCategorySection && !isColorSection && normalizedSection !== 'product')) && (
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-5 relative z-10">
           {currentView === 'dashboard' && (
             <AdminDashboard
