@@ -307,12 +307,8 @@ export default function CartDrawer() {
         whatsapp_number: prev.whatsapp_number || customer?.mobile || user?.user_metadata?.whatsapp_number || '',
         email: prev.email || customer?.email || user?.email || '',
       }));
-
-      if (isCartOpen && activeStep === 'cart' && cart.length > 0) {
-        setActiveStep('address');
-      }
     }
-  }, [user, customer, isCartOpen]);
+  }, [user, customer]);
 
   useEffect(() => {
     const fetchActiveGateway = async () => {
@@ -357,8 +353,8 @@ export default function CartDrawer() {
   }, [isCartOpen, isAddressModalOpen]);
 
   const handleCloseModal = () => {
+    setActiveStep('cart');
     if (activeStep === 'order_result') {
-      setActiveStep('cart');
       setConfirmedOrder(null);
       setPaymentResult(null);
     }
