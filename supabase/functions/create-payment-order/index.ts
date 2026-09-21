@@ -8,7 +8,6 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -17,15 +16,21 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
 
-    // Bypass RLS using Service Role to read gateway configs safely
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     const body = await req.json();
-    const { order_id, order_amount, customer_details, order_meta } = body;
 
-    if (!order_amount || order_amount <= 0) {
+    // Support both camelCase and snake_case inputs seamlessly
+    const rawOrderId = body.orderId || body.order_id;
+    const rawAmount = body.orderAmount || body.order_amount;
+    const rawPhone = body.customerPhone || body.customer_phone || body.customer_details?.customer_phone;
+    const rawName = body.customerName || body.customer_name || body.customer_details?.customer_name;
+    const rawEmail = body.customerEmail || body.customer_email || body.customer_details?.customer_email;
+
+    const finalAmount = Number(rawAmount);
+    if (!finalAmount || finalAmount <= 0) {
       return new Response(
-        JSON.stringify({ error: 'Valid order_amount is required' }),
+        JSON.stringify({ error: 'Valid order amount is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -51,46 +56,37 @@ serve(async (req) => {
 
     if (!appId || !secretKey) {
       return new Response(
-        JSON.stringify({ error: 'Cashfree App ID or Secret Key is missing.' }),
+        JSON.stringify({ error: 'Cashfree App ID or Secret Key is missing in database.' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Determine Base URL
     const baseUrl = env === 'production'
       ? 'https://api.cashfree.com/pg'
       : 'https://sandbox.cashfree.com/pg';
 
-    // Sanitize Customer Phone (must be 10 digits without +91)
-    let rawPhone = customer_details?.customer_phone || '9999999999';
-    rawPhone = String(rawPhone).replace(/\D/g, '');
-    if (rawPhone.length > 10) {
-      rawPhone = rawPhone.slice(-10);
-    }
-    if (rawPhone.length < 10) {
-      rawPhone = '9999999999';
-    }
+    // Sanitize phone to exact 10 digits
+    let sanitizedPhone = String(rawPhone || '9999999999').replace(/\D/g, '');
+    if (sanitizedPhone.length > 10) sanitizedPhone = sanitizedPhone.slice(-10);
+    if (sanitizedPhone.length < 10) sanitizedPhone = '9999999999';
 
-    const uniqueOrderId = order_id || `order_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const orderId = rawOrderId || `KFOD_${Date.now()}`;
 
-    // Prepare Cashfree API Payload
     const payload = {
-      order_id: uniqueOrderId,
-      order_amount: Number(order_amount),
+      order_id: orderId,
+      order_amount: finalAmount,
       order_currency: 'INR',
       customer_details: {
-        customer_id: customer_details?.customer_id || `cust_${Date.now()}`,
-        customer_name: customer_details?.customer_name || 'Customer',
-        customer_email: customer_details?.customer_email || 'customer@kashvifashions.in',
-        customer_phone: rawPhone,
+        customer_id: sanitizedPhone,
+        customer_name: rawName || 'Customer',
+        customer_email: rawEmail || 'customer@kashvifashions.in',
+        customer_phone: sanitizedPhone,
       },
       order_meta: {
-        return_url: order_meta?.return_url || `${req.headers.get('origin') || 'https://kashvifashions.in'}/#/order-status?order_id={order_id}`,
-        notify_url: order_meta?.notify_url || undefined,
+        return_url: `${req.headers.get('origin') || 'https://kashvifashions.in'}/#/orders?order_id={order_id}`,
       },
     };
 
-    // 2. Call Cashfree Create Order API
     const response = await fetch(`${baseUrl}/orders`, {
       method: 'POST',
       headers: {
@@ -105,41 +101,33 @@ serve(async (req) => {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('Cashfree PG Error Response:', data);
+      console.error('Cashfree API error:', data);
       return new Response(
-        JSON.stringify({
-          error: data.message || 'Failed to generate Cashfree payment session',
-          details: data,
-        }),
-        {
-          status: response.status,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
+        JSON.stringify({ error: data.message || 'Failed to create Cashfree order', details: data }),
+        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // 3. Return session and order details to Client
+    // Return both formats so frontend never breaks
     return new Response(
       JSON.stringify({
         success: true,
-        order_id: data.order_id,
-        payment_session_id: data.payment_session_id,
+        gateway: 'cashfree',
+        gatewayName: config.name || 'Cashfree Payments',
         environment: env,
+        orderId: data.order_id,
+        order_id: data.order_id,
+        paymentSessionId: data.payment_session_id,
+        payment_session_id: data.payment_session_id,
         cf_order: data,
       }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err: any) {
-    console.error('Edge Function Internal Error:', err);
+    console.error('Edge Function internal error:', err);
     return new Response(
       JSON.stringify({ error: err.message || 'Internal Edge Function Error' }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
