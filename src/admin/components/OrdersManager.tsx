@@ -82,6 +82,19 @@ export interface OrderRecord {
   is_refunded?: boolean;
 }
 
+interface StoreSettingsData {
+  store_name: string;
+  sender_address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  support_phone: string;
+  support_email: string;
+  whatsapp_no: string;
+  upi_payee_name?: string;
+  pipeline_pin?: string;
+}
+
 const PIPELINE_STAGES = [
   { key: 'new', label: 'New', order: 1, color: '#00d9ff' },
   { key: 'payment_check', label: 'Payment Check', order: 2, color: '#6d4aff' },
@@ -118,13 +131,24 @@ export default function OrdersManager() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Store Settings Cache State
+  const [storeConfig, setStoreConfig] = useState<StoreSettingsData>({
+    store_name: 'Kashvi Fashions',
+    sender_address: 'Main Road, Near Clock Tower',
+    city: 'Kakinada',
+    state: 'Andhra Pradesh',
+    pincode: '533001',
+    support_phone: '8686353574',
+    support_email: 'contact@kashvifashions.com',
+    whatsapp_no: '8686353574',
+    pipeline_pin: '1234'
+  });
+
   // Filters State
   const [currentStageFilter, setCurrentStageFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
-
-  const [masterPipelinePin, setMasterPipelinePin] = useState<string>('1234');
 
   // Modal States
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
@@ -155,18 +179,29 @@ export default function OrdersManager() {
   const [refundUtr, setRefundUtr] = useState<string>('');
 
   // Load Settings & Orders
-  const fetchStorePin = async () => {
+  const fetchStoreConfig = async () => {
     try {
       const { data } = await supabase
         .from('store_settings')
-        .select('pipeline_pin')
-        .eq('id', 'store_config')
-        .single();
-      if (data?.pipeline_pin) {
-        setMasterPipelinePin(String(data.pipeline_pin));
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+
+      if (data) {
+        setStoreConfig({
+          store_name: data.store_name || data.upi_payee_name || 'Kashvi Fashions',
+          sender_address: data.sender_address || 'Main Road, Near Clock Tower',
+          city: data.city || 'Kakinada',
+          state: data.state || 'Andhra Pradesh',
+          pincode: data.pincode || '533001',
+          support_phone: data.support_phone || data.whatsapp_no || '8686353574',
+          support_email: data.support_email || 'contact@kashvifashions.com',
+          whatsapp_no: data.whatsapp_no || '8686353574',
+          pipeline_pin: data.pipeline_pin || '1234'
+        });
       }
-    } catch {
-      // Default pin
+    } catch (err) {
+      console.warn('Store config load warning:', err);
     }
   };
 
@@ -190,7 +225,7 @@ export default function OrdersManager() {
   };
 
   useEffect(() => {
-    fetchStorePin();
+    fetchStoreConfig();
     loadOrders();
   }, []);
 
@@ -236,7 +271,6 @@ export default function OrdersManager() {
   const handleStageSelectChange = (orderId: string, targetStatus: string, currentStatus: string) => {
     if (currentStatus === targetStatus) return;
 
-    // Prompt user confirmation before changing status
     setConfirmStageChange({
       orderId,
       targetStatus,
@@ -281,7 +315,7 @@ export default function OrdersManager() {
 
   const handleVerifyPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (enteredPin.trim() !== masterPipelinePin) {
+    if (enteredPin.trim() !== storeConfig.pipeline_pin) {
       setPinError('❌ Incorrect Security PIN! Previous step transition denied.');
       return;
     }
@@ -334,7 +368,7 @@ export default function OrdersManager() {
     setRefundUtr('');
   };
 
-  // 4x6 Shipping Label Print
+  // SUPER STYLISH 4x6 SHIPPING LABEL (NO LOGO, NO GST)
   const printShippingLabel = (order: OrderRecord) => {
     const custName = order.customer?.name || order.customer_name || 'Customer';
     const custPhone = order.customer?.phone || order.customer_phone || '-';
@@ -344,58 +378,260 @@ export default function OrdersManager() {
     const tracking = order.shipping?.tracking_number || (order as any).tracking_number || order.id;
 
     const items = order.items || [];
-    const itemsSummary = items
-      .map((i) => `${i.name} x${i.quantity || i.qty || 1}`)
-      .join(', ');
+    const itemsListHtml = items
+      .map((i) => `<li><b>${i.name}</b> ${i.size ? `(${i.size})` : ''} ${i.color ? `[${i.color}]` : ''} &times; ${i.quantity || i.qty || 1}</li>`)
+      .join('');
 
-    const printWindow = window.open('', '_blank', 'width=600,height=800');
+    const storeTitle = (storeConfig.store_name || 'KASHVI FASHIONS').toUpperCase();
+    const returnAddressText = `${storeConfig.sender_address}, ${storeConfig.city}, ${storeConfig.state} - ${storeConfig.pincode}`;
+    const formattedDate = new Date(order.created_at).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    const printWindow = window.open('', '_blank', 'width=460,height=680');
     if (!printWindow) return;
 
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Shipping Label - ${order.id}</title>
+        <title>Shipping Label • ${order.id}</title>
+        <meta charset="utf-8" />
         <style>
-          body { font-family: Arial, sans-serif; padding: 20px; }
-          .shipping-label-card { width: 380px; border: 2px solid #000; padding: 16px; margin: 0 auto; box-sizing: border-box; }
-          .label-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #000; padding-bottom: 8px; font-size: 0.85rem; font-weight: bold; }
-          .label-section { border-bottom: 1px solid #000; padding: 8px 0; font-size: 0.85rem; line-height: 1.4; }
-          .label-barcode { text-align: center; font-family: monospace; font-size: 1.25rem; font-weight: bold; letter-spacing: 4px; padding: 8px 0; background: #f0f0f0; margin: 6px 0; }
+          @page {
+            size: 4in 6in;
+            margin: 0;
+          }
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #ffffff;
+            color: #0f172a;
+            padding: 14px;
+            font-size: 11px;
+            line-height: 1.35;
+          }
+          .label-wrapper {
+            width: 100%;
+            height: 100%;
+            border: 2px solid #0f172a;
+            border-radius: 12px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+          }
+          .header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 8px;
+          }
+          .brand-title {
+            font-size: 16px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            color: #0f172a;
+          }
+          .courier-badge {
+            background: #0f172a;
+            color: #ffffff;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 800;
+            font-size: 9px;
+            letter-spacing: 1px;
+          }
+          .barcode-box {
+            text-align: center;
+            margin: 10px 0;
+            background: #f8fafc;
+            border: 1px dashed #cbd5e1;
+            padding: 8px;
+            border-radius: 8px;
+          }
+          .barcode-bars {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 5px;
+            color: #0f172a;
+          }
+          .barcode-text {
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: bold;
+            color: #475569;
+            margin-top: 3px;
+          }
+          .dest-card {
+            background: #f1f5f9;
+            border-left: 4px solid #0f172a;
+            padding: 10px;
+            border-radius: 4px 8px 8px 4px;
+            margin-bottom: 8px;
+          }
+          .dest-tag {
+            font-size: 9px;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #475569;
+            display: block;
+            margin-bottom: 4px;
+          }
+          .dest-name {
+            font-size: 14px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 3px;
+          }
+          .dest-address {
+            font-size: 11px;
+            color: #1e293b;
+            line-height: 1.4;
+          }
+          .dest-pincode {
+            font-size: 14px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            margin-top: 4px;
+            display: inline-block;
+            background: #0f172a;
+            color: #ffffff;
+            padding: 2px 6px;
+            border-radius: 4px;
+          }
+          .items-preview-box {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 8px;
+            margin-bottom: 8px;
+            background: #ffffff;
+          }
+          .items-preview-box span {
+            font-size: 9px;
+            font-weight: 800;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: block;
+            margin-bottom: 3px;
+          }
+          .items-preview-box ul {
+            padding-left: 14px;
+            font-size: 10px;
+            color: #334155;
+          }
+          .order-meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            margin-bottom: 8px;
+          }
+          .meta-pill {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 5px 8px;
+            border-radius: 6px;
+          }
+          .meta-pill-label {
+            font-size: 8.5px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: bold;
+            display: block;
+          }
+          .meta-pill-val {
+            font-size: 11px;
+            font-weight: 800;
+            color: #0f172a;
+          }
+          .sender-box {
+            border-top: 1.5px solid #0f172a;
+            padding-top: 6px;
+            font-size: 9.5px;
+            color: #475569;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+          }
+          .sender-box strong {
+            color: #0f172a;
+          }
         </style>
       </head>
       <body onload="window.print(); window.close();">
-        <div class="shipping-label-card">
-          <div class="label-header">
-            <span>KASHVI FASHIONS</span>
-            <span>INDIA POST SPEED POST</span>
+        <div class="label-wrapper">
+          <div>
+            <div class="header-row">
+              <div>
+                <div class="brand-title">${storeTitle}</div>
+                <div style="font-size: 8.5px; color: #64748b; letter-spacing: 1px; font-weight: 600;">SPEED POST PRIORITY</div>
+              </div>
+              <div class="courier-badge">INDIA POST</div>
+            </div>
+
+            <div class="barcode-box">
+              <div class="barcode-bars">|||||| ${tracking} ||||||</div>
+              <div class="barcode-text">AWB: ${tracking}</div>
+            </div>
+
+            <div class="dest-card">
+              <span class="dest-tag">Deliver To Destination</span>
+              <div class="dest-name">${custName}</div>
+              <div class="dest-address">
+                ${shipAddr}<br/>
+                ${city ? `${city}, ` : ''}
+                Phone: <b>${custPhone}</b>
+              </div>
+              <div class="dest-pincode">PIN: ${shipPin}</div>
+            </div>
+
+            <div class="order-meta-grid">
+              <div class="meta-pill">
+                <span class="meta-pill-label">Order Ref & Date</span>
+                <span class="meta-pill-val">${order.id} • ${formattedDate}</span>
+              </div>
+              <div class="meta-pill">
+                <span class="meta-pill-label">Payment Mode</span>
+                <span class="meta-pill-val">${(order.payment_method || order.payment?.method || 'Prepaid').toUpperCase()} • ₹${Number(order.total || order.total_amount || 0).toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            <div class="items-preview-box">
+              <span>Package Contents (${items.length} item${items.length > 1 ? 's' : ''})</span>
+              <ul>
+                ${itemsListHtml || '<li>Standard Order Package</li>'}
+              </ul>
+            </div>
           </div>
-          <div class="label-barcode">||| ${tracking} |||</div>
-          <div class="label-section">
-            <strong>SHIP TO:</strong><br>
-            ${custName}<br>
-            ${shipAddr}<br>
-            ${city} ${shipPin ? '- ' + shipPin : ''}<br>
-            Phone: <strong>${custPhone}</strong>
-          </div>
-          <div class="label-section">
-            <strong>ORDER DETAILS:</strong><br>
-            Items: ${itemsSummary || 'Standard Order'}<br>
-            Payment: <strong>${order.payment_method || order.payment?.method || 'UPI'}</strong> | Total: <strong>₹ ${Number(order.total || order.total_amount || 0).toLocaleString('en-IN')}</strong>
-          </div>
-          <div class="label-section" style="border-bottom:none; font-size:0.75rem;">
-            <strong>RETURN / SENDER:</strong><br>
-            Kashvi Fashions, Main Road, Kakinada, AP - 533001
+
+          <div class="sender-box">
+            <div>
+              <strong>RETURN IF UNDELIVERED TO:</strong><br/>
+              <b>${storeTitle}</b>, ${returnAddressText}<br/>
+              Helpline: ${storeConfig.support_phone}
+            </div>
+            <div style="font-weight: 800; font-size: 10px; color: #0f172a;">PREPAID</div>
           </div>
         </div>
       </body>
       </html>
     `;
+
     printWindow.document.write(html);
     printWindow.document.close();
   };
 
-  // Full Tax Invoice Print
+  // SUPER STYLISH ORDER INVOICE (NO LOGO, NO GST)
   const handlePrintTaxInvoice = (order: OrderRecord) => {
     const custName = order.customer?.name || order.customer_name || 'Customer';
     const custPhone = order.customer?.phone || order.customer_phone || '';
@@ -407,6 +643,9 @@ export default function OrdersManager() {
       year: 'numeric'
     });
 
+    const storeTitle = (storeConfig.store_name || 'Kashvi Fashions').toUpperCase();
+    const returnAddressText = `${storeConfig.sender_address}, ${storeConfig.city}, ${storeConfig.state} - ${storeConfig.pincode}`;
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('Pop-up was blocked. Please allow pop-ups to print invoice.');
@@ -417,100 +656,283 @@ export default function OrdersManager() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Tax Invoice - ${order.id}</title>
+        <title>Order Receipt • ${order.id}</title>
+        <meta charset="utf-8" />
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1f2937; padding: 40px; margin: 0; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0b3b2c; padding-bottom: 20px; }
-          .brand { font-size: 24px; font-weight: 900; letter-spacing: 2px; color: #0b3b2c; }
-          .tagline { font-size: 10px; text-transform: uppercase; color: #b38728; letter-spacing: 1px; }
-          .invoice-title { font-size: 20px; font-weight: bold; text-align: right; color: #111; }
-          .meta-grid { display: flex; justify-content: space-between; margin: 30px 0; font-size: 12px; }
-          .meta-col { width: 45%; }
-          .meta-col strong { color: #111; font-size: 13px; }
-          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th { background: #f8fafc; text-align: left; padding: 12px 10px; font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; }
-          td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
-          .totals-table { width: 40%; margin-left: auto; margin-top: 20px; font-size: 12px; }
-          .totals-table td { border: none; padding: 6px 10px; }
-          .grand-total { font-weight: bold; font-size: 15px; color: #0b3b2c; border-top: 2px solid #0b3b2c !important; }
-          .footer { margin-top: 50px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px dashed #cbd5e1; padding-top: 20px; }
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+          }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+            padding: 40px;
+            font-size: 12px;
+            line-height: 1.5;
+          }
+          .invoice-card {
+            max-width: 780px;
+            margin: 0 auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            padding: 36px;
+            box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.05);
+          }
+          .top-brand-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #0f172a;
+            padding-bottom: 24px;
+          }
+          .brand-name {
+            font-size: 26px;
+            font-weight: 900;
+            letter-spacing: 3px;
+            color: #0f172a;
+          }
+          .brand-sub {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #64748b;
+            font-weight: 600;
+            margin-top: 3px;
+          }
+          .brand-contact {
+            font-size: 11px;
+            color: #475569;
+            margin-top: 6px;
+          }
+          .receipt-tag {
+            text-align: right;
+          }
+          .receipt-pill {
+            display: inline-block;
+            background: #0f172a;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            padding: 5px 12px;
+            border-radius: 9999px;
+            margin-bottom: 6px;
+          }
+          .invoice-num {
+            font-size: 18px;
+            font-weight: 800;
+            color: #0f172a;
+            font-family: monospace;
+          }
+          .invoice-date {
+            font-size: 11px;
+            color: #64748b;
+          }
+          .details-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin: 28px 0;
+          }
+          .info-block {
+            background: #f8fafc;
+            border: 1px solid #f1f5f9;
+            border-radius: 14px;
+            padding: 16px;
+          }
+          .info-block-title {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #64748b;
+            display: block;
+            margin-bottom: 8px;
+          }
+          .info-block-val {
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .info-block-text {
+            font-size: 11.5px;
+            color: #334155;
+            line-height: 1.5;
+            margin-top: 2px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+          }
+          th {
+            background: #f1f5f9;
+            color: #475569;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 800;
+            padding: 12px 14px;
+            text-align: left;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          th:first-child { border-top-left-radius: 10px; border-bottom-left-radius: 10px; }
+          th:last-child { border-top-right-radius: 10px; border-bottom-right-radius: 10px; text-align: right; }
+          td {
+            padding: 14px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 12px;
+          }
+          td:last-child {
+            text-align: right;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .item-name {
+            font-weight: 700;
+            color: #0f172a;
+            font-size: 12.5px;
+          }
+          .item-variant {
+            font-size: 10.5px;
+            color: #64748b;
+            margin-top: 2px;
+          }
+          .summary-card {
+            width: 50%;
+            margin-left: auto;
+            margin-top: 24px;
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 18px;
+            border: 1px solid #f1f5f9;
+          }
+          .summary-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #475569;
+            margin-bottom: 8px;
+          }
+          .summary-row.total {
+            border-top: 2px solid #0f172a;
+            padding-top: 10px;
+            margin-top: 10px;
+            margin-bottom: 0;
+            font-size: 16px;
+            font-weight: 900;
+            color: #0f172a;
+          }
+          .thank-you-footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px dashed #cbd5e1;
+            text-align: center;
+            color: #64748b;
+            font-size: 11px;
+          }
+          .thank-you-footer strong {
+            color: #0f172a;
+          }
         </style>
       </head>
       <body>
-        <div class="header">
-          <div>
-            <div class="brand">KASHVI FASHIONS</div>
-            <div class="tagline">Haute Couture & Royal Vault • Kakinada</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 5px;">GSTIN: 37AAEFK1234F1Z5 • Support: +91 8686353574</div>
+        <div class="invoice-card">
+          <div class="top-brand-bar">
+            <div>
+              <div class="brand-name">${storeTitle}</div>
+              <div class="brand-sub">Premium Customer Order Receipt</div>
+              <div class="brand-contact">
+                ${returnAddressText}<br/>
+                Helpline: +91 ${storeConfig.support_phone} • Email: ${storeConfig.support_email}
+              </div>
+            </div>
+            <div class="receipt-tag">
+              <span class="receipt-pill">ORDER RECEIPT</span>
+              <div class="invoice-num">${order.id}</div>
+              <div class="invoice-date">${formattedDate}</div>
+            </div>
           </div>
-          <div class="invoice-title">
-            TAX INVOICE
-            <div style="font-size: 12px; font-weight: normal; color: #64748b; margin-top: 4px;">Invoice ID: INV-${order.id}</div>
-            <div style="font-size: 12px; font-weight: normal; color: #64748b;">Date: ${formattedDate}</div>
+
+          <div class="details-grid">
+            <div class="info-block">
+              <span class="info-block-title">Customer & Delivery Details</span>
+              <div class="info-block-val">${custName}</div>
+              <div class="info-block-text">
+                WhatsApp: <b>${custPhone}</b><br/>
+                ${shipAddr}
+              </div>
+            </div>
+
+            <div class="info-block">
+              <span class="info-block-title">Payment & Fulfillment Details</span>
+              <div class="info-block-val">${(order.payment_method || order.payment?.method || 'Prepaid PG').toUpperCase()}</div>
+              <div class="info-block-text">
+                Status: <b style="color: #059669;">${(order.payment_status || order.payment?.status || 'Confirmed').toUpperCase()}</b><br/>
+                Payment Ref: <code>${order.payment_reference || order.id}</code><br/>
+                Logistics: India Post Speed Post
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div class="meta-grid">
-          <div class="meta-col">
-            <strong>Billed & Shipped To:</strong><br/>
-            ${custName}<br/>
-            WhatsApp: ${custPhone}<br/>
-            ${shipAddr}
+          <table>
+            <thead>
+              <tr>
+                <th>Product Description</th>
+                <th>Specifications</th>
+                <th style="text-align: center;">Qty</th>
+                <th style="text-align: right;">Unit Price</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items
+                .map((item) => {
+                  const q = item.quantity || item.qty || 1;
+                  return `
+                    <tr>
+                      <td>
+                        <div class="item-name">${item.name}</div>
+                      </td>
+                      <td>
+                        <div class="item-variant">
+                          ${item.size ? `Size: <b>${item.size}</b>` : ''} 
+                          ${item.color ? `• Color: <b>${item.color}</b>` : ''}
+                        </div>
+                      </td>
+                      <td style="text-align: center; font-weight: 700;">${q}</td>
+                      <td style="text-align: right; color: #475569;">₹${item.price.toLocaleString('en-IN')}</td>
+                      <td>₹${(item.price * q).toLocaleString('en-IN')}</td>
+                    </tr>
+                  `;
+                })
+                .join('')}
+            </tbody>
+          </table>
+
+          <div class="summary-card">
+            <div class="summary-row">
+              <span>Items Subtotal</span>
+              <span>₹${Number(order.subtotal || order.total || 0).toLocaleString('en-IN')}</span>
+            </div>
+            <div class="summary-row">
+              <span>Delivery Charges</span>
+              <span>₹${order.delivery_fee || order.shipping?.fee || 0}</span>
+            </div>
+            <div class="summary-row total">
+              <span>Total Paid Amount</span>
+              <span>₹${Number(order.total || order.total_amount || 0).toLocaleString('en-IN')}</span>
+            </div>
           </div>
-          <div class="meta-col" style="text-align: right;">
-            <strong>Payment Summary:</strong><br/>
-            Payment Mode: ${order.payment_method || order.payment?.method || 'Online PG'}<br/>
-            Status: ${order.payment_status || order.payment?.status || 'Confirmed'}<br/>
-            Reference: ${order.payment_reference || order.id}
+
+          <div class="thank-you-footer">
+            Thank you for shopping with <strong>${storeTitle}</strong>.<br/>
+            For support or tracking queries, reach us on WhatsApp at <strong>+91 ${storeConfig.whatsapp_no}</strong>.
           </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>Item Description</th>
-              <th>Specifications</th>
-              <th style="text-align: center;">Qty</th>
-              <th style="text-align: right;">Rate</th>
-              <th style="text-align: right;">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items
-              .map((item) => {
-                const q = item.quantity || item.qty || 1;
-                return `
-                  <tr>
-                    <td><strong>${item.name}</strong></td>
-                    <td>${item.size ? 'Size: ' + item.size : ''} ${item.color ? '• Color: ' + item.color : ''}</td>
-                    <td style="text-align: center;">${q}</td>
-                    <td style="text-align: right;">₹${item.price.toLocaleString('en-IN')}</td>
-                    <td style="text-align: right;">₹${(item.price * q).toLocaleString('en-IN')}</td>
-                  </tr>
-                `;
-              })
-              .join('')}
-          </tbody>
-        </table>
-
-        <table class="totals-table">
-          <tr>
-            <td>Subtotal:</td>
-            <td style="text-align: right;">₹${Number(order.subtotal || order.total || 0).toLocaleString('en-IN')}</td>
-          </tr>
-          <tr>
-            <td>Delivery / Shipping:</td>
-            <td style="text-align: right;">₹${order.delivery_fee || order.shipping?.fee || 0}</td>
-          </tr>
-          <tr class="grand-total">
-            <td>Total Paid:</td>
-            <td style="text-align: right;">₹${Number(order.total || order.total_amount || 0).toLocaleString('en-IN')}</td>
-          </tr>
-        </table>
-
-        <div class="footer">
-          This is a computer-generated invoice and requires no physical signature.<br/>
-          Thank you for choosing <strong>Kashvi Fashions</strong>.
         </div>
         <script>
           window.onload = function() { window.print(); }
@@ -537,7 +959,7 @@ export default function OrdersManager() {
     }
 
     const text = encodeURIComponent(
-      `Hello ${custName},\n\n*Kashvi Fashions* Order Update:\n\n📦 *Order ID:* ${order.id}\n📊 *Status:* ${formatStatusName(order.status || order.order_status)}\n💰 *Total:* ₹ ${Number(order.total || order.total_amount || 0).toLocaleString('en-IN')}${trackingMsg}\n\nThank you for shopping with us!`
+      `Hello ${custName},\n\n*${storeConfig.store_name || 'Kashvi Fashions'}* Order Update:\n\n📦 *Order ID:* ${order.id}\n📊 *Status:* ${formatStatusName(order.status || order.order_status)}\n💰 *Total:* ₹ ${Number(order.total || order.total_amount || 0).toLocaleString('en-IN')}${trackingMsg}\n\nThank you for shopping with us!`
     );
     window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
   };
@@ -586,7 +1008,6 @@ export default function OrdersManager() {
   const filteredOrders = useMemo(() => {
     let list = orders;
 
-    // 1. Pipeline Stage Tab
     if (currentStageFilter !== 'all') {
       list = list.filter((o) => {
         const st = (o.status || o.order_status || '').toLowerCase();
@@ -594,7 +1015,6 @@ export default function OrdersManager() {
       });
     }
 
-    // 2. Payment Status Filter
     if (paymentFilter !== 'all') {
       list = list.filter((o) => {
         const payStatus = (o.payment_status || o.payment?.status || '').toLowerCase();
@@ -605,7 +1025,6 @@ export default function OrdersManager() {
       });
     }
 
-    // 3. Date Range Filter
     if (dateFilter !== 'all') {
       const now = Date.now();
       list = list.filter((o) => {
@@ -618,7 +1037,6 @@ export default function OrdersManager() {
       });
     }
 
-    // 4. Search Filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((o) => {
@@ -654,12 +1072,11 @@ export default function OrdersManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              8-Stage Dispatch Pipeline • Security PIN Rollback • India Post Speed Post
+              {storeConfig.store_name} • 8-Stage Dispatch Pipeline • India Post Speed Post
             </span>
           </div>
         </div>
 
-        {/* Global Search & Export Buttons */}
         <div className="flex items-center gap-2.5 flex-1 max-w-lg justify-end">
           <div className="relative flex-1 max-w-xs">
             <input
@@ -696,7 +1113,6 @@ export default function OrdersManager() {
       {/* 2. FINE-TUNING FILTER CONTROL BAR */}
       <div className="p-3 rounded-2xl bg-[#0a0e17]/80 border border-white/10 flex flex-wrap items-center justify-between gap-3 text-[11px]">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Date Filter */}
           <div className="flex items-center gap-1.5 bg-[#101628] border border-white/10 rounded-xl px-2.5 py-1">
             <Calendar className="w-3 h-3 text-[#00d9ff]" />
             <select
@@ -711,7 +1127,6 @@ export default function OrdersManager() {
             </select>
           </div>
 
-          {/* Payment Status Filter */}
           <div className="flex items-center gap-1.5 bg-[#101628] border border-white/10 rounded-xl px-2.5 py-1">
             <CreditCard className="w-3 h-3 text-[#00ff9d]" />
             <select
@@ -823,7 +1238,6 @@ export default function OrdersManager() {
 
                   return (
                     <tr key={order.id} className="hover:bg-white/[0.02] transition-colors">
-                      {/* Order ID & Date */}
                       <td className="p-3.5">
                         <span className="font-mono font-bold text-white text-[11px] block">
                           {order.id}
@@ -838,7 +1252,6 @@ export default function OrdersManager() {
                         </span>
                       </td>
 
-                      {/* Customer Info */}
                       <td className="p-3.5">
                         <span className="font-bold text-white block">
                           {custName}
@@ -849,7 +1262,6 @@ export default function OrdersManager() {
                         </span>
                       </td>
 
-                      {/* Items Count & First Item Preview */}
                       <td className="p-3.5">
                         <span className="font-mono font-bold text-[#00d9ff] text-[11px] block">
                           {items.length} Item{items.length > 1 ? 's' : ''}
@@ -861,7 +1273,6 @@ export default function OrdersManager() {
                         )}
                       </td>
 
-                      {/* Amount & Payment */}
                       <td className="p-3.5">
                         <span className="font-mono font-bold text-[#00ff9d] text-[11px] block">
                           ₹ {Number(order.total || order.total_amount || 0).toLocaleString('en-IN')}
@@ -871,7 +1282,6 @@ export default function OrdersManager() {
                         </span>
                       </td>
 
-                      {/* Current Stage Badge with Tracking note */}
                       <td className="p-3.5">
                         <span className="px-2.5 py-1 rounded-xl text-[9.5px] font-mono font-bold border border-white/10 bg-white/5 text-white inline-block">
                           {formatStatusName(currentStatus)}
@@ -883,7 +1293,6 @@ export default function OrdersManager() {
                         )}
                       </td>
 
-                      {/* Pipeline Stage Selector with Confirmation trigger */}
                       <td className="p-3.5">
                         <select
                           value={currentStatus}
@@ -899,7 +1308,6 @@ export default function OrdersManager() {
                         </select>
                       </td>
 
-                      {/* Row Action Buttons */}
                       <td className="p-3.5 text-right">
                         <div className="inline-flex items-center gap-1.5">
                           <button
@@ -1164,7 +1572,7 @@ export default function OrdersManager() {
                   className="px-3.5 py-2 bg-white/10 hover:bg-white/15 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <FileText className="w-3.5 h-3.5 text-[#00d9ff]" />
-                  <span>Tax Invoice</span>
+                  <span>Order Receipt</span>
                 </button>
                 <button
                   type="button"
