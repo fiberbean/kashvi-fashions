@@ -15,6 +15,7 @@ import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
 import ColorMasterModal from './admin/components/modals/ColorMasterModal';
 import SizeMasterModal from './admin/components/modals/SizeMasterModal';
+import SupplierMasterModal from './admin/components/modals/SupplierMasterModal';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
 export type AdminViewType = 
@@ -172,6 +173,7 @@ export default function AdminApp() {
     normalizedSection === 'colour' || 
     normalizedSection === 'colours';
   const isSizeSection = normalizedSection === 'size' || normalizedSection === 'sizes';
+  const isSupplierSection = normalizedSection === 'supplier' || normalizedSection === 'suppliers';
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
@@ -217,6 +219,13 @@ export default function AdminApp() {
         onDismiss={handleDismissAlert}
       />
 
+      {/* Masters Modal Popups */}
+      {isSupplierSection && (
+        <SupplierMasterModal
+          onClose={() => setSelectedMasterSection(null)}
+          onSuccess={() => handleManualSync()}
+        />
+      )}
       {isCategorySection && (
         <CategoryMasterModal
           onClose={() => setSelectedMasterSection(null)}
@@ -246,7 +255,8 @@ export default function AdminApp() {
         !isCategorySection && 
         !isSubCategorySection && 
         !isColorSection && 
-        !isSizeSection
+        !isSizeSection &&
+        !isSupplierSection
       )) && (
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-5 relative z-10">
           {currentView === 'dashboard' && (
@@ -269,7 +279,6 @@ export default function AdminApp() {
             <ProductMasterManager />
           )}
 
-          {/* Full Purchase Inward Deck */}
           {currentView === 'purchase' && (
             <PurchaseManager />
           )}

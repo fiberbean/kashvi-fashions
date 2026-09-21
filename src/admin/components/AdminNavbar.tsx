@@ -17,12 +17,13 @@ import {
   ShoppingCart,
   Receipt,
   BarChart3,
-  Boxes
+  Boxes,
+  Building2
 } from 'lucide-react';
 import { AdminStaffUser } from '../types';
 import { AdminViewType } from '../../AdminApp';
 
-export type MasterSectionType = 'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics';
+export type MasterSectionType = 'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics' | 'supplier';
 
 interface AdminNavbarProps {
   unreadCount: number;
@@ -147,7 +148,6 @@ export default function AdminNavbar({
               <span>Orders</span>
             </button>
 
-            {/* Inventory Navigation Tab */}
             <button
               type="button"
               onClick={() => handleSelectView('inventory')}
@@ -213,6 +213,7 @@ export default function AdminNavbar({
               <span>Reports</span>
             </button>
 
+            {/* Masters Floating Dropdown Menu */}
             <div className="relative shrink-0 z-[100]">
               <button
                 type="button"
@@ -237,6 +238,14 @@ export default function AdminNavbar({
                   >
                     <Package className="w-4 h-4 text-[#6d4aff] group-hover:text-[#00d9ff] transition-colors" />
                     <span className="font-semibold">Product Master</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMasterClick('supplier')}
+                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
+                  >
+                    <Building2 className="w-4 h-4 text-[#ffa500] group-hover:text-[#00ff9d] transition-colors" />
+                    <span className="font-semibold">Supplier Master</span>
                   </button>
                   <button
                     type="button"

@@ -5,24 +5,38 @@ import {
   Search,
   RefreshCw,
   Loader2,
-  Calendar,
-  IndianRupee,
-  FileText,
   Trash2,
   X,
   PackageCheck,
-  Building,
-  Check
+  Check,
+  Building2,
+  BookOpen,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Phone,
+  MapPin,
+  IndianRupee
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+
+interface SupplierRecord {
+  id: string;
+  name: string;
+  phone?: string | null;
+  city?: string | null;
+  gstin?: string | null;
+  balance_due: number;
+}
 
 interface PurchaseRecord {
   id: string;
   invoice_no: string;
+  supplier_id?: string | null;
   supplier_name: string;
   purchase_date: string;
   total_amount: number;
-  tax_amount: number;
+  paid_amount: number;
+  balance_amount: number;
   payment_status: string;
   notes?: string | null;
   created_at: string;
@@ -38,27 +52,48 @@ interface InwardItemInput {
   selling_price: number;
 }
 
+interface LedgerEntry {
+  id: string;
+  supplier_id: string;
+  purchase_id?: string | null;
+  transaction_type: string;
+  amount: number;
+  balance_after: number;
+  description?: string | null;
+  created_at: string;
+}
+
 export default function PurchaseManager() {
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
   const [productsList, setProductsList] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // New Purchase Inward Modal State
+  // Purchase Modal State
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
+  // Supplier Ledger Modal State
+  const [selectedSupplierForLedger, setSelectedSupplierForLedger] = useState<SupplierRecord | null>(null);
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [loadingLedger, setLoadingLedger] = useState<boolean>(false);
+
+  // Quick Add Supplier Modal State inside form
+  const [isAddingSupplier, setIsAddingSupplier] = useState<boolean>(false);
+  const [newSuppName, setNewSuppName] = useState<string>('');
+  const [newSuppPhone, setNewSuppPhone] = useState<string>('');
+  const [newSuppCity, setNewSuppCity] = useState<string>('');
+
   // Form State
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [invoiceNo, setInvoiceNo] = useState<string>('');
-  const [supplierName, setSupplierName] = useState<string>('');
   const [purchaseDate, setPurchaseDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [paymentStatus, setPaymentStatus] = useState<string>('paid');
+  const [paidAmount, setPaidAmount] = useState<number | string>(0);
   const [notes, setNotes] = useState<string>('');
 
-  // Line items state
+  // Line items
   const [items, setItems] = useState<InwardItemInput[]>([]);
-
-  // Item row staging
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
@@ -66,19 +101,20 @@ export default function PurchaseManager() {
   const [cost, setCost] = useState<number>(0);
   const [sellingPrice, setSellingPrice] = useState<number>(0);
 
-  // Load Past Purchases and Products Catalog
   const loadData = async () => {
     setLoading(true);
     try {
-      const [purchRes, prodRes] = await Promise.all([
+      const [purchRes, suppRes, prodRes] = await Promise.all([
         supabase.from('purchases').select('*').order('created_at', { ascending: false }),
+        supabase.from('suppliers').select('*').order('name', { ascending: true }),
         supabase.from('products').select('id, name, variants, colour, size, cost_price, selling_price')
       ]);
 
       if (purchRes.data) setPurchases(purchRes.data);
+      if (suppRes.data) setSuppliers(suppRes.data);
       if (prodRes.data) setProductsList(prodRes.data);
     } catch (err) {
-      console.error('Failed to load purchases:', err);
+      console.error('Failed to load purchase & supplier data:', err);
     } finally {
       setLoading(false);
     }
@@ -88,7 +124,7 @@ export default function PurchaseManager() {
     loadData();
   }, []);
 
-  // Selected product details for variant selector
+  // Product Selection Handlers
   const activeProduct = useMemo(() => {
     return productsList.find((p) => p.id === selectedProductId);
   }, [productsList, selectedProductId]);
@@ -114,7 +150,6 @@ export default function PurchaseManager() {
     }
   }, [activeProduct, availableColors, availableSizes]);
 
-  // Add Item to Staging List
   const handleAddLineItem = () => {
     if (!activeProduct) return;
     if (qty <= 0) {
@@ -146,16 +181,80 @@ export default function PurchaseManager() {
     return items.reduce((sum, it) => sum + it.quantity * it.unit_cost, 0);
   }, [items]);
 
-  // Save Purchase Inward & Auto-Update Inventory
+  const calculatedBalanceDue = useMemo(() => {
+    const paid = Number(paidAmount) || 0;
+    return Math.max(0, totalInvoiceCost - paid);
+  }, [totalInvoiceCost, paidAmount]);
+
+  // Quick Create Supplier
+  const handleCreateSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSuppName.trim()) return;
+
+    const suppId = `supp_${Date.now()}`;
+    const newSupp = {
+      id: suppId,
+      name: newSuppName.trim(),
+      phone: newSuppPhone.trim() || null,
+      city: newSuppCity.trim() || null,
+      balance_due: 0
+    };
+
+    try {
+      const { error } = await supabase.from('suppliers').insert([newSupp]);
+      if (error) throw error;
+
+      setSuppliers((prev) => [...prev, newSupp]);
+      setSelectedSupplierId(suppId);
+      setIsAddingSupplier(false);
+      setNewSuppName('');
+      setNewSuppPhone('');
+      setNewSuppCity('');
+    } catch (err: any) {
+      alert('Failed to add supplier: ' + err.message);
+    }
+  };
+
+  // View Supplier Ledger History
+  const handleOpenLedger = async (supp: SupplierRecord) => {
+    setSelectedSupplierForLedger(supp);
+    setLoadingLedger(true);
+    try {
+      const { data, error } = await supabase
+        .from('supplier_ledger')
+        .select('*')
+        .eq('supplier_id', supp.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setLedgerEntries(data || []);
+    } catch (err: any) {
+      console.error('Failed to load ledger:', err);
+    } finally {
+      setLoadingLedger(false);
+    }
+  };
+
+  // Save Purchase and Post to Supplier Ledger
   const handleSavePurchaseInward = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedSupplierId) {
+      alert('Please select or create a supplier.');
+      return;
+    }
     if (items.length === 0) {
       alert('Please add at least one line item to this purchase inward.');
       return;
     }
 
+    const supplierObj = suppliers.find((s) => s.id === selectedSupplierId);
+    if (!supplierObj) return;
+
     setSubmitting(true);
     const purchaseId = `pur_${Date.now()}`;
+    const paid = Number(paidAmount) || 0;
+    const balance = calculatedBalanceDue;
+    const paymentStatus = balance === 0 ? 'paid' : paid > 0 ? 'partial' : 'pending';
 
     try {
       // 1. Insert Master Purchase Record
@@ -163,15 +262,16 @@ export default function PurchaseManager() {
         {
           id: purchaseId,
           invoice_no: invoiceNo.trim() || `INV-${Date.now().toString().slice(-6)}`,
-          supplier_name: supplierName.trim(),
+          supplier_id: supplierObj.id,
+          supplier_name: supplierObj.name,
           purchase_date: purchaseDate,
           total_amount: totalInvoiceCost,
-          tax_amount: 0,
+          paid_amount: paid,
+          balance_amount: balance,
           payment_status: paymentStatus,
           notes: notes.trim() || null
         }
       ]);
-
       if (purErr) throw purErr;
 
       // 2. Insert Purchase Line Items
@@ -186,11 +286,10 @@ export default function PurchaseManager() {
         selling_price: it.selling_price,
         total_cost: it.quantity * it.unit_cost
       }));
-
       const { error: linesErr } = await supabase.from('purchase_items').insert(lineItemPayloads);
       if (linesErr) throw linesErr;
 
-      // 3. Atomically Update/Upsert Inventory Stock
+      // 3. Atomically Update Inventory Stock
       for (const it of items) {
         const { data: existInv } = await supabase
           .from('inventory')
@@ -221,20 +320,52 @@ export default function PurchaseManager() {
           ]);
         }
 
-        // Also update product cost price if provided
         if (it.unit_cost > 0) {
-          await supabase
-            .from('products')
-            .update({ cost_price: it.unit_cost })
-            .eq('id', it.product_id);
+          await supabase.from('products').update({ cost_price: it.unit_cost }).eq('id', it.product_id);
         }
       }
 
-      alert('Purchase invoice saved and inventory stock successfully incremented!');
+      // 4. Update Supplier Balance & Post to Supplier Ledger
+      const newSupplierBalance = (supplierObj.balance_due || 0) + balance;
+      await supabase
+        .from('suppliers')
+        .update({ balance_due: newSupplierBalance })
+        .eq('id', supplierObj.id);
+
+      // Ledger Entry: Bill Inward
+      await supabase.from('supplier_ledger').insert([
+        {
+          id: `led_${Date.now()}_bill`,
+          supplier_id: supplierObj.id,
+          purchase_id: purchaseId,
+          transaction_type: 'BILL',
+          amount: totalInvoiceCost,
+          balance_after: (supplierObj.balance_due || 0) + totalInvoiceCost,
+          description: `Purchase Inward Bill #${invoiceNo || purchaseId}`
+        }
+      ]);
+
+      // Ledger Entry: Paid Amount (if paid > 0)
+      if (paid > 0) {
+        await supabase.from('supplier_ledger').insert([
+          {
+            id: `led_${Date.now()}_pay`,
+            supplier_id: supplierObj.id,
+            purchase_id: purchaseId,
+            transaction_type: 'PAYMENT',
+            amount: paid,
+            balance_after: newSupplierBalance,
+            description: `Payment applied for Invoice #${invoiceNo || purchaseId}`
+          }
+        ]);
+      }
+
+      alert('Purchase bill inwarded and posted to Supplier Ledger successfully!');
       setIsModalOpen(false);
       setItems([]);
       setInvoiceNo('');
-      setSupplierName('');
+      setSelectedSupplierId('');
+      setPaidAmount(0);
       setNotes('');
       loadData();
     } catch (err: any) {
@@ -265,13 +396,13 @@ export default function PurchaseManager() {
           </div>
           <div>
             <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
-              <span>Purchase & Stock Inward Hub</span>
+              <span>Purchase Hub & Supplier Ledger</span>
               <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/40 text-[9.5px] font-mono">
                 {purchases.length} Invoices
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Manage Vendor Bills, Bulk Variant Stock Inwards & Cost Ledgers
+              Vendor Invoices, Stock Inward & Supplier Ledger Balances
             </span>
           </div>
         </div>
@@ -297,7 +428,45 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 2. Search Controls */}
+      {/* 2. Registered Suppliers Ledger Quick Bar */}
+      <div className="p-3.5 rounded-2xl bg-[#0a0e17]/80 border border-white/10 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] flex items-center gap-1.5 uppercase">
+            <Building2 className="w-3.5 h-3.5" /> Registered Suppliers & Active Ledger Balances ({suppliers.length})
+          </span>
+          <span className="text-[9px] text-[#8b9bb4]">Click any supplier to view complete statement</span>
+        </div>
+
+        <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+          {suppliers.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => handleOpenLedger(s)}
+              className="px-3 py-2 rounded-xl bg-[#101628] border border-white/10 hover:border-[#00d9ff]/50 text-left shrink-0 transition-all cursor-pointer group"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-white group-hover:text-[#00d9ff] text-[11px] truncate max-w-[130px]">
+                  {s.name}
+                </span>
+                <BookOpen className="w-3 h-3 text-[#8b9bb4] group-hover:text-[#00d9ff]" />
+              </div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[9px] font-mono text-[#8b9bb4]">{s.city || 'Vendor'}</span>
+                <span
+                  className={`text-[9.5px] font-mono font-bold ${
+                    s.balance_due > 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'
+                  }`}
+                >
+                  Due: ₹{Number(s.balance_due || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 3. Search Controls */}
       <div className="p-3 rounded-2xl bg-[#0a0e17]/80 border border-white/10 flex items-center justify-between gap-3">
         <div className="relative flex-1 max-w-sm">
           <input
@@ -311,7 +480,7 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 3. Invoices Table */}
+      {/* 4. Invoices Table */}
       <div className="rounded-3xl bg-[#101628]/95 border border-white/10 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -321,69 +490,92 @@ export default function PurchaseManager() {
                 <th className="p-3.5">Supplier Name</th>
                 <th className="p-3.5">Date</th>
                 <th className="p-3.5">Total Amount</th>
+                <th className="p-3.5">Paid Amount</th>
+                <th className="p-3.5">Balance Due</th>
                 <th className="p-3.5 text-center">Status</th>
-                <th className="p-3.5">Notes</th>
+                <th className="p-3.5 text-right">Ledger</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[#8b9bb4]">
+                  <td colSpan={8} className="p-8 text-center text-[#8b9bb4]">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#ffa500] mb-2" />
                     Loading purchase history...
                   </td>
                 </tr>
               ) : filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[#8b9bb4] italic">
+                  <td colSpan={8} className="p-8 text-center text-[#8b9bb4] italic">
                     No purchase inward invoices recorded yet. Click &quot;New Purchase Inward&quot; to add stock.
                   </td>
                 </tr>
               ) : (
-                filteredPurchases.map((p) => (
-                  <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="p-3.5">
-                      <span className="font-mono font-extrabold text-[#00ff9d] text-xs">
-                        {p.invoice_no}
-                      </span>
-                    </td>
-                    <td className="p-3.5">
-                      <span className="font-bold text-white text-xs">{p.supplier_name}</span>
-                    </td>
-                    <td className="p-3.5 font-mono text-[#8b9bb4]">{p.purchase_date}</td>
-                    <td className="p-3.5 font-mono font-extrabold text-white text-xs">
-                      ₹{Number(p.total_amount || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td className="p-3.5 text-center">
-                      <span
-                        className={`inline-block px-2.5 py-0.5 rounded-full font-mono font-bold text-[9px] uppercase border ${
-                          p.payment_status === 'paid'
-                            ? 'bg-[#00ff9d]/15 text-[#00ff9d] border-[#00ff9d]/30'
-                            : 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/30'
-                        }`}
-                      >
-                        {p.payment_status}
-                      </span>
-                    </td>
-                    <td className="p-3.5 text-[#8b9bb4] text-[10px] max-w-xs truncate">
-                      {p.notes || '—'}
-                    </td>
-                  </tr>
-                ))
+                filteredPurchases.map((p) => {
+                  const supp = suppliers.find((s) => s.id === p.supplier_id);
+                  return (
+                    <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="p-3.5">
+                        <span className="font-mono font-extrabold text-[#00ff9d] text-xs">
+                          {p.invoice_no}
+                        </span>
+                      </td>
+                      <td className="p-3.5">
+                        <span className="font-bold text-white text-xs block">{p.supplier_name}</span>
+                        {supp?.city && <span className="text-[9px] text-[#8b9bb4]">{supp.city}</span>}
+                      </td>
+                      <td className="p-3.5 font-mono text-[#8b9bb4]">{p.purchase_date}</td>
+                      <td className="p-3.5 font-mono font-extrabold text-white text-xs">
+                        ₹{Number(p.total_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="p-3.5 font-mono font-semibold text-[#00ff9d] text-xs">
+                        ₹{Number(p.paid_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="p-3.5 font-mono font-extrabold text-[#ff6b6b] text-xs">
+                        ₹{Number(p.balance_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="p-3.5 text-center">
+                        <span
+                          className={`inline-block px-2.5 py-0.5 rounded-full font-mono font-bold text-[9px] uppercase border ${
+                            p.payment_status === 'paid'
+                              ? 'bg-[#00ff9d]/15 text-[#00ff9d] border-[#00ff9d]/30'
+                              : p.payment_status === 'partial'
+                              ? 'bg-[#00d9ff]/15 text-[#00d9ff] border-[#00d9ff]/30'
+                              : 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/30'
+                          }`}
+                        >
+                          {p.payment_status}
+                        </span>
+                      </td>
+                      <td className="p-3.5 text-right">
+                        {supp && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenLedger(supp)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer"
+                            title="Open Supplier Statement"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 4. NEW PURCHASE INWARD MODAL */}
+      {/* 5. NEW PURCHASE INWARD MODAL WITH SUPPLIER LEDGER CONTROLS */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl animate-in fade-in">
           <div className="bg-[#101628]/98 border border-white/15 rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl relative animate-in zoom-in-95 flex flex-col max-h-[92vh]">
             <div className="p-4 sm:px-6 border-b border-white/10 flex items-center justify-between bg-[#0a0e17]/80">
               <div className="flex items-center gap-2.5">
                 <PackageCheck className="w-5 h-5 text-[#ffa500]" />
-                <h3 className="text-base font-extrabold text-white">Stock Inward / Purchase Bill</h3>
+                <h3 className="text-base font-extrabold text-white">Stock Inward & Supplier Bill</h3>
               </div>
               <button
                 type="button"
@@ -395,8 +587,72 @@ export default function PurchaseManager() {
             </div>
 
             <form onSubmit={handleSavePurchaseInward} className="p-4 sm:p-6 overflow-y-auto space-y-4 custom-scrollbar">
+              
+              {/* Supplier Selection & Quick Add */}
+              <div className="p-3.5 rounded-2xl bg-[#0a0e17]/80 border border-white/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10.5px] font-mono text-[#8b9bb4] uppercase block font-bold">
+                    Select Supplier (Ledger Linked) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingSupplier(!isAddingSupplier)}
+                    className="text-[10px] text-[#00d9ff] hover:underline font-bold cursor-pointer"
+                  >
+                    {isAddingSupplier ? 'Cancel' : '+ Add New Supplier'}
+                  </button>
+                </div>
+
+                {isAddingSupplier ? (
+                  <div className="p-3 bg-[#101628] rounded-xl border border-[#00d9ff]/30 grid grid-cols-1 sm:grid-cols-4 gap-2 animate-in fade-in">
+                    <input
+                      type="text"
+                      placeholder="Supplier Name *"
+                      value={newSuppName}
+                      onChange={(e) => setNewSuppName(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#0a0e17] text-white border border-white/10 outline-none text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Phone"
+                      value={newSuppPhone}
+                      onChange={(e) => setNewSuppPhone(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#0a0e17] text-white border border-white/10 outline-none text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="City / Hub"
+                      value={newSuppCity}
+                      onChange={(e) => setNewSuppCity(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-[#0a0e17] text-white border border-white/10 outline-none text-xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCreateSupplier}
+                      className="bg-[#00d9ff] text-neutral-950 font-bold rounded-lg px-3 py-1.5 text-xs hover:bg-[#00b8d9]"
+                    >
+                      Save Supplier
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={selectedSupplierId}
+                    onChange={(e) => setSelectedSupplierId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#101628] border border-white/10 text-white font-semibold outline-none cursor-pointer [&>option]:bg-[#101628]"
+                  >
+                    <option value="">Choose Supplier...</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.city ? `(${s.city})` : ''} — Current Due: ₹{s.balance_due || 0}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
               {/* Bill Details */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
                     Invoice / Bill No *
@@ -407,20 +663,6 @@ export default function PurchaseManager() {
                     value={invoiceNo}
                     onChange={(e) => setInvoiceNo(e.target.value)}
                     placeholder="e.g. BILL-9921"
-                    className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/10 text-white font-semibold outline-none focus:border-[#ffa500]"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                    Supplier / Vendor Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={supplierName}
-                    onChange={(e) => setSupplierName(e.target.value)}
-                    placeholder="e.g. Surat Wholesale Mill"
                     className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/10 text-white font-semibold outline-none focus:border-[#ffa500]"
                   />
                 </div>
@@ -567,7 +809,7 @@ export default function PurchaseManager() {
                             <button
                               type="button"
                               onClick={() => handleRemoveItem(idx)}
-                              className="p-1 rounded-lg text-[#ff6b6b] hover:bg-white/5"
+                              className="p-1 rounded-lg text-[#ff6b6b] hover:bg-white/5 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -579,24 +821,45 @@ export default function PurchaseManager() {
                 </table>
               </div>
 
-              {/* Grand Total & Notes */}
-              <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                <div className="flex-1 min-w-[200px]">
-                  <input
-                    type="text"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Bill notes, transport details, remarks..."
-                    className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white text-[11px] outline-none"
-                  />
-                </div>
-
-                <div className="text-right">
-                  <span className="text-[10px] text-[#8b9bb4] font-mono block">INVOICE TOTAL</span>
-                  <span className="text-lg font-mono font-extrabold text-[#00ff9d]">
+              {/* Supplier Ledger Payment Section */}
+              <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <span className="text-[10px] text-[#8b9bb4] font-mono block mb-1">TOTAL BILL AMOUNT</span>
+                  <span className="text-base font-mono font-extrabold text-white">
                     ₹{totalInvoiceCost.toLocaleString('en-IN')}
                   </span>
                 </div>
+
+                <div>
+                  <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                    Amount Paid Now (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={totalInvoiceCost}
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/10 text-[#00ff9d] font-bold outline-none focus:border-[#00ff9d]"
+                  />
+                </div>
+
+                <div>
+                  <span className="text-[10px] text-[#ff6b6b] font-mono block mb-1">LEDGER BALANCE DUE</span>
+                  <span className="text-base font-mono font-extrabold text-[#ff6b6b]">
+                    ₹{calculatedBalanceDue.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <input
+                  type="text"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Bill notes, transport details, remarks..."
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white text-[11px] outline-none"
+                />
               </div>
 
               {/* Bottom Actions */}
@@ -604,7 +867,7 @@ export default function PurchaseManager() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white"
+                  className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -614,13 +877,109 @@ export default function PurchaseManager() {
                   className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#ffa500] to-[#ff6b6b] text-white font-bold flex items-center gap-1.5 shadow-lg shadow-[#ffa500]/30 disabled:opacity-50 cursor-pointer active:scale-95"
                 >
                   {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>Save & Inward Stock</span>
+                  <span>Save & Inward to Ledger</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* 6. SUPPLIER LEDGER STATEMENT MODAL */}
+      {selectedSupplierForLedger && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 bg-black/85 backdrop-blur-xl animate-in fade-in">
+          <div className="bg-[#101628]/98 border border-white/15 rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl relative animate-in zoom-in-95 flex flex-col max-h-[85vh]">
+            <div className="p-4 sm:px-6 border-b border-white/10 flex items-center justify-between bg-[#0a0e17]/80">
+              <div>
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-[#00d9ff]" />
+                  <h3 className="text-base font-extrabold text-white">{selectedSupplierForLedger.name}</h3>
+                </div>
+                <span className="text-[10px] text-[#8b9bb4]">
+                  {selectedSupplierForLedger.city || 'Vendor'} • Phone: {selectedSupplierForLedger.phone || 'N/A'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <span className="text-[8.5px] font-mono text-[#8b9bb4] block uppercase">Current Due</span>
+                  <span className="text-sm font-mono font-extrabold text-[#ff6b6b]">
+                    ₹{Number(selectedSupplierForLedger.balance_due || 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSupplierForLedger(null)}
+                  className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-3 custom-scrollbar">
+              <span className="text-[10px] font-mono text-[#8b9bb4] uppercase block font-bold">
+                Transaction Statement & History
+              </span>
+
+              {loadingLedger ? (
+                <div className="p-8 text-center text-[#8b9bb4]">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-2" />
+                  Loading ledger entries...
+                </div>
+              ) : ledgerEntries.length === 0 ? (
+                <div className="p-8 text-center text-[#8b9bb4] italic bg-[#0a0e17] rounded-2xl border border-white/5">
+                  No previous ledger transactions recorded for this supplier.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {ledgerEntries.map((entry) => {
+                    const isBill = entry.transaction_type === 'BILL';
+                    return (
+                      <div
+                        key={entry.id}
+                        className="p-3 rounded-2xl bg-[#0a0e17] border border-white/5 flex items-center justify-between"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-7 h-7 rounded-xl flex items-center justify-center ${
+                              isBill ? 'bg-[#ffa500]/15 text-[#ffa500]' : 'bg-[#00ff9d]/15 text-[#00ff9d]'
+                            }`}
+                          >
+                            {isBill ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                          </div>
+                          <div>
+                            <span className="font-bold text-white text-xs block">
+                              {entry.description || (isBill ? 'Bill Inward' : 'Payment Out')}
+                            </span>
+                            <span className="text-[9.5px] font-mono text-[#8b9bb4]">
+                              {new Date(entry.created_at).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span
+                            className={`font-mono text-xs font-bold block ${
+                              isBill ? 'text-[#ffa500]' : 'text-[#00ff9d]'
+                            }`}
+                          >
+                            {isBill ? '+' : '-'}₹{Number(entry.amount).toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-[9px] font-mono text-[#8b9bb4]">
+                            Balance: ₹{Number(entry.balance_after).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
