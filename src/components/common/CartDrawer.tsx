@@ -36,9 +36,9 @@ interface Address {
   whatsapp_number: string;
   email?: string;
   door_no: string;
-  building_name: string;
-  street: string;
-  area: string;
+  building_name?: string;
+  street?: string;
+  area?: string;
   pincode: string;
   city: string;
   state: string;
@@ -150,14 +150,9 @@ export default function CartDrawer() {
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderInfo | null>(null);
   const [paymentResult, setPaymentResult] = useState<PaymentStatusState | null>(null);
 
-  const [savedAddresses, setSavedAddresses] = useState<Address[]>(() => {
-    try {
-      const saved = localStorage.getItem('kashvi_saved_addresses');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState<boolean>(false);
+  const [savingAddress, setSavingAddress] = useState<boolean>(false);
 
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [isAddressModalOpen, setIsAddressModalOpen] = useState<boolean>(false);
@@ -186,6 +181,84 @@ export default function CartDrawer() {
   } | null>(null);
 
   const hasJewelleryItems = cart.some((item) => item?.department === 'jewellery');
+
+  // Fetch addresses directly from Supabase customer_addresses table
+  const fetchAddressesFromDb = async () => {
+    const customerId = customer?.id || customer?.mobile || user?.user_metadata?.whatsapp_number;
+    const authId = user?.id;
+
+    if (!customerId && !authId) {
+      try {
+        const saved = localStorage.getItem('kashvi_saved_addresses');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setSavedAddresses(parsed);
+          if (parsed.length > 0 && !selectedAddressId) {
+            setSelectedAddressId(parsed[0].id);
+          }
+        }
+      } catch (e) {
+        console.warn('Fallback storage load error:', e);
+      }
+      return;
+    }
+
+    try {
+      setLoadingAddresses(true);
+      let query = supabase
+        .from('customer_addresses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (authId) {
+        query = query.eq('auth_user_id', authId);
+      } else if (customerId) {
+        query = query.eq('customer_id', customerId);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data) {
+        const mapped: Address[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.full_name || '',
+          whatsapp_number: row.mobile || '',
+          door_no: row.door_address || '',
+          building_name: row.building_name || '',
+          street: row.street || '',
+          area: row.area || '',
+          pincode: row.pincode || '',
+          city: row.city || '',
+          state: row.state || '',
+          address_type: row.address_type || 'Home',
+          custom_label: row.custom_label || '',
+          is_default: !!row.is_default,
+        }));
+
+        setSavedAddresses(mapped);
+        localStorage.setItem('kashvi_saved_addresses', JSON.stringify(mapped));
+
+        if (mapped.length > 0) {
+          const def = mapped.find((a) => a.is_default) || mapped[0];
+          setSelectedAddressId(def.id);
+          if (def.pincode) {
+            setUserPincode(def.pincode);
+            fetchShippingByPincode(def.pincode);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load addresses from db:', err);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isCartOpen) {
+      fetchAddressesFromDb();
+    }
+  }, [isCartOpen, user?.id, customer?.id]);
 
   const triggerAuthModal = () => {
     closeCart();
@@ -262,19 +335,6 @@ export default function CartDrawer() {
       fetchActiveGateway();
     }
   }, [isCartOpen]);
-
-  useEffect(() => {
-    if (savedAddresses.length > 0) {
-      const validTarget = savedAddresses.find((a) => a.id === selectedAddressId) || savedAddresses[0];
-      if (validTarget && validTarget.id !== selectedAddressId) {
-        setSelectedAddressId(validTarget.id);
-      }
-      if (validTarget?.pincode) {
-        setUserPincode(validTarget.pincode);
-        fetchShippingByPincode(validTarget.pincode);
-      }
-    }
-  }, [savedAddresses, selectedAddressId, isCartOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -420,6 +480,28 @@ export default function CartDrawer() {
     await fetchShippingByPincode(addr.pincode);
   };
 
+  const handleDeleteAddress = async (addrId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await supabase.from('customer_addresses').delete().eq('id', addrId);
+      const updated = savedAddresses.filter((a) => a.id !== addrId);
+      setSavedAddresses(updated);
+      localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+
+      if (selectedAddressId === addrId) {
+        if (updated.length > 0) {
+          setSelectedAddressId(updated[0].id);
+          fetchShippingByPincode(updated[0].pincode);
+        } else {
+          setSelectedAddressId('');
+          setShippingCharge(0);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to delete address:', err);
+    }
+  };
+
   const handleOpenAddAddressModal = () => {
     if (!user) {
       triggerAuthModal();
@@ -462,27 +544,62 @@ export default function CartDrawer() {
       return;
     }
 
-    const newAddrId = `addr_${Date.now()}`;
-    const newAddr: Address = {
-      id: newAddrId,
-      ...formData,
-      custom_label: formData.address_type === 'Others' ? formData.custom_label.trim() : undefined,
-    };
-
-    const updated = [newAddr, ...savedAddresses];
-    setSavedAddresses(updated);
+    setSavingAddress(true);
     try {
+      const customerId = customer?.id || customer?.mobile || formData.whatsapp_number;
+      const authUserId = user?.id || null;
+      const isFirst = savedAddresses.length === 0;
+
+      const payload = {
+        customer_id: customerId,
+        auth_user_id: authUserId,
+        address_type: formData.address_type,
+        full_name: formData.name.trim(),
+        mobile: formData.whatsapp_number.trim(),
+        door_address: formData.door_no.trim(),
+        building_name: formData.building_name.trim() || null,
+        street: formData.street.trim() || null,
+        area: formData.area.trim() || null,
+        pincode: formData.pincode.trim(),
+        city: formData.city.trim(),
+        state: formData.state.trim(),
+        custom_label: formData.address_type === 'Others' ? formData.custom_label.trim() : null,
+        is_default: isFirst,
+      };
+
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error inserting address in database:', error);
+      }
+
+      const createdId = data?.id || `addr_${Date.now()}`;
+      const newAddr: Address = {
+        id: createdId,
+        ...formData,
+        custom_label: formData.address_type === 'Others' ? formData.custom_label.trim() : undefined,
+        is_default: isFirst,
+      };
+
+      const updated = [newAddr, ...savedAddresses];
+      setSavedAddresses(updated);
       localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
-    } catch (e) {
-      console.warn('Storage save warning:', e);
+
+      setSelectedAddressId(createdId);
+      setUserPincode(newAddr.pincode);
+      await fetchShippingByPincode(newAddr.pincode);
+
+      setIsAddressModalOpen(false);
+      setActiveStep('address');
+    } catch (err) {
+      console.error('Save address error:', err);
+    } finally {
+      setSavingAddress(false);
     }
-
-    setSelectedAddressId(newAddrId);
-    setUserPincode(newAddr.pincode);
-    await fetchShippingByPincode(newAddr.pincode);
-
-    setIsAddressModalOpen(false);
-    setActiveStep('address');
   };
 
   const handlePaymentSuccess = async (
@@ -619,7 +736,7 @@ export default function CartDrawer() {
       }${currentAddress.street}, ${currentAddress.area}, ${currentAddress.city}, ${
         currentAddress.state
       } - ${currentAddress.pincode}`;
-      
+
       const resolvedEmail =
         currentAddress.email?.trim() ||
         user?.email?.trim() ||
@@ -1171,7 +1288,12 @@ export default function CartDrawer() {
                 </button>
               </div>
 
-              {savedAddresses.length === 0 ? (
+              {loadingAddresses ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-neutral-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-600" />
+                  <span className="text-xs">Loading addresses from server...</span>
+                </div>
+              ) : savedAddresses.length === 0 ? (
                 <div className="py-10 text-center border-2 border-dashed border-neutral-200 rounded-2xl p-6 space-y-3">
                   <MapPin className="w-8 h-8 text-neutral-300 mx-auto" />
                   <p className="text-xs text-neutral-500">No delivery address saved yet.</p>
@@ -1196,7 +1318,7 @@ export default function CartDrawer() {
                       <div
                         key={addr.id}
                         onClick={() => handleSelectExistingAddress(addr)}
-                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 ${
+                        className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 relative group ${
                           isSelected
                             ? hasJewelleryItems
                               ? 'border-[#0b3b2c] bg-[#f4f7f5] shadow-xs'
@@ -1226,9 +1348,19 @@ export default function CartDrawer() {
                               </span>
                             </div>
 
-                            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
-                              WA: {addr.whatsapp_number}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                WA: {addr.whatsapp_number}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => handleDeleteAddress(addr.id, e)}
+                                className="text-neutral-400 hover:text-rose-600 p-1 rounded-md hover:bg-rose-50 transition-colors"
+                                title="Delete Address"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
 
                           <p className="text-neutral-600 leading-relaxed pt-0.5">
@@ -1593,10 +1725,17 @@ export default function CartDrawer() {
                 </button>
                 <button
                   type="submit"
-                  disabled={pincodeStatus?.deliveryAvailable === false}
-                  className="flex-1 py-2.5 rounded-xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-40 transition-all cursor-pointer shadow-xs"
+                  disabled={savingAddress || pincodeStatus?.deliveryAvailable === false}
+                  className="flex-1 py-2.5 rounded-xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-40 transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
                 >
-                  Save Address
+                  {savingAddress ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>Save Address</span>
+                  )}
                 </button>
               </div>
             </form>
