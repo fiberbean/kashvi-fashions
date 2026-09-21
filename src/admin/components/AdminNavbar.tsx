@@ -16,7 +16,8 @@ import {
   TrendingUp,
   ShoppingCart,
   Receipt,
-  BarChart3
+  BarChart3,
+  Boxes
 } from 'lucide-react';
 import { AdminStaffUser } from '../types';
 import { AdminViewType } from '../../AdminApp';
@@ -144,6 +145,20 @@ export default function AdminNavbar({
             >
               <ShoppingBag className="w-3.5 h-3.5 text-[#00ff9d]" />
               <span>Orders</span>
+            </button>
+
+            {/* Inventory Navigation Tab */}
+            <button
+              type="button"
+              onClick={() => handleSelectView('inventory')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
+                currentView === 'inventory'
+                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
+                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Boxes className="w-3.5 h-3.5 text-[#00d9ff]" />
+              <span>Inventory</span>
             </button>
 
             <button

@@ -9,6 +9,7 @@ import AdminStaff from './admin/pages/AdminStaff';
 import AdminProducts from './admin/pages/AdminProducts';
 import OrdersManager from './admin/components/OrdersManager';
 import ProductMasterManager from './admin/pages/ProductMasterManager';
+import InventoryManager from './admin/pages/InventoryManager';
 import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
 import ColorMasterModal from './admin/components/modals/ColorMasterModal';
@@ -18,6 +19,7 @@ import { OrderRecord, AdminStaffUser } from './admin/types';
 export type AdminViewType = 
   | 'dashboard' 
   | 'orders' 
+  | 'inventory'
   | 'sales' 
   | 'purchase' 
   | 'expenses' 
@@ -256,6 +258,11 @@ export default function AdminApp() {
 
           {currentView === 'orders' && (
             <OrdersManager />
+          )}
+
+          {/* Realtime Inventory Table View */}
+          {currentView === 'inventory' && (
+            <InventoryManager />
           )}
 
           {currentView === 'product_master' && (
