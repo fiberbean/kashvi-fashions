@@ -216,7 +216,7 @@ export default function AdminNavbar({
               <span>Reports</span>
             </button>
 
-            {/* Admin Staff Tab */}
+            {/* Renamed to Users with UI Style */}
             {isAdmin && (
               <button
                 type="button"
@@ -228,11 +228,10 @@ export default function AdminNavbar({
                 }`}
               >
                 <Users className="w-3.5 h-3.5 text-[#00d9ff]" />
-                <span>Staff & PINs</span>
+                <span>Users</span>
               </button>
             )}
 
-            {/* Masters Dropdown */}
             <div className="relative shrink-0">
               <button
                 type="button"
