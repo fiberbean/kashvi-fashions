@@ -81,6 +81,21 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
 }
 
+// Representative color mapping for Base Color family tabs
+const BASE_FAMILY_PALETTE: { [key: string]: string } = {
+  green: '#00843D',
+  pink: '#E30B5C',
+  blue: '#0052CC',
+  red: '#D32F2F',
+  yellow: '#FFB800',
+  purple: '#7E57C2',
+  orange: '#FF7043',
+  brown: '#8D6E63',
+  white: '#F5F5F5',
+  black: '#212121',
+  grey: '#757575'
+};
+
 export default function PurchaseManager() {
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -132,6 +147,7 @@ export default function PurchaseManager() {
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [purchaseCodeLoading, setPurchaseCodeLoading] = useState<boolean>(false);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
   const currentUser = useMemo(() => {
     try {
@@ -363,6 +379,63 @@ export default function PurchaseManager() {
     }
   };
 
+  // Delete an existing item directly from saved purchase bill
+  const handleDeleteExistingItem = async (item: any) => {
+    if (!editingPurchase) return;
+    const confirmDel = window.confirm(`Delete "${item.product_id} (${item.variant_color} / ${item.variant_size})" from this bill? Stock will be rolled back.`);
+    if (!confirmDel) return;
+
+    setDeletingItemId(item.id);
+    try {
+      // 1. Delete line item
+      const { error: delErr } = await supabase
+        .from('purchase_items')
+        .delete()
+        .eq('id', item.id);
+      if (delErr) throw delErr;
+
+      // 2. Rollback inventory stock
+      const { data: inv } = await supabase
+        .from('inventory')
+        .select('id, stock_quantity')
+        .eq('product_id', item.product_id)
+        .eq('variant_color', item.variant_color)
+        .eq('variant_size', item.variant_size)
+        .maybeSingle();
+
+      if (inv) {
+        const newQty = Math.max(0, inv.stock_quantity - (item.quantity || 0));
+        await supabase
+          .from('inventory')
+          .update({ stock_quantity: newQty })
+          .eq('id', inv.id);
+      }
+
+      // 3. Update existing items in state
+      const updatedExisting = existingItems.filter((it) => it.id !== item.id);
+      setExistingItems(updatedExisting);
+
+      // 4. Update total on purchase record
+      const itemCost = Number(item.total_cost) || (item.quantity * item.unit_cost) || 0;
+      const updatedTotal = Math.max(0, (editingPurchase.total_amount || 0) - itemCost);
+
+      await supabase
+        .from('purchases')
+        .update({
+          total_amount: updatedTotal,
+          balance_amount: updatedTotal
+        })
+        .eq('id', editingPurchase.id);
+
+      setEditingPurchase((prev) => prev ? { ...prev, total_amount: updatedTotal } : null);
+      setPurchases((prev) => prev.map((p) => p.id === editingPurchase.id ? { ...p, total_amount: updatedTotal } : p));
+    } catch (err: any) {
+      alert('Failed to delete item: ' + err.message);
+    } finally {
+      setDeletingItemId(null);
+    }
+  };
+
   const activeProduct = useMemo(() => {
     return productsList.find((p) => p.id === selectedProductId);
   }, [productsList, selectedProductId]);
@@ -444,7 +517,6 @@ export default function PurchaseManager() {
     }
   };
 
-  // Direct remove single color row from matrix
   const handleRemoveColorFromMatrix = (colorToRemove: string) => {
     setActiveMatrixColors((prev) => prev.filter((c) => c !== colorToRemove));
     setMatrixQtyMap((prev) => {
@@ -537,8 +609,10 @@ export default function PurchaseManager() {
   }, [editingPurchase, existingItemsTotal, stagedNewlyAddedTotal]);
 
   const totalInwardQuantity = useMemo(() => {
-    return stagedItems.reduce((sum, it) => sum + it.quantity, 0);
-  }, [stagedItems]);
+    const existingQty = existingItems.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
+    const stagedQty = stagedItems.reduce((sum, it) => sum + it.quantity, 0);
+    return editingPurchase ? existingQty + stagedQty : stagedQty;
+  }, [editingPurchase, existingItems, stagedItems]);
 
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -896,7 +970,7 @@ export default function PurchaseManager() {
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                     <span>{editingPurchase ? `Edit Purchase Inward [${editingPurchase.id}]` : 'Purchase Inward Workspace'}</span>
                     <span className="px-2 py-0.5 rounded-full bg-[#ffa500]/20 text-[#ffa500] border border-[#ffa500]/40 text-[9px] font-mono">
-                      LEFT: PRODUCT & MATRIX • RIGHT: SAVED ITEMS & LIVE QUEUE
+                      LEFT: PRODUCT & MATRIX • RIGHT: SAVED ITEMS & NEW QUEUE
                     </span>
                   </h3>
                 </div>
@@ -1144,7 +1218,7 @@ export default function PurchaseManager() {
                                 3. Enter Inward Quantities in Matrix
                               </span>
 
-                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-52">
+                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-56">
                                 <table className="w-full text-center border-collapse">
                                   <thead>
                                     <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0 z-10">
@@ -1237,106 +1311,136 @@ export default function PurchaseManager() {
                   )}
                 </div>
 
-                {/* === RIGHT COLUMN: BALANCED INWARD QUEUE & SAVED BILL ITEMS (Span 6) === */}
+                {/* === RIGHT COLUMN: UNIFIED SAVED ITEMS & NEWLY ADDED QUEUE (Span 6) === */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
-                    {/* Header: Live Inward Queue */}
+                    {/* Header: Overview of items */}
                     <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
-                        <ReceiptText className="w-4 h-4" /> Live Inward Queue ({stagedItems.length} lines)
+                        <ReceiptText className="w-4 h-4" /> Inward Inventory Breakdown
                       </span>
-                      <span className="text-white font-bold">{totalInwardQuantity} Units</span>
+                      <span className="text-white font-bold">{totalInwardQuantity} Total Units</span>
                     </div>
 
-                    {/* Staged Items List */}
-                    <div className="max-h-48 min-h-[130px] overflow-y-auto custom-scrollbar p-1">
-                      {stagedItems.length === 0 ? (
+                    {/* Scrollable Container with Distinct Saved vs Staged Sections */}
+                    <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2.5 space-y-2.5">
+                      
+                      {/* 1. EXISTING SAVED ITEMS ON BILL (Blue-Themed Container) */}
+                      {editingPurchase && existingItems.length > 0 && (
+                        <div className="p-2.5 rounded-2xl bg-[#00d9ff]/5 border border-[#00d9ff]/30 space-y-1.5">
+                          <div className="flex items-center justify-between text-xs font-mono">
+                            <span className="font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
+                              <PackageCheck className="w-3.5 h-3.5 text-[#00d9ff]" />
+                              Saved Items on Bill ({existingItems.length} lines)
+                            </span>
+                            <span className="text-white font-bold">Subtotal: ₹{existingItemsTotal.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          <div className="max-h-40 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#101628]">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[8.5px] uppercase sticky top-0">
+                                <tr>
+                                  <th className="py-1 px-2">Product</th>
+                                  <th className="py-1 px-2">Variant</th>
+                                  <th className="py-1 px-2 text-center">Qty</th>
+                                  <th className="py-1 px-2 text-right">Cost</th>
+                                  <th className="py-1 px-2 text-right">Total</th>
+                                  <th className="py-1 px-1.5 text-center"></th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {existingItems.map((it) => (
+                                  <tr key={it.id} className="hover:bg-white/[0.02]">
+                                    <td className="py-1.5 px-2 font-bold text-white">[{it.product_id}]</td>
+                                    <td className="py-1.5 px-2 text-[#00d9ff] font-semibold">{it.variant_color} / {it.variant_size}</td>
+                                    <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
+                                    <td className="py-1.5 px-1.5 text-center">
+                                      <button
+                                        type="button"
+                                        disabled={deletingItemId === it.id}
+                                        onClick={() => handleDeleteExistingItem(it)}
+                                        className="p-1 text-[#ff6b6b] hover:text-white rounded hover:bg-white/10 cursor-pointer disabled:opacity-50"
+                                        title="Delete saved item from bill"
+                                      >
+                                        {deletingItemId === it.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 2. NEWLY ADDED QUEUE (Green-Themed Container) */}
+                      {stagedItems.length > 0 && (
+                        <div className="p-2.5 rounded-2xl bg-[#00ff9d]/5 border border-[#00ff9d]/30 space-y-1.5">
+                          <div className="flex items-center justify-between text-xs font-mono">
+                            <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
+                              <Plus className="w-3.5 h-3.5 text-[#00ff9d]" />
+                              Newly Added in this Session ({stagedItems.length} lines)
+                            </span>
+                            <span className="text-white font-bold">Subtotal: ₹{stagedNewlyAddedTotal.toLocaleString('en-IN')}</span>
+                          </div>
+
+                          <div className="max-h-40 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#101628]">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-[#0a0e17] text-[#8b9bb4] font-mono uppercase text-[8px] sticky top-0">
+                                <tr>
+                                  <th className="py-1 px-2">Product & Variant</th>
+                                  <th className="py-1 px-2 text-center">Qty</th>
+                                  <th className="py-1 px-2 text-right">Cost</th>
+                                  <th className="py-1 px-2 text-right">Total</th>
+                                  <th className="py-1 px-1.5 text-center"></th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-white/5">
+                                {stagedItems.map((it, idx) => (
+                                  <tr key={idx} className="hover:bg-white/[0.02]">
+                                    <td className="py-1.5 px-2">
+                                      <span className="font-bold text-white block truncate max-w-[170px]">
+                                        {it.product_name}
+                                      </span>
+                                      <span className="text-[10px] text-[#00ff9d] font-mono">
+                                        {it.color} • {it.size}
+                                      </span>
+                                    </td>
+                                    <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono font-bold text-white">
+                                      ₹{it.total_cost.toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="py-1.5 px-1.5 text-center">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveStagedItem(idx)}
+                                        className="p-1 text-[#ff6b6b] hover:text-white rounded hover:bg-white/5 cursor-pointer"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* If both are empty */}
+                      {!editingPurchase && stagedItems.length === 0 && (
                         <div className="p-5 text-center text-[#8b9bb4] italic text-xs space-y-1">
                           <Layers className="w-5 h-5 mx-auto text-white/20" />
-                          <p className="font-semibold text-white/60">Inward Queue is Empty.</p>
+                          <p className="font-semibold text-white/60">No items added to bill yet.</p>
                           <p className="text-[10.5px] text-white/40">Select product & shades on Left, then click &quot;Add to Matrix Queue ➔&quot;.</p>
                         </div>
-                      ) : (
-                        <table className="w-full text-left text-xs">
-                          <thead className="bg-[#101628]/80 text-[#8b9bb4] font-mono uppercase text-[8px] sticky top-0">
-                            <tr>
-                              <th className="py-1.5 px-2">Product & Variant</th>
-                              <th className="py-1.5 px-2 text-center">Qty</th>
-                              <th className="py-1.5 px-2 text-right">Cost</th>
-                              <th className="py-1.5 px-2 text-right">Total</th>
-                              <th className="py-1.5 px-1.5 text-center"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                            {stagedItems.map((it, idx) => (
-                              <tr key={idx} className="hover:bg-white/[0.02]">
-                                <td className="py-1.5 px-2">
-                                  <span className="font-bold text-white block truncate max-w-[170px]">
-                                    {it.product_name}
-                                  </span>
-                                  <span className="text-[10px] text-[#00d9ff] font-mono">
-                                    {it.color} • {it.size}
-                                  </span>
-                                </td>
-                                <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
-                                <td className="py-1.5 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
-                                <td className="py-1.5 px-2 text-right font-mono font-bold text-white">
-                                  ₹{it.total_cost.toLocaleString('en-IN')}
-                                </td>
-                                <td className="py-1.5 px-1.5 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveStagedItem(idx)}
-                                    className="p-1 text-[#ff6b6b] hover:text-white rounded hover:bg-white/5 cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
                       )}
+
                     </div>
-
-                    {/* SAVED ITEMS ON BILL */}
-                    {editingPurchase && existingItems.length > 0 && (
-                      <div className="p-3 bg-[#101628]/70 border-t border-white/10 space-y-1.5">
-                        <div className="flex items-center justify-between text-xs font-mono">
-                          <span className="font-bold text-white uppercase flex items-center gap-1.5">
-                            <PackageCheck className="w-3.5 h-3.5 text-[#00d9ff]" />
-                            Saved Items on Bill ({existingItems.length} lines)
-                          </span>
-                          <span className="text-[#00ff9d] font-bold">Subtotal: ₹{existingItemsTotal.toLocaleString('en-IN')}</span>
-                        </div>
-
-                        <div className="max-h-40 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#0a0e17]">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[8.5px] uppercase sticky top-0">
-                              <tr>
-                                <th className="p-1.5">Product</th>
-                                <th className="p-1.5">Variant</th>
-                                <th className="p-1.5 text-center">Qty</th>
-                                <th className="p-1.5 text-right">Cost</th>
-                                <th className="p-1.5 text-right">Total</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                              {existingItems.map((it, idx) => (
-                                <tr key={idx}>
-                                  <td className="p-1.5 font-bold text-white">[{it.product_id}]</td>
-                                  <td className="p-1.5 text-[#00d9ff] font-semibold">{it.variant_color} / {it.variant_size}</td>
-                                  <td className="p-1.5 text-center font-bold text-[#00ff9d]">{it.quantity} Qty</td>
-                                  <td className="p-1.5 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
-                                  <td className="p-1.5 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Summary & Bill Total Card */}
                     <div className="p-3 bg-[#101628] border-t border-white/10 space-y-2">
@@ -1400,7 +1504,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 4. DEDICATED POPUP FOR SHADE SELECTION */}
+      {/* 4. DEDICATED POPUP FOR SHADE SELECTION (DYNAMIC ACTIVE COLOR TABS WITH AUTO CONTRAST TEXT) */}
       {isShadePickerModalOpen && activeProduct && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -1413,7 +1517,7 @@ export default function PurchaseManager() {
                   <span>Select Color Shades for [{activeProduct.id}] {activeProduct.name}</span>
                 </h4>
                 <span className="text-xs text-[#8b9bb4]">
-                  Alphabetically sorted (A to Z) • Selected shades show Baby Pink Border
+                  Alphabetically sorted (A to Z) • Click base color to switch palette • Selected shades show Baby Pink Border
                 </span>
               </div>
               <button
@@ -1425,7 +1529,7 @@ export default function PurchaseManager() {
               </button>
             </div>
 
-            {/* Base Color Selection Tabs (A-Z) */}
+            {/* Base Color Selection Tabs: Dynamic Color Fill + Auto Opposite Contrast Text */}
             <div className="space-y-2 shrink-0">
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
                 1. Pick Base Color Family (A-Z):
@@ -1433,15 +1537,27 @@ export default function PurchaseManager() {
               <div className="flex flex-wrap gap-1.5">
                 {availableBaseFamilies.map((fam) => {
                   const isSelected = selectedBaseFilter.toLowerCase() === fam.toLowerCase();
+                  const famColor = BASE_FAMILY_PALETTE[fam.toLowerCase()] || '#6d4aff';
+                  const textColor = getContrastTextColor(famColor);
+
                   return (
                     <button
                       key={fam}
                       type="button"
                       onClick={() => setSelectedBaseFilter(fam)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold capitalize transition-all cursor-pointer ${
+                      style={
                         isSelected
-                          ? 'bg-[#00d9ff] text-neutral-950 shadow-lg scale-105'
-                          : 'bg-[#0a0e17] text-[#8b9bb4] hover:text-white border border-white/10'
+                          ? {
+                              backgroundColor: famColor,
+                              color: textColor,
+                              borderColor: famColor
+                            }
+                          : {}
+                      }
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold capitalize transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'shadow-lg scale-105 ring-2 ring-white/30'
+                          : 'bg-[#0a0e17] text-[#8b9bb4] hover:text-white border-white/10'
                       }`}
                     >
                       {fam}
