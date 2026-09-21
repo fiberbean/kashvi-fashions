@@ -19,7 +19,8 @@ import {
   CheckSquare,
   Square,
   Edit3,
-  IndianRupee
+  IndianRupee,
+  Lock
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
@@ -77,16 +78,25 @@ const STANDARD_COLOR_MAP: { [key: string]: string } = {
   'teal': '#008080'
 };
 
-function resolveColorHex(colorObj: any): string {
-  if (!colorObj) return '#6d4aff';
-  const nameKey = (colorObj.name || '').toLowerCase().trim();
+function resolveColorHex(colorNameOrObj: any): string {
+  if (!colorNameOrObj) return '#6d4aff';
+  if (typeof colorNameOrObj === 'string') {
+    const key = colorNameOrObj.toLowerCase().trim();
+    if (STANDARD_COLOR_MAP[key]) return STANDARD_COLOR_MAP[key];
+    for (const [k, v] of Object.entries(STANDARD_COLOR_MAP)) {
+      if (key.includes(k)) return v;
+    }
+    return '#6d4aff';
+  }
+
+  const nameKey = (colorNameOrObj.name || '').toLowerCase().trim();
   const directHex =
-    colorObj.hex ||
-    colorObj.code ||
-    colorObj.color_code ||
-    colorObj.hex_code ||
-    colorObj.value ||
-    colorObj.hex_value;
+    colorNameOrObj.hex ||
+    colorNameOrObj.code ||
+    colorNameOrObj.color_code ||
+    colorNameOrObj.hex_code ||
+    colorNameOrObj.value ||
+    colorNameOrObj.hex_value;
 
   if (directHex && typeof directHex === 'string' && directHex.trim()) {
     const clean = directHex.trim();
@@ -97,8 +107,8 @@ function resolveColorHex(colorObj: any): string {
     return STANDARD_COLOR_MAP[nameKey];
   }
 
-  for (const [key, val] of Object.entries(STANDARD_COLOR_MAP)) {
-    if (nameKey.includes(key)) return val;
+  for (const [k, val] of Object.entries(STANDARD_COLOR_MAP)) {
+    if (nameKey.includes(k)) return val;
   }
 
   return '#6d4aff';
@@ -210,7 +220,13 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
       setSelectedUnit(initialProduct.unit || 'Piece');
 
       const vars = initialProduct.variants || {};
-      setSelectedColors(Array.isArray(vars.colors) ? vars.colors : (initialProduct.colour ? [initialProduct.colour] : []));
+      const linkedColors = Array.isArray(vars.colors)
+        ? vars.colors
+        : initialProduct.colour
+        ? [initialProduct.colour]
+        : [];
+      setSelectedColors(linkedColors);
+
       setSelectedSizes(Array.isArray(vars.sizes) ? vars.sizes : (initialProduct.size ? [initialProduct.size] : []));
       setSelectedFabrics(
         Array.isArray(vars.fabrics)
@@ -222,6 +238,8 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
         setImages(initialProduct.images);
       }
     } else {
+      // Create mode defaults
+      setSelectedColors([]);
       const generateProductCode = async () => {
         setCodeLoading(true);
         const prefix = brand === 'fashions' ? 'KF' : 'KJ';
@@ -373,7 +391,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
 
     setIsCompressingQuickUpload(true);
     try {
-      const defaultTag = selectedColors[0] || colours[0]?.name || 'Universal';
+      const defaultTag = selectedColors[0] || 'Universal';
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -437,14 +455,17 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
       const selectedUnitObj = units.find((u) => u.id === selectedUnit || u.name === selectedUnit);
       const unitValue = selectedUnitObj?.name || selectedUnit || 'Piece';
 
-      const payload = {
+      // Preserving linked colors in edit mode, empty/null on create mode
+      const colorsToSave = isEditMode ? selectedColors : [];
+
+      const payload: any = {
         id: productCode.trim(),
         name: name.trim(),
         category: catName,
         sub_category: subCatObj?.name || null,
         category_id: catId,
         sub_category_id: selectedSubCategory || null,
-        colour: selectedColors[0] || null,
+        colour: colorsToSave[0] || null,
         size: selectedSizes[0] || null,
         unit: unitValue,
         brand: brand === 'jewellery' ? 'Kashvi Jewellery' : 'Kashvi Fashions',
@@ -457,7 +478,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
         images: images,
         active: true,
         variants: { 
-          colors: selectedColors, 
+          colors: colorsToSave, 
           sizes: selectedSizes, 
           fabrics: selectedFabrics 
         },
@@ -520,7 +541,9 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Universal colors with strictly linked Sub-Category size groups
+                {isEditMode
+                  ? 'View linked color history with strictly linked Sub-Category size groups'
+                  : 'Sizes and fabrics setup. Colour selection is handled directly during Purchase entry.'}
               </span>
             </div>
           </div>
@@ -796,64 +819,64 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
               <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
             </span>
             
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-[10px] font-mono font-bold text-[#8b9bb4] flex items-center gap-1">
-                  <Palette className="w-3 h-3 text-[#ff6b6b]" /> Colours (Universal Selection):
-                </span>
-                <span className="text-[9px] font-mono text-[#8b9bb4]">
-                  {selectedColors.length} selected
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
-                {colours.map((c) => {
-                  const isSelected = selectedColors.includes(c.name);
-                  const hexCode = resolveColorHex(c);
-                  const isLight = isColorLight(hexCode);
+            {/* Colours Section: Shown ONLY in Edit Mode as View-Only (No Delete/Deselect) */}
+            {isEditMode && (
+              <div className="p-3 bg-[#101628]/80 rounded-2xl border border-white/10 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-[#8b9bb4] flex items-center gap-1.5">
+                    <Palette className="w-3.5 h-3.5 text-[#ff6b6b]" />
+                    <span>Linked Colours (View-Only / Purchase History):</span>
+                    <Lock className="w-3 h-3 text-[#8b9bb4]" />
+                  </span>
+                  <span className="text-[9px] font-mono text-[#00d9ff] bg-[#00d9ff]/10 px-2 py-0.5 rounded-md border border-[#00d9ff]/20">
+                    {selectedColors.length} linked
+                  </span>
+                </div>
 
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => toggleSelection(c.name, selectedColors, setSelectedColors)}
-                      style={
-                        isSelected
-                          ? {
-                              backgroundColor: hexCode,
-                              borderColor: isLight ? '#00000033' : '#ffffff44',
-                              color: isLight ? '#111827' : '#ffffff',
-                              boxShadow: `0 4px 14px ${hexCode}77`
-                            }
-                          : {}
-                      }
-                      className={`px-3 py-1.5 rounded-xl text-[10.5px] font-bold flex items-center gap-1.5 border transition-all cursor-pointer active:scale-95 ${
-                        isSelected
-                          ? ''
-                          : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/25'
-                      }`}
-                    >
-                      <span
-                        className={`w-2.5 h-2.5 rounded-full border shrink-0 ${
-                          isSelected
-                            ? isLight ? 'border-black/30' : 'border-white/50'
-                            : 'border-white/20'
-                        }`}
-                        style={{ backgroundColor: hexCode }}
-                      />
-                      {isSelected && (
-                        <Check
-                          className={`w-3 h-3 stroke-[2.5] ${
-                            isLight ? 'text-black' : 'text-white'
-                          }`}
-                        />
-                      )}
-                      <span>{c.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                {selectedColors.length === 0 ? (
+                  <div className="text-[10px] text-[#8b9bb4] italic py-1">
+                    No colours linked yet. Colours will be assigned automatically during Purchase entry.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {selectedColors.map((colorName) => {
+                      const hexCode = resolveColorHex(colorName);
+                      const isLight = isColorLight(hexCode);
 
+                      return (
+                        <div
+                          key={colorName}
+                          style={{
+                            backgroundColor: hexCode,
+                            color: isLight ? '#111827' : '#ffffff',
+                            borderColor: isLight ? '#00000033' : '#ffffff44'
+                          }}
+                          className="px-3 py-1.5 rounded-xl text-[10.5px] font-bold flex items-center gap-2 border shadow-sm select-none"
+                        >
+                          <span
+                            className={`w-2.5 h-2.5 rounded-full border shrink-0 ${
+                              isLight ? 'border-black/40' : 'border-white/60'
+                            }`}
+                            style={{ backgroundColor: hexCode }}
+                          />
+                          <span>{colorName}</span>
+                          <span className={`text-[8.5px] font-mono px-1.5 py-0.2 rounded font-semibold ${
+                            isLight ? 'bg-black/10 text-black' : 'bg-white/20 text-white'
+                          }`}>
+                            Locked
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <p className="text-[9px] text-[#8b9bb4]/70 pt-0.5">
+                  * Note: Colours cannot be deleted here to protect historical purchase & inventory transactions.
+                </p>
+              </div>
+            )}
+
+            {/* Available Sizes */}
             <div className="p-3.5 bg-[#101628] rounded-2xl border border-white/10 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -923,6 +946,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
               </div>
             </div>
 
+            {/* Fabrics */}
             <div>
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] block mb-1.5 flex items-center gap-1">
                 <Scissors className="w-3 h-3 text-[#00ff9d]" /> Fabrics:
