@@ -185,7 +185,6 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
     fetchMasters();
   }, [isEditMode]);
 
-  // Generate or prefill product code
   useEffect(() => {
     if (initialProduct) {
       setProductCode(initialProduct.id);

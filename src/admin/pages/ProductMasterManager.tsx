@@ -16,7 +16,7 @@ import {
   Check
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import ProductMasterModal from '../components/ProductMasterModal'; // Modal file component path
+import ProductMasterModal from '../components/modals/ProductMasterModal';
 
 export interface ProductRecord {
   id: string;
@@ -191,7 +191,7 @@ export default function ProductMasterManager() {
             <button
               type="button"
               onClick={() => setBrandFilter('all')}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                 brandFilter === 'all' ? 'bg-[#6d4aff] text-white' : 'text-[#8b9bb4] hover:text-white'
               }`}
             >
@@ -200,7 +200,7 @@ export default function ProductMasterManager() {
             <button
               type="button"
               onClick={() => setBrandFilter('fashions')}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                 brandFilter === 'fashions' ? 'bg-[#6d4aff] text-white' : 'text-[#8b9bb4] hover:text-white'
               }`}
             >
@@ -209,7 +209,7 @@ export default function ProductMasterManager() {
             <button
               type="button"
               onClick={() => setBrandFilter('jewellery')}
-              className={`px-3 py-1 rounded-lg transition-all ${
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                 brandFilter === 'jewellery' ? 'bg-[#6d4aff] text-white' : 'text-[#8b9bb4] hover:text-white'
               }`}
             >
