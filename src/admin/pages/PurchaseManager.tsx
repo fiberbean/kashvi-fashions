@@ -17,7 +17,10 @@ import {
   AlertCircle,
   Lock,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  SlidersHorizontal,
+  ArrowRight,
+  ReceiptText
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import ProductMasterModal from '../components/modals/ProductMasterModal';
@@ -116,7 +119,7 @@ export default function PurchaseManager() {
   const [viewingItems, setViewingItems] = useState<any[]>([]);
   const [loadingItems, setLoadingItems] = useState<boolean>(false);
 
-  // Edit Mode & Existing Items State
+  // Edit Mode & Security PIN
   const [editingPurchase, setEditingPurchase] = useState<PurchaseRecord | null>(null);
   const [existingItems, setExistingItems] = useState<any[]>([]);
   const [isPinModalOpen, setIsPinModalOpen] = useState<boolean>(false);
@@ -144,7 +147,6 @@ export default function PurchaseManager() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [purchaseCodeLoading, setPurchaseCodeLoading] = useState<boolean>(false);
 
-  // Fetch Current Logged-in Staff user for Security PIN validation
   const currentUser = useMemo(() => {
     try {
       const stored = sessionStorage.getItem('kfmama_auth_user');
@@ -210,7 +212,7 @@ export default function PurchaseManager() {
   const openNewPurchaseModal = () => {
     setEditingPurchase(null);
     setExistingItems([]);
-    setIsEditProductUnlocked(true); // New purchases do not require PIN
+    setIsEditProductUnlocked(true);
     generatePurchaseNo();
     setPurchaseDate(new Date().toISOString().split('T')[0]);
     setSupplierBillDate(new Date().toISOString().split('T')[0]);
@@ -229,7 +231,7 @@ export default function PurchaseManager() {
 
   const openEditPurchaseModal = async (p: PurchaseRecord) => {
     setEditingPurchase(p);
-    setIsEditProductUnlocked(false); // Locked by default for saved purchases
+    setIsEditProductUnlocked(false);
     setPurchaseNo(p.id);
     setPurchaseDate(p.purchase_date || new Date().toISOString().split('T')[0]);
     setSupplierBillDate(p.supplier_bill_date || new Date().toISOString().split('T')[0]);
@@ -241,7 +243,6 @@ export default function PurchaseManager() {
     setActiveMatrixColors([]);
     setMatrixQtyMap({});
 
-    // Fetch existing line items for this purchase
     try {
       const { data } = await supabase
         .from('purchase_items')
@@ -264,7 +265,6 @@ export default function PurchaseManager() {
   const handleVerifySecurityPin = (e: React.FormEvent) => {
     e.preventDefault();
     setPinError(null);
-
     const entered = enteredPin.trim();
     const correctPin = currentUser?.security_pin || currentUser?.pin || '9921';
 
@@ -295,7 +295,7 @@ export default function PurchaseManager() {
   };
 
   const handleDeletePurchase = async (p: PurchaseRecord) => {
-    const confirmDelete = window.confirm(`Permanently delete [${p.id}]? Ee bill loni inward stock inventory nunchi rollback avthundi.`);
+    const confirmDelete = window.confirm(`Permanently delete [${p.id}]? Inward stock will be rolled back from inventory.`);
     if (!confirmDelete) return;
 
     try {
@@ -378,10 +378,12 @@ export default function PurchaseManager() {
     return ['Free Size'];
   }, [activeProduct, subCategories, allSizes]);
 
+  // Load colors & default cost price on product selection
   useEffect(() => {
     if (activeProduct) {
       setUnitCost(activeProduct.cost_price || 0);
       setMatrixQtyMap({});
+
       const existingColours: string[] = [];
       let vars = activeProduct.variants;
       if (typeof vars === 'string') {
@@ -397,18 +399,19 @@ export default function PurchaseManager() {
       setActiveMatrixColors(unique);
     } else {
       setActiveMatrixColors([]);
+      setMatrixQtyMap({});
     }
   }, [activeProduct]);
 
   const handleAddColorToMatrix = () => {
     const colorToAdd = (customColorInput.trim() || selectedColorToAdd.trim());
     if (!colorToAdd) {
-      alert('Color select cheyandi leda type cheyandi.');
+      alert('Select or type a color name.');
       return;
     }
 
     if (activeMatrixColors.some((c) => c.toLowerCase() === colorToAdd.toLowerCase())) {
-      alert(`Color "${colorToAdd}" already undi.`);
+      alert(`Color "${colorToAdd}" is already in the list.`);
       return;
     }
 
@@ -437,16 +440,24 @@ export default function PurchaseManager() {
     }));
   };
 
+  const currentConfiguredTotalQty = useMemo(() => {
+    return Object.values(matrixQtyMap).reduce((sum, q) => sum + (Number(q) || 0), 0);
+  }, [matrixQtyMap]);
+
+  // Push from Left Side Matrix to Right Side Inward List
   const handleAddMatrixToStaged = () => {
-    if (!activeProduct) return;
+    if (!activeProduct) {
+      alert('Please select a product first.');
+      return;
+    }
     const cost = Number(unitCost) || 0;
     if (cost <= 0) {
-      alert('Unit rate correct ga enter cheyandi.');
+      alert('Please enter a valid Cost Price (CP Rate).');
       return;
     }
 
     if (activeMatrixColors.length === 0) {
-      alert('K కనీసం ఒక కలర్ యాడ్ చేయండి.');
+      alert('Please add at least one color in the matrix.');
       return;
     }
 
@@ -470,7 +481,7 @@ export default function PurchaseManager() {
     });
 
     if (newAdditions.length === 0) {
-      alert('Matrix lo quantity enter cheyandi.');
+      alert('Please enter quantities in the size cells before adding.');
       return;
     }
 
@@ -485,17 +496,14 @@ export default function PurchaseManager() {
     setStagedItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Existing items total
   const existingItemsTotal = useMemo(() => {
     return existingItems.reduce((sum, it) => sum + (Number(it.total_cost) || (it.quantity * it.unit_cost) || 0), 0);
   }, [existingItems]);
 
-  // Staged newly added items total
   const stagedNewlyAddedTotal = useMemo(() => {
     return stagedItems.reduce((sum, it) => sum + it.total_cost, 0);
   }, [stagedItems]);
 
-  // Grand total bill amount
   const grandTotalBillAmount = useMemo(() => {
     if (editingPurchase) {
       return existingItemsTotal + stagedNewlyAddedTotal;
@@ -510,11 +518,11 @@ export default function PurchaseManager() {
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
-      alert('Supplier select cheyandi.');
+      alert('Please select a Supplier.');
       return;
     }
     if (!supplierBillNo.trim()) {
-      alert('Supplier Bill No enter cheyandi.');
+      alert('Please enter Supplier Bill No.');
       return;
     }
 
@@ -522,7 +530,6 @@ export default function PurchaseManager() {
     const supplierObj = suppliers.find((s) => s.id === selectedSupplierId);
 
     try {
-      // 1. UPDATE EXISTING PURCHASE
       if (editingPurchase) {
         const { error: updateErr } = await supabase
           .from('purchases')
@@ -540,7 +547,6 @@ export default function PurchaseManager() {
 
         if (updateErr) throw updateErr;
 
-        // If newly added products exist in stagedItems, insert them and update inventory
         if (stagedItems.length > 0) {
           const linePayloads = stagedItems.map((it, idx) => ({
             id: `pi_${editingPurchase.id}_${Date.now()}_${idx}`,
@@ -557,7 +563,6 @@ export default function PurchaseManager() {
           const { error: lineErr } = await supabase.from('purchase_items').insert(linePayloads);
           if (lineErr) throw lineErr;
 
-          // Increment stock for newly added variants
           for (const it of stagedItems) {
             const { data: existInv } = await supabase
               .from('inventory')
@@ -596,9 +601,8 @@ export default function PurchaseManager() {
         return;
       }
 
-      // 2. CREATE FRESH PURCHASE
       if (stagedItems.length === 0) {
-        alert('K కనీసం ఒక ప్రొడక్ట్ ఇన్వర్డ్ యాడ్ చేయండి.');
+        alert('Please add at least one line item into the Inward List on the right.');
         return;
       }
 
@@ -720,7 +724,7 @@ export default function PurchaseManager() {
   return (
     <div className="space-y-2.5 font-sans text-xs select-none">
       
-      {/* 1. Header Bar (Ultra Compact) */}
+      {/* 1. Header Bar */}
       <div className="p-2.5 rounded-xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#ffa500] to-[#ff6b6b] text-white flex items-center justify-center shadow-md shadow-[#ffa500]/20">
@@ -768,7 +772,7 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 2. Compact Purchases Table */}
+      {/* 2. Compact Purchases History Table */}
       <div className="rounded-xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -849,22 +853,22 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 3. COMPACT MODAL: CREATE / EDIT PURCHASE */}
+      {/* 3. SPLIT TWO-COLUMN MODAL: LEFT (CREATION/MATRIX) & RIGHT (STAGED/SUMMARY) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[99999] pt-12 pb-3 px-2 sm:px-4 flex items-start justify-center bg-black/90 backdrop-blur-md overflow-y-auto select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-2xl max-w-3xl w-full overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[92vh]">
+          <div className="bg-[#101628] border border-white/20 rounded-2xl max-w-5xl w-full overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[92vh]">
             
             {/* Modal Header */}
-            <div className="px-3 py-2 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30">
+            <div className="px-3.5 py-2 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30">
               <div className="flex items-center gap-2">
-                <PackageCheck className="w-3.5 h-3.5 text-[#ffa500]" />
+                <PackageCheck className="w-4 h-4 text-[#ffa500]" />
                 <h3 className="text-xs font-bold text-white">
-                  {editingPurchase ? `Edit Purchase Inward [${editingPurchase.id}]` : 'New Purchase Inward Entry'}
+                  {editingPurchase ? `Edit Purchase Inward [${editingPurchase.id}]` : 'New Purchase Inward Deck'}
                 </h3>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="bg-[#101628] px-2 py-0.5 rounded border border-white/15 text-right font-mono text-[11px] font-bold text-[#00ff9d]">
+                <div className="bg-[#101628] px-2.5 py-0.5 rounded border border-white/15 text-right font-mono text-[11px] font-bold text-[#00ff9d]">
                   {purchaseCodeLoading ? '...' : purchaseNo}
                 </div>
                 <button
@@ -872,15 +876,15 @@ export default function PurchaseManager() {
                   onClick={() => setIsModalOpen(false)}
                   className="p-1 rounded bg-white/10 hover:bg-[#ff6b6b]/30 text-[#8b9bb4] hover:text-white"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleSavePurchase} className="p-2.5 overflow-y-auto space-y-2 custom-scrollbar text-[10.5px]">
+            <form onSubmit={handleSavePurchase} className="p-3 overflow-y-auto space-y-3 custom-scrollbar text-[10.5px]">
               
-              {/* Header Fields (Tightly Grouped) */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-2 rounded-xl bg-[#0a0e17]/80 border border-white/10">
+              {/* Top Bill Master Info (Supplier, Bill No, Dates) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2 rounded-xl bg-[#0a0e17]/80 border border-white/10">
                 <div>
                   <label className="text-[8px] font-mono text-[#8b9bb4] uppercase block mb-0.5 font-bold">
                     Supplier *
@@ -889,7 +893,7 @@ export default function PurchaseManager() {
                     required
                     value={selectedSupplierId}
                     onChange={(e) => setSelectedSupplierId(e.target.value)}
-                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-white font-semibold outline-none text-[10px]"
+                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-white font-semibold outline-none text-[10.5px]"
                   >
                     <option value="">Select Supplier...</option>
                     {suppliers.map((s) => (
@@ -910,7 +914,7 @@ export default function PurchaseManager() {
                     placeholder="e.g. 7426"
                     value={supplierBillNo}
                     onChange={(e) => setSupplierBillNo(e.target.value)}
-                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-white font-semibold outline-none text-[10px]"
+                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-white font-semibold outline-none text-[10.5px]"
                   />
                 </div>
 
@@ -923,7 +927,7 @@ export default function PurchaseManager() {
                     required
                     value={supplierBillDate}
                     onChange={(e) => setSupplierBillDate(e.target.value)}
-                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-white outline-none text-[10px]"
+                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-white outline-none text-[10.5px]"
                   />
                 </div>
 
@@ -936,305 +940,383 @@ export default function PurchaseManager() {
                     required
                     value={purchaseDate}
                     onChange={(e) => setPurchaseDate(e.target.value)}
-                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-[#00ff9d] font-mono font-bold outline-none text-[10px]"
+                    className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-[#00ff9d] font-mono font-bold outline-none text-[10.5px]"
                   />
                 </div>
               </div>
 
-              {/* EXISTING ITEMS BREAKDOWN (If Editing) */}
-              {editingPurchase && existingItems.length > 0 && (
-                <div className="p-2 rounded-xl bg-[#0a0e17] border border-white/10 space-y-1">
-                  <div className="flex items-center justify-between text-[9px] font-mono">
-                    <span className="font-bold text-white uppercase">Saved Items on Bill ({existingItems.length} lines)</span>
-                    <span className="text-[#00ff9d] font-bold">Subtotal: ₹{existingItemsTotal.toLocaleString('en-IN')}</span>
-                  </div>
-                  <div className="max-h-24 overflow-y-auto">
-                    <table className="w-full text-left text-[9.5px]">
-                      <tbody className="divide-y divide-white/5">
-                        {existingItems.map((it, idx) => (
-                          <tr key={idx}>
-                            <td className="p-1 font-semibold text-white">[{it.product_id}]</td>
-                            <td className="p-1 text-[#00d9ff]">{it.variant_color} / {it.variant_size}</td>
-                            <td className="p-1 text-center font-bold text-[#00ff9d]">{it.quantity} Qty</td>
-                            <td className="p-1 text-right font-mono">₹{it.unit_cost}</td>
-                            <td className="p-1 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* SECURITY PIN LOCKED BANNER FOR SAVED PURCHASES */}
-              {editingPurchase && !isEditProductUnlocked ? (
-                <div className="p-2.5 rounded-xl bg-[#6d4aff]/10 border border-[#6d4aff]/30 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-[#6d4aff]/20 text-[#00d9ff] flex items-center justify-center">
-                      <Lock className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-white text-[11px] block">Add Products to Saved Purchase</span>
-                      <span className="text-[9px] text-[#8b9bb4]">Protected by Order Pipeline Security PIN</span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleOpenPinVerification}
-                    className="px-3 py-1 rounded-lg bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] hover:opacity-90 text-white font-bold text-[10px] flex items-center gap-1 cursor-pointer active:scale-95 shadow-md shadow-[#6d4aff]/30"
-                  >
-                    <KeyRound className="w-3 h-3" />
-                    <span>Enter PIN to Add Products</span>
-                  </button>
-                </div>
-              ) : (
-                /* MATRIX INWARD SECTION (UNLOCKED) */
-                <div className="p-2 rounded-xl bg-[#0a0e17] border border-white/10 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9.5px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1">
-                      <Layers className="w-3 h-3" /> Matrix Inward
-                      {editingPurchase && (
-                        <span className="ml-1.5 px-1.5 py-0.2 rounded bg-[#00ff9d]/20 text-[#00ff9d] text-[8px] font-mono font-bold flex items-center gap-0.5">
-                          <ShieldCheck className="w-2.5 h-2.5" /> PIN Verified
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setIsProductMasterOpen(true)}
-                      className="px-2 py-0.5 rounded bg-[#6d4aff]/20 border border-[#6d4aff]/40 text-[#00d9ff] text-[9px] font-bold"
-                    >
-                      + Add Product Master
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
-                    <div className="sm:col-span-2">
-                      <select
-                        value={selectedProductId}
-                        onChange={(e) => setSelectedProductId(e.target.value)}
-                        className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-white font-semibold outline-none text-[10px]"
-                      >
-                        <option value="">Choose Product...</option>
-                        {productsList.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            [{p.id}] {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="Cost Rate (₹)"
-                        value={unitCost}
-                        onChange={(e) => setUnitCost(e.target.value)}
-                        className="w-full px-2 py-1 rounded bg-[#101628] border border-white/10 text-[#00ff9d] font-bold outline-none text-[10px]"
-                      />
-                    </div>
-                  </div>
-
-                  {activeProduct && (
-                    <div className="space-y-1.5 pt-0.5">
-                      <div className="p-1.5 rounded-lg bg-[#101628] border border-white/10 flex flex-wrap items-center gap-1">
-                        <select
-                          value={selectedColorToAdd}
-                          onChange={(e) => {
-                            setSelectedColorToAdd(e.target.value);
-                            setCustomColorInput('');
-                          }}
-                          className="px-2 py-0.5 rounded bg-[#0a0e17] border border-white/10 text-white text-[9.5px] outline-none"
-                        >
-                          <option value="">Select Color...</option>
-                          {masterColours.map((c) => (
-                            <option key={c.id} value={c.name}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-
-                        <input
-                          type="text"
-                          placeholder="Or custom color"
-                          value={customColorInput}
-                          onChange={(e) => {
-                            setCustomColorInput(e.target.value);
-                            setSelectedColorToAdd('');
-                          }}
-                          className="px-2 py-0.5 rounded bg-[#0a0e17] border border-white/10 text-white text-[9.5px] outline-none max-w-[110px]"
-                        />
-
-                        <button
-                          type="button"
-                          onClick={handleAddColorToMatrix}
-                          className="px-2 py-0.5 rounded bg-[#6d4aff] text-white font-bold text-[9px]"
-                        >
-                          + Add Color
-                        </button>
-
-                        <div className="flex flex-wrap gap-1 ml-1">
-                          {activeMatrixColors.map((clr) => (
-                            <span
-                              key={clr}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#0a0e17] border border-white/15 text-[9px] text-white"
-                            >
-                              <span
-                                className="w-2 h-2 rounded-full border border-white/30 shrink-0"
-                                style={{ backgroundColor: getBadgeColor(clr) }}
-                              />
-                              <span>{clr}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveColorFromMatrix(clr)}
-                                className="text-[#8b9bb4] hover:text-[#ff6b6b] ml-0.5"
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
+              {/* TWO-COLUMN WORKSPACE: LEFT (CREATION) vs RIGHT (MATRIX STAGED) */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
+                
+                {/* LEFT SIDE: CREATION & MATRIX INPUT (Span 7) */}
+                <div className="lg:col-span-7 space-y-2.5">
+                  
+                  {/* Security PIN Lock for Saved Purchase */}
+                  {editingPurchase && !isEditProductUnlocked ? (
+                    <div className="p-3 rounded-xl bg-[#6d4aff]/10 border border-[#6d4aff]/30 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-[#6d4aff]/20 text-[#00d9ff] flex items-center justify-center">
+                          <Lock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-white text-[11px] block">Add Products to Saved Bill</span>
+                          <span className="text-[9px] text-[#8b9bb4]">Protected by Order Pipeline Security PIN</span>
                         </div>
                       </div>
 
-                      {activeMatrixColors.length > 0 && (
-                        <div className="border border-white/10 rounded-lg overflow-x-auto bg-[#101628]">
-                          <table className="w-full text-center border-collapse">
-                            <thead>
-                              <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[8px] uppercase border-b border-white/10">
-                                <th className="p-1 text-left min-w-[90px]">Colour \ Size</th>
-                                {productSizes.map((sz) => (
-                                  <th key={sz} className="p-1 text-center text-[#00d9ff] min-w-[45px]">
-                                    {sz}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                              {activeMatrixColors.map((clr) => (
-                                <tr key={clr}>
-                                  <td className="p-1 text-left font-bold text-white text-[10px]">
-                                    {clr}
-                                  </td>
-                                  {productSizes.map((sz) => {
-                                    const key = `${clr}:::${sz}`;
-                                    return (
-                                      <td key={sz} className="p-0.5 text-center">
-                                        <input
-                                          type="number"
-                                          min="0"
-                                          placeholder="0"
-                                          value={matrixQtyMap[key] || ''}
-                                          onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
-                                          className="w-10 px-1 py-0.5 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/10 rounded outline-none text-[9.5px]"
-                                        />
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
+                      <button
+                        type="button"
+                        onClick={handleOpenPinVerification}
+                        className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-[10.5px] flex items-center gap-1 cursor-pointer active:scale-95 shadow-md shadow-[#6d4aff]/30"
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Enter PIN</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-[#0a0e17] border border-white/10 space-y-2">
+                      
+                      {/* Product Selector Header */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5" /> 1. Select Product & Cost Price
+                          {editingPurchase && (
+                            <span className="ml-1 px-1.5 py-0.2 rounded bg-[#00ff9d]/20 text-[#00ff9d] text-[8px] font-mono font-bold flex items-center gap-0.5">
+                              <ShieldCheck className="w-2.5 h-2.5" /> PIN Verified
+                            </span>
+                          )}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setIsProductMasterOpen(true)}
+                          className="px-2 py-0.5 rounded bg-[#6d4aff]/20 border border-[#6d4aff]/40 text-[#00d9ff] hover:text-white text-[9px] font-bold"
+                        >
+                          + Create Product Master
+                        </button>
+                      </div>
 
-                      {activeMatrixColors.length > 0 && (
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={handleAddMatrixToStaged}
-                            className="px-2.5 py-0.5 bg-[#00d9ff] text-neutral-950 font-bold text-[10px] rounded"
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="sm:col-span-2">
+                          <select
+                            value={selectedProductId}
+                            onChange={(e) => setSelectedProductId(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#101628] border border-white/15 text-white font-semibold outline-none text-[11px] focus:border-[#00d9ff]"
                           >
-                            + Add to Inward List
-                          </button>
+                            <option value="">Choose Product...</option>
+                            {productsList.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                [{p.id}] {p.name} ({p.sub_category || 'General'})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="CP Rate (₹) *"
+                            value={unitCost}
+                            onChange={(e) => setUnitCost(e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#101628] border border-white/15 text-[#00ff9d] font-bold outline-none text-[11px] focus:border-[#00ff9d]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Dynamic Color Selector */}
+                      {activeProduct ? (
+                        <div className="space-y-2 pt-1 border-t border-white/5">
+                          <div className="flex flex-wrap items-center justify-between gap-1.5">
+                            <span className="text-[9.5px] font-mono font-bold text-white uppercase flex items-center gap-1">
+                              <Palette className="w-3 h-3 text-[#ff6b6b]" /> 2. Add Inward Colors
+                            </span>
+                            <span className="text-[8.5px] text-[#8b9bb4]">
+                              Sub-Category: <strong className="text-white">{activeProduct.sub_category || 'General'}</strong>
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <select
+                              value={selectedColorToAdd}
+                              onChange={(e) => {
+                                setSelectedColorToAdd(e.target.value);
+                                setCustomColorInput('');
+                              }}
+                              className="px-2 py-1 rounded bg-[#101628] border border-white/15 text-white text-[10px] outline-none"
+                            >
+                              <option value="">Choose from Colour Master...</option>
+                              {masterColours.map((c) => (
+                                <option key={c.id} value={c.name}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+
+                            <input
+                              type="text"
+                              placeholder="Or custom color"
+                              value={customColorInput}
+                              onChange={(e) => {
+                                setCustomColorInput(e.target.value);
+                                setSelectedColorToAdd('');
+                              }}
+                              className="px-2 py-1 rounded bg-[#101628] border border-white/15 text-white text-[10px] outline-none max-w-[120px]"
+                            />
+
+                            <button
+                              type="button"
+                              onClick={handleAddColorToMatrix}
+                              className="px-2.5 py-1 rounded bg-[#6d4aff] hover:bg-[#5b3adb] text-white font-bold text-[9.5px] cursor-pointer"
+                            >
+                              + Add Color
+                            </button>
+
+                            {/* Color Badges */}
+                            <div className="flex flex-wrap gap-1 ml-1">
+                              {activeMatrixColors.map((clr) => (
+                                <span
+                                  key={clr}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#101628] border border-white/15 text-[9px] text-white"
+                                >
+                                  <span
+                                    className="w-2 h-2 rounded-full border border-white/30 shrink-0"
+                                    style={{ backgroundColor: getBadgeColor(clr) }}
+                                  />
+                                  <span>{clr}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveColorFromMatrix(clr)}
+                                    className="text-[#8b9bb4] hover:text-[#ff6b6b] ml-0.5"
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Matrix Table: Colour x Size Group */}
+                          {activeMatrixColors.length > 0 ? (
+                            <div className="space-y-1.5 pt-1">
+                              <span className="text-[9px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                                3. Enter Inward Quantities
+                              </span>
+
+                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-48">
+                                <table className="w-full text-center border-collapse">
+                                  <thead>
+                                    <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[8px] uppercase border-b border-white/10 sticky top-0">
+                                      <th className="p-1.5 text-left min-w-[90px]">Colour \ Size</th>
+                                      {productSizes.map((sz) => (
+                                        <th key={sz} className="p-1.5 text-center text-[#00d9ff] min-w-[45px]">
+                                          {sz}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-white/5">
+                                    {activeMatrixColors.map((clr) => (
+                                      <tr key={clr}>
+                                        <td className="p-1.5 text-left font-bold text-white text-[10px] whitespace-nowrap">
+                                          {clr}
+                                        </td>
+                                        {productSizes.map((sz) => {
+                                          const key = `${clr}:::${sz}`;
+                                          return (
+                                            <td key={sz} className="p-1 text-center">
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                placeholder="0"
+                                                value={matrixQtyMap[key] || ''}
+                                                onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
+                                                className="w-10 px-1 py-0.5 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/10 rounded outline-none text-[10px] focus:border-[#00ff9d]"
+                                              />
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1">
+                                <span className="font-mono text-[10px] text-[#00ff9d] font-bold">
+                                  Units in Matrix: {currentConfiguredTotalQty}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={currentConfiguredTotalQty === 0}
+                                  onClick={handleAddMatrixToStaged}
+                                  className="px-4 py-1.5 bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] hover:opacity-95 text-neutral-950 font-bold text-[10.5px] rounded-lg flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow active:scale-95"
+                                >
+                                  <span>Add to Matrix Queue</span>
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="p-3 rounded-lg bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-[10px]">
+                              Add one or more colors above to reveal the variant size cells.
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-3 rounded-lg bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-[10px]">
+                          Choose a product from the dropdown to start configuring its color and size matrix.
                         </div>
                       )}
                     </div>
                   )}
-                </div>
-              )}
 
-              {/* STAGED NEWLY ADDED ITEMS LIST */}
-              {stagedItems.length > 0 && (
-                <div className="border border-white/10 rounded-lg overflow-hidden bg-[#0a0e17]">
-                  <div className="px-2 py-1 bg-[#101628] border-b border-white/10 flex items-center justify-between text-[9px] font-mono">
-                    <span className="font-bold text-[#00ff9d] uppercase">Newly Added Inward Items ({stagedItems.length} lines)</span>
-                    <span className="text-white font-bold">Qty: {totalInwardQuantity}</span>
-                  </div>
-                  <div className="max-h-28 overflow-y-auto">
-                    <table className="w-full text-left text-[9.5px]">
-                      <thead className="bg-[#101628] text-[#8b9bb4] font-mono uppercase text-[7.5px] sticky top-0">
-                        <tr>
-                          <th className="p-1">Product</th>
-                          <th className="p-1">Variant</th>
-                          <th className="p-1 text-center">Qty</th>
-                          <th className="p-1 text-right">Rate</th>
-                          <th className="p-1 text-right">Total</th>
-                          <th className="p-1 text-center">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {stagedItems.map((it, idx) => (
-                          <tr key={idx}>
-                            <td className="p-1 font-bold text-white truncate max-w-[120px]">
-                              [{it.product_id}] {it.product_name}
-                            </td>
-                            <td className="p-1 text-[#00d9ff]">{it.color} / {it.size}</td>
-                            <td className="p-1 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
-                            <td className="p-1 text-right font-mono">₹{it.unit_cost}</td>
-                            <td className="p-1 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
-                            <td className="p-1 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveStagedItem(idx)}
-                                className="text-[#ff6b6b]"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  {/* Saved Items for Existing Purchases (if Editing) */}
+                  {editingPurchase && existingItems.length > 0 && (
+                    <div className="p-2 rounded-xl bg-[#0a0e17] border border-white/10 space-y-1">
+                      <div className="flex items-center justify-between text-[9px] font-mono">
+                        <span className="font-bold text-white uppercase">Saved Items on Bill ({existingItems.length} lines)</span>
+                        <span className="text-[#00ff9d] font-bold">Subtotal: ₹{existingItemsTotal.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="max-h-24 overflow-y-auto">
+                        <table className="w-full text-left text-[9.5px]">
+                          <tbody className="divide-y divide-white/5">
+                            {existingItems.map((it, idx) => (
+                              <tr key={idx}>
+                                <td className="p-1 font-semibold text-white">[{it.product_id}]</td>
+                                <td className="p-1 text-[#00d9ff]">{it.variant_color} / {it.variant_size}</td>
+                                <td className="p-1 text-center font-bold text-[#00ff9d]">{it.quantity} Qty</td>
+                                <td className="p-1 text-right font-mono">₹{it.unit_cost}</td>
+                                <td className="p-1 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Notes & Grand Total */}
-              <div className="p-1.5 rounded-lg bg-[#0a0e17] border border-white/10 flex items-center justify-between gap-2">
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Remarks, vehicle no, notes..."
-                  className="flex-1 px-2 py-1 rounded bg-[#101628] border border-white/10 text-white text-[10px] outline-none"
-                />
-                <div className="text-right whitespace-nowrap">
-                  <span className="text-xs font-mono font-bold text-[#00ff9d]">
-                    Bill Total: ₹{grandTotalBillAmount.toLocaleString('en-IN')}
-                  </span>
+                {/* RIGHT SIDE: LIVE MATRIX INWARD QUEUE & BILL SUMMARY (Span 5) */}
+                <div className="lg:col-span-5 space-y-2.5">
+                  <div className="border border-white/10 rounded-xl overflow-hidden bg-[#0a0e17] shadow-inner flex flex-col">
+                    
+                    {/* Header */}
+                    <div className="px-3 py-2 bg-[#101628] border-b border-white/10 flex items-center justify-between text-[10px] font-mono">
+                      <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
+                        <ReceiptText className="w-3.5 h-3.5" /> Inward Queue ({stagedItems.length} items)
+                      </span>
+                      <span className="text-white font-bold">{totalInwardQuantity} Units</span>
+                    </div>
+
+                    {/* Staged Items List */}
+                    <div className="max-h-60 min-h-[160px] overflow-y-auto custom-scrollbar p-1">
+                      {stagedItems.length === 0 ? (
+                        <div className="p-6 text-center text-[#8b9bb4] italic text-[10px] space-y-1">
+                          <Layers className="w-5 h-5 mx-auto text-white/20" />
+                          <p>No items added to matrix queue yet.</p>
+                          <p className="text-[9px] text-white/40">Select product & fill quantities on the left, then click &quot;Add to Matrix Queue&quot;.</p>
+                        </div>
+                      ) : (
+                        <table className="w-full text-left text-[10px]">
+                          <thead className="bg-[#101628]/60 text-[#8b9bb4] font-mono uppercase text-[7.5px] sticky top-0">
+                            <tr>
+                              <th className="p-1.5">Product & Variant</th>
+                              <th className="p-1.5 text-center">Qty</th>
+                              <th className="p-1.5 text-right">Cost</th>
+                              <th className="p-1.5 text-right">Total</th>
+                              <th className="p-1.5 text-center"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {stagedItems.map((it, idx) => (
+                              <tr key={idx} className="hover:bg-white/[0.02]">
+                                <td className="p-1.5">
+                                  <span className="font-bold text-white block truncate max-w-[140px]">
+                                    {it.product_name}
+                                  </span>
+                                  <span className="text-[9px] text-[#00d9ff] font-mono">
+                                    {it.color} • {it.size}
+                                  </span>
+                                </td>
+                                <td className="p-1.5 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
+                                <td className="p-1.5 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
+                                <td className="p-1.5 text-right font-mono font-bold text-white">
+                                  ₹{it.total_cost.toLocaleString('en-IN')}
+                                </td>
+                                <td className="p-1.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveStagedItem(idx)}
+                                    className="p-1 text-[#ff6b6b] hover:text-white rounded hover:bg-white/5"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+
+                    {/* Summary & Bill Total Card */}
+                    <div className="p-2.5 bg-[#101628] border-t border-white/10 space-y-2">
+                      <div className="space-y-1 font-mono text-[10px]">
+                        {editingPurchase && (
+                          <div className="flex justify-between text-[#8b9bb4]">
+                            <span>Existing Bill Total:</span>
+                            <span>₹{existingItemsTotal.toLocaleString('en-IN')}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-[#8b9bb4]">
+                          <span>Newly Added ({stagedItems.length} lines):</span>
+                          <span className="text-[#00d9ff]">₹{stagedNewlyAddedTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs font-bold pt-1 border-t border-white/5">
+                          <span className="text-white">GRAND TOTAL:</span>
+                          <span className="text-base font-extrabold text-[#00ff9d]">
+                            ₹{grandTotalBillAmount.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Notes Input */}
+                      <div>
+                        <input
+                          type="text"
+                          value={notes}
+                          onChange={(e) => setNotes(e.target.value)}
+                          placeholder="Transport, remarks, notes..."
+                          className="w-full px-2 py-1 rounded bg-[#0a0e17] border border-white/10 text-white text-[10px] outline-none"
+                        />
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsModalOpen(false)}
+                          className="px-3 py-1.5 rounded-lg text-[#8b9bb4] hover:text-white text-[10.5px]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="w-full sm:w-auto px-5 py-2 rounded-xl bg-gradient-to-r from-[#ffa500] to-[#ff6b6b] hover:opacity-95 text-white font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-lg shadow-[#ffa500]/30 cursor-pointer active:scale-95 disabled:opacity-50"
+                        >
+                          {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                          <span>{editingPurchase ? 'Update Purchase Bill' : 'Save Purchase Entry'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
+
               </div>
 
-              {/* Bottom Actions */}
-              <div className="flex justify-end gap-2 pt-1 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1 rounded-lg text-[#8b9bb4] hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#ffa500] to-[#ff6b6b] text-white font-bold text-[11px] flex items-center gap-1.5 cursor-pointer active:scale-95"
-                >
-                  {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>{editingPurchase ? 'Update Purchase Bill' : 'Save Purchase Entry'}</span>
-                </button>
-              </div>
             </form>
           </div>
         </div>
@@ -1262,7 +1344,7 @@ export default function PurchaseManager() {
 
             <form onSubmit={handleVerifySecurityPin} className="space-y-3">
               <p className="text-[10px] text-[#8b9bb4]">
-                Enter your Order Pipeline Security PIN to add new products to this saved purchase inward.
+                Enter Order Pipeline Security PIN to add new products to this saved purchase inward.
               </p>
 
               {pinError && (
