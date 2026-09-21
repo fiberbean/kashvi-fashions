@@ -444,6 +444,18 @@ export default function PurchaseManager() {
     }
   };
 
+  // Direct remove single color row from matrix
+  const handleRemoveColorFromMatrix = (colorToRemove: string) => {
+    setActiveMatrixColors((prev) => prev.filter((c) => c !== colorToRemove));
+    setMatrixQtyMap((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith(`${colorToRemove}:::`)) delete next[k];
+      });
+      return next;
+    });
+  };
+
   const handleMatrixQtyChange = (color: string, size: string, value: string) => {
     const count = parseInt(value, 10);
     const key = `${color}:::${size}`;
@@ -1101,7 +1113,7 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* POPUP TRIGGER BUTTON & ACTIVE SHADE SUMMARY */}
+                      {/* POPUP TRIGGER BUTTON (CLEAN & DIRECT TO MATRIX) */}
                       {activeProduct ? (
                         <div className="space-y-3 pt-2 border-t border-white/5">
                           
@@ -1125,62 +1137,31 @@ export default function PurchaseManager() {
                             </button>
                           </div>
 
-                          {activeMatrixColors.length > 0 && (
-                            <div className="p-2.5 rounded-xl bg-[#101628] border border-white/10 space-y-1.5">
-                              <span className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block">
-                                Selected Shades ready for Matrix:
-                              </span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {activeMatrixColors.map((clr) => {
-                                  const shadeObj = masterColours.find((c) => c.name === clr);
-                                  return (
-                                    <span
-                                      key={clr}
-                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#0a0e17] border border-[#FF69B4]/60 text-xs text-white"
-                                    >
-                                      <span
-                                        className="w-3 h-3 rounded-full border border-white/30 shrink-0"
-                                        style={{ backgroundColor: shadeObj?.hex_code || '#6d4aff' }}
-                                      />
-                                      <span className="font-bold">{clr}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleShadeSelection(clr)}
-                                        className="text-[#8b9bb4] hover:text-[#ff6b6b] ml-1 cursor-pointer"
-                                      >
-                                        ×
-                                      </button>
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* 3. QUANTITY MATRIX GRID FOR CHOSEN SHADES */}
+                          {/* 3. QUANTITY MATRIX GRID FOR CHOSEN SHADES (WITH DELETE OPTION AT ROW END) */}
                           {activeMatrixColors.length > 0 ? (
                             <div className="space-y-2 pt-1 border-t border-white/5">
                               <span className="text-[10px] font-mono font-bold text-[#00ff9d] uppercase block">
                                 3. Enter Inward Quantities in Matrix
                               </span>
 
-                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-48">
+                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-52">
                                 <table className="w-full text-center border-collapse">
                                   <thead>
-                                    <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
+                                    <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0 z-10">
                                       <th className="py-2 px-2.5 text-left min-w-[110px]">Colour \ Size</th>
                                       {productSizes.map((sz) => (
                                         <th key={sz} className="py-2 px-2 text-center text-[#00d9ff] min-w-[55px]">
                                           {sz}
                                         </th>
                                       ))}
+                                      <th className="py-2 px-2 text-center min-w-[40px] text-[#ff6b6b]">Action</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-white/5">
                                     {activeMatrixColors.map((clr) => {
                                       const shadeObj = masterColours.find((c) => c.name === clr);
                                       return (
-                                        <tr key={clr}>
+                                        <tr key={clr} className="hover:bg-white/[0.02]">
                                           <td className="py-1.5 px-2.5 text-left font-bold text-white text-xs whitespace-nowrap">
                                             <span className="inline-flex items-center gap-1.5">
                                               <span
@@ -1205,6 +1186,17 @@ export default function PurchaseManager() {
                                               </td>
                                             );
                                           })}
+                                          {/* Direct Delete Row Action */}
+                                          <td className="py-1.5 px-2 text-center">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveColorFromMatrix(clr)}
+                                              className="p-1.5 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b] cursor-pointer transition-colors"
+                                              title={`Remove ${clr} from matrix`}
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                          </td>
                                         </tr>
                                       );
                                     })}
@@ -1408,7 +1400,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 4. DEDICATED POPUP FOR SHADE SELECTION (ALPHABETICAL ORDER A-Z) */}
+      {/* 4. DEDICATED POPUP FOR SHADE SELECTION */}
       {isShadePickerModalOpen && activeProduct && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
