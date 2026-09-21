@@ -6,28 +6,26 @@ import { supabase } from '../../lib/supabase';
 interface SubCategory {
   id: string;
   name: string;
-  category_id: string | null;
+  category_id?: string | null;
   category_name?: string | null;
-  image_url: string | null;
-  active: boolean | null;
+  image_url?: string | null;
+  active?: boolean | null;
 }
 
 interface Category {
   id: string;
   name: string;
-  slug: string | null;
-  department: string | null;
-  image_url: string | null;
-  active: boolean | null;
+  slug?: string | null;
+  department?: string | null;
+  image_url?: string | null;
+  active?: boolean | null;
   sub_categories?: SubCategory[];
 }
 
-let fashionCache: Category[] | null = null;
-
 export default function FashionBubbleMenu() {
-  const [categories, setCategories] = useState<Category[]>(fashionCache || []);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<Category | null>(null);
-  const [loading, setLoading] = useState(!fashionCache);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -40,86 +38,59 @@ export default function FashionBubbleMenu() {
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchFashionMenu() {
-      if (fashionCache && fashionCache.length > 0) {
-        setCategories(fashionCache);
-        setLoading(false);
-        return;
-      }
-
+    async function loadFashionMenu() {
       setLoading(true);
       try {
-        const [catResponse, subResponse] = await Promise.all([
-          supabase
-            .from('categories')
-            .select('id, name, slug, department, image_url, active'),
-          supabase
-            .from('sub_categories')
-            .select('id, name, category_id, category_name, image_url, active')
-            .eq('active', true),
+        const [catRes, subRes] = await Promise.all([
+          supabase.from('categories').select('*').order('name'),
+          supabase.from('sub_categories').select('*').order('name'),
         ]);
 
-        const catData = catResponse.data || [];
-        const subData = subResponse.data || [];
+        const catData: any[] = catRes.data || [];
+        const subData: any[] = subRes.data || [];
 
-        if (catData.length > 0) {
-          const fashionCats = catData.filter((c) => {
-            const nameLower = (c.name || '').toLowerCase();
-            const slugLower = (c.slug || '').toLowerCase();
-            const deptLower = (c.department || '').toLowerCase();
+        // 1. Fashion Categories Filter (Jewellery kani vatini theesukuntundhi)
+        const fashionCats = catData.filter((c) => {
+          if (c.active === false) return false;
+          const dept = (c.department || '').toLowerCase().trim();
+          const name = (c.name || '').toLowerCase().trim();
+          const slug = (c.slug || '').toLowerCase().trim();
+          const isJewel = dept.includes('jewel') || name.includes('jewel') || slug.includes('jewel');
+          return !isJewel;
+        });
 
-            const isJewellery =
-              nameLower.includes('jewel') ||
-              slugLower.includes('jewel') ||
-              deptLower.includes('jewel');
+        // 2. Map Sub-Categories to Categories by ID or Name
+        const mappedCategories: Category[] = fashionCats.map((cat) => {
+          const catIdStr = String(cat.id).trim();
+          const catNameStr = (cat.name || '').toLowerCase().trim();
 
-            return !isJewellery && c.active !== false;
+          const relatedSubs = subData.filter((sub) => {
+            if (sub.active === false) return false;
+            const subDept = (sub.department || '').toLowerCase().trim();
+            if (subDept.includes('jewel')) return false;
+
+            const mId = sub.category_id && String(sub.category_id).trim() === catIdStr;
+            const mName = sub.category_name && sub.category_name.toLowerCase().trim() === catNameStr;
+            return mId || mName;
           });
 
-          const subByCatId = new Map<string, SubCategory[]>();
-          const subByCatName = new Map<string, SubCategory[]>();
+          return {
+            ...cat,
+            sub_categories: relatedSubs,
+          };
+        });
 
-          subData.forEach((sub) => {
-            if (sub.category_id) {
-              const cid = String(sub.category_id).trim();
-              if (!subByCatId.has(cid)) subByCatId.set(cid, []);
-              subByCatId.get(cid)!.push(sub);
-            }
-            if (sub.category_name) {
-              const cname = sub.category_name.toLowerCase().trim();
-              if (!subByCatName.has(cname)) subByCatName.set(cname, []);
-              subByCatName.get(cname)!.push(sub);
-            }
-          });
-
-          const mappedCategories: Category[] = fashionCats.map((cat) => {
-            const byId = subByCatId.get(String(cat.id).trim()) || [];
-            const byName = subByCatName.get((cat.name || '').toLowerCase().trim()) || [];
-
-            const combined = [...byId];
-            byName.forEach((item) => {
-              if (!combined.some((c) => c.id === item.id)) {
-                combined.push(item);
-              }
-            });
-
-            return {
-              ...cat,
-              sub_categories: combined,
-            };
-          });
-
-          fashionCache = mappedCategories;
-          if (isMounted) setCategories(mappedCategories);
+        if (isMounted) {
+          setCategories(mappedCategories);
         }
       } catch (err) {
-        console.error('Error fetching fashion categories:', err);
+        console.error('Error loading fashion menu:', err);
       } finally {
         if (isMounted) setLoading(false);
       }
     }
 
-    fetchFashionMenu();
+    loadFashionMenu();
 
     return () => {
       isMounted = false;
@@ -134,9 +105,11 @@ export default function FashionBubbleMenu() {
     );
   }
 
+  if (categories.length === 0) return null;
+
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-7 pb-2">
-      {/* 1. Category Section Header */}
+    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-7 pb-2 select-none">
+      {/* 1. Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <span className="text-[10px] uppercase tracking-[0.25em] text-[#ff4d6d] font-bold block">
@@ -147,11 +120,11 @@ export default function FashionBubbleMenu() {
           </h3>
         </div>
         <span className="text-[11px] text-neutral-400 font-medium tracking-wider uppercase hidden sm:inline-block">
-          Select collection →
+          Select Category →
         </span>
       </div>
 
-      {/* 2. Main Royal Arch Menu Track */}
+      {/* 2. Main Track: Categories */}
       <div className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth">
         {categories.map((cat) => (
           <button
@@ -184,7 +157,7 @@ export default function FashionBubbleMenu() {
         ))}
       </div>
 
-      {/* 3. Half-Sized Arch Menu Modal */}
+      {/* 3. Sub-Category Pop-Up Menu Modal */}
       {activeCategory && (
         <div
           onClick={() => setActiveCategory(null)}
@@ -194,7 +167,6 @@ export default function FashionBubbleMenu() {
             onClick={(e) => e.stopPropagation()}
             className="relative w-full max-w-lg bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-[#ff4d6d]/20 cursor-default animate-in zoom-in-95 duration-200 flex flex-col"
           >
-            {/* Header */}
             <div className="flex items-center justify-between pb-3.5 border-b border-neutral-100 shrink-0">
               <div className="flex items-center gap-2">
                 <span className="p-1 rounded-full bg-[#fff0f3] text-[#ff4d6d]">
@@ -204,7 +176,7 @@ export default function FashionBubbleMenu() {
                   <h3 className="text-base sm:text-lg font-serif font-bold text-neutral-950 leading-none">
                     {activeCategory.name}
                   </h3>
-                  <span className="text-[10px] text-neutral-400 font-medium">Select Sub-category</span>
+                  <span className="text-[10px] text-neutral-400 font-medium">Select Sub-Category</span>
                 </div>
               </div>
 
@@ -218,21 +190,19 @@ export default function FashionBubbleMenu() {
               </button>
             </div>
 
-            {/* Half-Size Mini Arch Grid (Exact Menu Style in Half Scale) */}
             <div className="overflow-y-auto max-h-[55vh] py-4 no-scrollbar flex-1">
               {activeCategory.sub_categories && activeCategory.sub_categories.length > 0 ? (
                 <div className="grid grid-cols-4 sm:grid-cols-4 gap-3 sm:gap-4 justify-items-center">
                   {activeCategory.sub_categories.map((sub) => {
-                    const categoryTarget = activeCategory.slug || activeCategory.id;
+                    const catSlug = activeCategory.slug || activeCategory.id;
 
                     return (
                       <Link
                         key={sub.id}
-                        to={`/category/${categoryTarget}?sub=${encodeURIComponent(sub.name)}`}
+                        to={`/category/${catSlug}?sub=${encodeURIComponent(sub.name)}`}
                         onClick={() => setActiveCategory(null)}
                         className="group flex flex-col items-center w-[68px] sm:w-[76px] text-center cursor-pointer active:scale-95 transition-all"
                       >
-                        {/* Half-Sized Arch Frame (50% scale of main menu) */}
                         <div className="relative w-full h-[88px] sm:h-[96px] rounded-t-[32px] rounded-b-xl p-0.5 bg-gradient-to-b from-[#fff0f3] to-white border border-[#ff4d6d]/25 shadow-2xs group-hover:border-[#ff4d6d] group-hover:shadow-sm transition-all duration-300">
                           <div className="w-full h-full rounded-t-[28px] rounded-b-lg overflow-hidden bg-neutral-100 relative">
                             <img
@@ -249,7 +219,6 @@ export default function FashionBubbleMenu() {
                           </div>
                         </div>
 
-                        {/* Title */}
                         <span className="mt-1.5 text-[10px] font-serif font-bold text-neutral-800 group-hover:text-[#ff4d6d] transition-colors line-clamp-1 w-full text-center">
                           {sub.name}
                         </span>
@@ -259,12 +228,11 @@ export default function FashionBubbleMenu() {
                 </div>
               ) : (
                 <div className="py-8 text-center text-xs text-neutral-400">
-                  No sub-categories found
+                  No sub-categories found in this category.
                 </div>
               )}
             </div>
 
-            {/* Footer */}
             <div className="pt-3 border-t border-neutral-100 text-center shrink-0">
               <Link
                 to={`/category/${activeCategory.slug || activeCategory.id}`}

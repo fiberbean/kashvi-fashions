@@ -2,72 +2,97 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
-interface JewelleryItem {
+interface JewellerySubCategory {
   id: string;
   name: string;
-  category_id: string | null;
-  image_url: string | null;
-  active: boolean | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  department?: string | null;
+  image_url?: string | null;
+  active?: boolean | null;
 }
 
-let jewelleryCache: JewelleryItem[] | null = null;
-
 export default function JewelleryBubbleMenu() {
-  const [jewelleryItems, setJewelleryItems] = useState<JewelleryItem[]>(jewelleryCache || []);
-  const [loading, setLoading] = useState(!jewelleryCache);
+  const [jewellerySubs, setJewellerySubs] = useState<JewellerySubCategory[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchJewelleryData() {
-      if (jewelleryCache && jewelleryCache.length > 0) {
-        setJewelleryItems(jewelleryCache);
-        setLoading(false);
-        return;
-      }
-
+    async function loadJewelleryMenu() {
       setLoading(true);
       try {
-        const [catResponse, subResponse] = await Promise.all([
-          supabase
-            .from('categories')
-            .select('id, name, slug, department')
-            .or('slug.eq.jewellery,name.ilike.%jewellery%,department.eq.jewellery'),
-          supabase
-            .from('sub_categories')
-            .select('id, name, category_id, category_name, image_url, active')
-            .eq('active', true),
+        const [catRes, subRes] = await Promise.all([
+          supabase.from('categories').select('id, name, slug, department'),
+          supabase.from('sub_categories').select('*').order('name'),
         ]);
 
-        const catData = catResponse.data || [];
-        const subData = subResponse.data || [];
+        const catData: any[] = catRes.data || [];
+        const subData: any[] = subRes.data || [];
 
-        const jewelleryCategoryIds = catData.map((c) => c.id);
+        // 1. Identify any category IDs belonging to Jewellery
+        const jewelCatIds = new Set(
+          catData
+            .filter((c) => {
+              const d = (c.department || '').toLowerCase().trim();
+              const n = (c.name || '').toLowerCase().trim();
+              const s = (c.slug || '').toLowerCase().trim();
+              return d.includes('jewel') || n.includes('jewel') || s.includes('jewel');
+            })
+            .map((c) => String(c.id).trim())
+        );
 
-        let items: JewelleryItem[] = [];
+        // 2. Fetch all Jewellery Sub-Categories as Main Menu Items
+        let items = subData.filter((sub) => {
+          if (sub.active === false) return false;
 
-        if (subData.length > 0) {
+          // Department check
+          const subDept = (sub.department || '').toLowerCase().trim();
+          if (subDept.includes('jewel')) return true;
+
+          // Category ID check
+          if (sub.category_id && jewelCatIds.has(String(sub.category_id).trim())) return true;
+
+          // Category name check
+          const cName = (sub.category_name || '').toLowerCase().trim();
+          if (cName.includes('jewel')) return true;
+
+          // Jewellery name keywords check
+          const sName = (sub.name || '').toLowerCase().trim();
+          return (
+            sName.includes('bangle') ||
+            sName.includes('necklace') ||
+            sName.includes('earring') ||
+            sName.includes('chain') ||
+            sName.includes('ring') ||
+            sName.includes('chuda') ||
+            sName.includes('haram') ||
+            sName.includes('choker') ||
+            sName.includes('pendant') ||
+            sName.includes('anklet') ||
+            sName.includes('jewel')
+          );
+        });
+
+        // Fallback: If no explicit match, exclude strictly fashion items
+        if (items.length === 0 && subData.length > 0) {
           items = subData.filter((sub) => {
-            const matchesId = sub.category_id && jewelleryCategoryIds.includes(sub.category_id);
-            const matchesName = sub.category_name && sub.category_name.toLowerCase().includes('jewellery');
-            return matchesId || matchesName;
+            const subDept = (sub.department || '').toLowerCase().trim();
+            return !subDept.includes('fashion') && sub.active !== false;
           });
-
-          if (items.length === 0 && catData.length > 0) {
-            items = subData;
-          }
         }
 
-        jewelleryCache = items;
-        if (isMounted) setJewelleryItems(items);
+        if (isMounted) {
+          setJewellerySubs(items);
+        }
       } catch (err) {
-        console.error('Error fetching jewellery items:', err);
+        console.error('Error loading jewellery menu:', err);
       } finally {
         if (isMounted) setLoading(false);
       }
     }
 
-    fetchJewelleryData();
+    loadJewelleryMenu();
 
     return () => {
       isMounted = false;
@@ -82,8 +107,10 @@ export default function JewelleryBubbleMenu() {
     );
   }
 
+  if (jewellerySubs.length === 0) return null;
+
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-7 pb-2">
+    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-7 pb-2 select-none">
       {/* 1. Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
@@ -99,15 +126,14 @@ export default function JewelleryBubbleMenu() {
         </span>
       </div>
 
-      {/* 2. Royal Arch Menu */}
+      {/* 2. Main Track: Jewellery Sub-Categories Direct Menu */}
       <div className="flex items-stretch gap-3.5 sm:gap-4 overflow-x-auto pb-4 pt-1 scrollbar-none scroll-smooth">
-        {jewelleryItems.map((item) => (
+        {jewellerySubs.map((item) => (
           <Link
             key={item.id}
             to={`/category/jewellery?sub=${encodeURIComponent(item.name)}`}
             className="group shrink-0 flex flex-col items-center w-[108px] sm:w-[122px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden"
           >
-            {/* Royal Arch Frame */}
             <div className="relative w-full h-[142px] sm:h-[155px] rounded-t-[54px] rounded-b-2xl p-1 bg-gradient-to-b from-[#f8f5eb] to-white border border-[#e5c07b]/60 shadow-2xs group-hover:border-[#b38728] group-hover:shadow-md group-hover:shadow-[#0b3b2c]/15 transition-all duration-300 flex flex-col justify-between">
               <div className="w-full h-full rounded-t-[48px] rounded-b-xl overflow-hidden bg-neutral-100 relative">
                 <img
@@ -123,7 +149,6 @@ export default function JewelleryBubbleMenu() {
               </div>
             </div>
 
-            {/* Clean Category Label */}
             <div className="mt-2.5 w-full px-1">
               <h4 className="text-xs font-serif font-bold text-neutral-900 group-hover:text-[#0b3b2c] transition-colors truncate">
                 {item.name}
