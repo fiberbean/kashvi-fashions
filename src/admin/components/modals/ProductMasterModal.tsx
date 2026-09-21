@@ -18,7 +18,8 @@ import {
   ChevronDown,
   CheckSquare,
   Square,
-  Edit3
+  Edit3,
+  IndianRupee
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
@@ -62,6 +63,8 @@ const STANDARD_COLOR_MAP: { [key: string]: string } = {
   'orange': '#FFA500',
   'purple': '#800080',
   'brown': '#A52A2A',
+  'rusty red': '#B7410E',
+  'tan brown': '#D2B48C',
   'gold': '#D4AF37',
   'golden': '#D4AF37',
   'silver': '#C0C0C0',
@@ -137,6 +140,11 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [images, setImages] = useState<TaggedImage[]>([]);
 
+  // Pricing fields mapping directly to table columns
+  const [sellingPrice, setSellingPrice] = useState<number | string>(0);
+  const [mrp, setMrp] = useState<number | string>(0);
+  const [costPrice, setCostPrice] = useState<number | string>(0);
+
   const [isSubCatDropdownOpen, setIsSubCatDropdownOpen] = useState<boolean>(false);
   const [subCatSearch, setSubCatSearch] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -190,6 +198,9 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
       setProductCode(initialProduct.id);
       setName(initialProduct.name || '');
       setDescription(initialProduct.description || '');
+      setSellingPrice(initialProduct.selling_price ?? 0);
+      setMrp(initialProduct.mrp ?? 0);
+      setCostPrice(initialProduct.cost_price ?? 0);
 
       const isJewel = (initialProduct.brand || '').toLowerCase().includes('jewel') || initialProduct.id.startsWith('KJ');
       setBrand(isJewel ? 'jewellery' : 'fashions');
@@ -440,6 +451,9 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
         sub_brand: null,
         model_no: productCode.trim(),
         barcode: productCode.trim(),
+        selling_price: Number(sellingPrice) || 0,
+        mrp: Number(mrp) || 0,
+        cost_price: Number(costPrice) || 0,
         images: images,
         active: true,
         variants: { 
@@ -464,12 +478,9 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
         const { error } = await supabase.from('products').insert([
           {
             ...payload,
-            selling_price: 0,
-            cost_price: 0,
             gst: 0,
             weight: 0,
             weight_unit: 'grams',
-            mrp: 0,
             stock_quantity: 0,
             low_stock_threshold: 3,
             created_at: new Date().toISOString()
@@ -489,10 +500,11 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-6 bg-[#0a0e17]/85 backdrop-blur-xl select-none font-sans animate-in fade-in">
-      <div className="bg-[#101628]/95 backdrop-blur-2xl rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(109,74,255,0.2)] border border-white/10 space-y-4 text-xs relative">
+      <div className="bg-[#101628]/95 backdrop-blur-2xl rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(109,74,255,0.2)] border border-white/10 space-y-4 text-xs relative custom-scrollbar">
         
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#6d4aff] via-[#00d9ff] to-[#ff6b6b] rounded-t-3xl" />
 
+        {/* Header */}
         <div className="flex justify-between items-center border-b border-white/10 pb-3.5 sticky top-0 bg-[#101628]/90 backdrop-blur-md z-20">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] text-white flex items-center justify-center shadow-lg shadow-[#6d4aff]/30">
@@ -537,6 +549,8 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
         )}
 
         <form onSubmit={handleSave} className="space-y-4">
+          
+          {/* Brand Domain */}
           <div>
             <label className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
               Brand Domain *
@@ -581,6 +595,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
             </div>
           </div>
 
+          {/* Title & Description */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
@@ -609,6 +624,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
             </div>
           </div>
 
+          {/* Category, Sub-Category, Unit */}
           <div className={`grid grid-cols-1 ${brand === 'fashions' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
             {brand === 'fashions' && (
               <div>
@@ -721,6 +737,60 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
             </div>
           </div>
 
+          {/* Pricing Grid */}
+          <div className="p-4 bg-[#0a0e17]/80 rounded-3xl border border-white/10 space-y-2.5">
+            <span className="text-[11px] font-mono font-bold text-[#00ff9d] block uppercase tracking-wider flex items-center gap-1.5">
+              <IndianRupee className="w-3.5 h-3.5" /> Pricing & Rates
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
+                  Selling Price (₹) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={sellingPrice}
+                  onChange={(e) => setSellingPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3.5 py-2 rounded-xl border border-white/10 bg-[#101628] font-bold text-[#00ff9d] outline-none focus:border-[#00ff9d] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
+                  MRP (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={mrp}
+                  onChange={(e) => setMrp(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3.5 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
+                  Cost Price (₹)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={costPrice}
+                  onChange={(e) => setCostPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3.5 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#6d4aff] transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Variants Matrix */}
           <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-4">
             <span className="text-[11px] font-mono font-bold text-[#00d9ff] block uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
@@ -880,6 +950,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
             </div>
           </div>
 
+          {/* Product Assets */}
           <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-3.5">
             <div>
               <span className="text-[11px] font-mono font-bold text-white block uppercase tracking-wider flex items-center gap-1.5">
