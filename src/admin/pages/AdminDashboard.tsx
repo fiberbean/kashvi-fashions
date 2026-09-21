@@ -169,10 +169,11 @@ export default function AdminDashboard({
         setTotalOrdersToday(todayOrders.length);
         setAov(todayOrders.length > 0 ? Math.round(sum / todayOrders.length) : 0);
 
-        const freshOrders = orders.filter(
-          (o) => o.order_status === 'new' || o.order_status === 'pending' || !o.order_status
-        ).length;
-        setNewOrdersCount(freshOrders);
+        const freshOrders = orders.filter((o) => {
+  const st = (o.order_status || '').toLowerCase();
+  return st === 'new' || st === 'pending' || st === 'confirmed' || !o.order_status;
+}).length;
+setNewOrdersCount(freshOrders);
 
         const pendingLeads = orders
           .filter((o) => o.payment_status === 'payment_pending' || o.order_status === 'payment_pending')
@@ -690,7 +691,8 @@ export default function AdminDashboard({
                     </tr>
                   ) : (
                     recentOrders.map((ord) => {
-                      const isNew = ord.order_status === 'new' || ord.order_status === 'pending' || !ord.order_status;
+                      const st = (ord.order_status || '').toLowerCase();
+                      const isNew = st === 'new' || st === 'pending' || st === 'confirmed' || !ord.order_status; 
                       return (
                         <tr
                           key={ord.id}

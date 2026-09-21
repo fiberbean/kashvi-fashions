@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Phone,
   User,
+  Loader2,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -22,9 +23,9 @@ export interface AddressItem {
   whatsapp_number: string;
   email?: string;
   door_no: string;
-  building_name: string;
-  street: string;
-  area: string;
+  building_name?: string;
+  street?: string;
+  area?: string;
   pincode: string;
   city: string;
   state: string;
@@ -40,7 +41,7 @@ interface CustomerAddressesModalProps {
 }
 
 export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddressesModalProps) {
-  const { customer } = useAuth();
+  const { user, customer } = useAuth();
   const [addresses, setAddresses] = useState<AddressItem[]>(() => {
     try {
       const saved = localStorage.getItem('kashvi_saved_addresses');
@@ -50,6 +51,8 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
     }
   });
 
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [isAddingNew, setIsAddingNew] = useState(false);
   const [pincodeLoading, setPincodeLoading] = useState(false);
   const [pincodeStatus, setPincodeStatus] = useState<{
@@ -73,6 +76,57 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
     custom_label: '',
     zone_type: '',
   });
+
+  // 1. Fetch addresses from Supabase customer_addresses table
+  const fetchDbAddresses = async () => {
+    const customerId = customer?.id || customer?.mobile || user?.user_metadata?.whatsapp_number;
+    const authId = user?.id;
+
+    if (!customerId && !authId) return;
+
+    try {
+      setLoading(true);
+      let query = supabase.from('customer_addresses').select('*').order('created_at', { ascending: false });
+
+      if (authId) {
+        query = query.eq('auth_user_id', authId);
+      } else if (customerId) {
+        query = query.eq('customer_id', customerId);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data && data.length > 0) {
+        const mapped: AddressItem[] = data.map((row: any) => ({
+          id: row.id,
+          name: row.full_name || '',
+          whatsapp_number: row.mobile || '',
+          door_no: row.door_address || '',
+          building_name: row.building_name || '',
+          street: row.street || '',
+          area: row.area || '',
+          pincode: row.pincode || '',
+          city: row.city || '',
+          state: row.state || '',
+          address_type: row.address_type || 'Home',
+          custom_label: row.custom_label || '',
+          is_default: !!row.is_default,
+        }));
+        setAddresses(mapped);
+        localStorage.setItem('kashvi_saved_addresses', JSON.stringify(mapped));
+      }
+    } catch (err) {
+      console.error('Error fetching addresses:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchDbAddresses();
+    }
+  }, [isOpen, user?.id, customer?.id]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -143,7 +197,8 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
     }
   };
 
-  const handleSaveAddress = (e: React.FormEvent) => {
+  // 2. Save Address directly to Supabase table
+  const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.whatsapp_number || !formData.pincode || !formData.door_no) {
       alert('Please fill all required fields');
@@ -155,49 +210,115 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
       return;
     }
 
-    const newAddr: AddressItem = {
-      id: `addr_${Date.now()}`,
-      ...formData,
-      custom_label: formData.address_type === 'Others' ? formData.custom_label.trim() : undefined,
-      is_default: addresses.length === 0,
-    };
+    setSaving(true);
+    try {
+      const customerId = customer?.id || customer?.mobile || formData.whatsapp_number;
+      const authUserId = user?.id || null;
 
-    const updated = [newAddr, ...addresses];
-    setAddresses(updated);
-    localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+      const isFirst = addresses.length === 0;
 
-    setIsAddingNew(false);
-    setFormData({
-      name: customer?.name || '',
-      whatsapp_number: customer?.mobile || '',
-      email: customer?.email || '',
-      door_no: '',
-      building_name: '',
-      street: '',
-      area: '',
-      pincode: '',
-      city: '',
-      state: '',
-      address_type: 'Home',
-      custom_label: '',
-      zone_type: '',
-    });
-    setPincodeStatus(null);
+      // Prepare payload strictly matching public.customer_addresses schema
+      const insertPayload: any = {
+        customer_id: customerId,
+        auth_user_id: authUserId,
+        address_type: formData.address_type,
+        full_name: formData.name.trim(),
+        mobile: formData.whatsapp_number.trim(),
+        door_address: formData.door_no.trim(),
+        building_name: formData.building_name.trim() || null,
+        street: formData.street.trim() || null,
+        area: formData.area.trim() || null,
+        pincode: formData.pincode.trim(),
+        city: formData.city.trim(),
+        state: formData.state.trim(),
+        custom_label: formData.address_type === 'Others' ? formData.custom_label.trim() : null,
+        is_default: isFirst,
+      };
+
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .insert([insertPayload])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Supabase address insert error:', error);
+        alert('Could not save to server: ' + (error.message || 'Check database permissions'));
+        return;
+      }
+
+      const newAddr: AddressItem = {
+        id: data?.id || `addr_${Date.now()}`,
+        ...formData,
+        custom_label: formData.address_type === 'Others' ? formData.custom_label.trim() : undefined,
+        is_default: isFirst,
+      };
+
+      const updated = [newAddr, ...addresses];
+      setAddresses(updated);
+      localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+
+      setIsAddingNew(false);
+      setFormData({
+        name: customer?.name || '',
+        whatsapp_number: customer?.mobile || '',
+        email: customer?.email || '',
+        door_no: '',
+        building_name: '',
+        street: '',
+        area: '',
+        pincode: '',
+        city: '',
+        state: '',
+        address_type: 'Home',
+        custom_label: '',
+        zone_type: '',
+      });
+      setPincodeStatus(null);
+    } catch (err: any) {
+      console.error('Address save failed:', err);
+      alert('Error saving address: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDeleteAddress = (id: string) => {
-    const updated = addresses.filter((a) => a.id !== id);
-    setAddresses(updated);
-    localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+  // 3. Delete Address from Supabase
+  const handleDeleteAddress = async (id: string) => {
+    try {
+      await supabase.from('customer_addresses').delete().eq('id', id);
+      const updated = addresses.filter((a) => a.id !== id);
+      setAddresses(updated);
+      localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
   };
 
-  const handleSetDefault = (id: string) => {
-    const updated = addresses.map((a) => ({
-      ...a,
-      is_default: a.id === id,
-    }));
-    setAddresses(updated);
-    localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+  // 4. Set Default Address in Supabase
+  const handleSetDefault = async (id: string) => {
+    try {
+      const customerId = customer?.id || customer?.mobile || user?.user_metadata?.whatsapp_number;
+      if (customerId) {
+        await supabase
+          .from('customer_addresses')
+          .update({ is_default: false })
+          .eq('customer_id', customerId);
+      }
+      await supabase
+        .from('customer_addresses')
+        .update({ is_default: true })
+        .eq('id', id);
+
+      const updated = addresses.map((a) => ({
+        ...a,
+        is_default: a.id === id,
+      }));
+      setAddresses(updated);
+      localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
+    } catch (err) {
+      console.error('Set default error:', err);
+    }
   };
 
   if (!isOpen) return null;
@@ -253,7 +374,12 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                 </button>
               </div>
 
-              {addresses.length === 0 ? (
+              {loading ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-neutral-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-neutral-600" />
+                  <span className="text-xs">Loading saved addresses...</span>
+                </div>
+              ) : addresses.length === 0 ? (
                 <div className="py-14 text-center border-2 border-dashed border-neutral-200 rounded-3xl p-6 space-y-3">
                   <div className="w-14 h-14 rounded-2xl bg-neutral-50 flex items-center justify-center text-neutral-300 mx-auto">
                     <MapPin className="w-7 h-7" />
@@ -328,8 +454,10 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
 
                         <div className="pt-1.5 text-xs text-neutral-600 space-y-0.5">
                           <p>
-                            {addr.door_no}, {addr.building_name ? `${addr.building_name}, ` : ''}
-                            {addr.street}, {addr.area}
+                            {addr.door_no}
+                            {addr.building_name ? `, ${addr.building_name}` : ''}
+                            {addr.street ? `, ${addr.street}` : ''}
+                            {addr.area ? `, ${addr.area}` : ''}
                           </p>
                           <p className="font-semibold text-neutral-900 pt-0.5">
                             {addr.city}, {addr.state} — <span className="font-bold">{addr.pincode}</span>
@@ -570,10 +698,17 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
               <div className="pt-2">
                 <button
                   type="submit"
-                  disabled={pincodeStatus?.deliveryAvailable === false}
-                  className="w-full py-3 rounded-2xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-40 transition-all cursor-pointer shadow-md"
+                  disabled={saving || pincodeStatus?.deliveryAvailable === false}
+                  className="w-full py-3 rounded-2xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-40 transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
                 >
-                  Save Delivery Address
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving to Account...</span>
+                    </>
+                  ) : (
+                    <span>Save Delivery Address</span>
+                  )}
                 </button>
               </div>
             </form>
