@@ -10,8 +10,7 @@ import {
   Sparkles,
   Plus,
   CheckCircle2,
-  Layers,
-  ArrowRight
+  Layers
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 
@@ -30,138 +29,38 @@ interface ColorMasterModalProps {
   onSuccess?: () => void;
 }
 
-// Global Apparel & Textile Shade Library Palette
-const APPAREL_SHADE_DICTIONARY: { [base: string]: { name: string; hex: string }[] } = {
-  green: [
-    { name: 'Bottle Green', hex: '#004225' },
-    { name: 'Dark Green', hex: '#006400' },
-    { name: 'Forest Green', hex: '#228B22' },
-    { name: 'Emerald Green', hex: '#50C878' },
-    { name: 'Olive Green', hex: '#808000' },
-    { name: 'Mint Green', hex: '#98FF98' },
-    { name: 'Sage Green', hex: '#9DC183' },
-    { name: 'Pista Green', hex: '#93C572' },
-    { name: 'Sea Green', hex: '#2E8B57' },
-    { name: 'Lime Green', hex: '#32CD32' },
-    { name: 'Army Green', hex: '#4B5320' },
-    { name: 'Teal Green', hex: '#00827F' },
-    { name: 'Mehendi Green', hex: '#556B2F' },
-    { name: 'Parrot Green', hex: '#44D62C' },
-    { name: 'Moss Green', hex: '#8A9A5B' },
-    { name: 'Pastel Green', hex: '#77DD77' }
-  ],
-  pink: [
-    { name: 'Rani Pink', hex: '#E30B5C' },
-    { name: 'Baby Pink', hex: '#F4C2C2' },
-    { name: 'Rose Pink', hex: '#FF66CC' },
-    { name: 'Dusty Pink', hex: '#DCAE96' },
-    { name: 'Hot Pink', hex: '#FF69B4' },
-    { name: 'Blush Pink', hex: '#FE828C' },
-    { name: 'Magenta Pink', hex: '#CC338B' },
-    { name: 'Pastel Pink', hex: '#FFD1DC' },
-    { name: 'Onion Pink', hex: '#C48793' },
-    { name: 'Coral Pink', hex: '#F88379' },
-    { name: 'Deep Pink', hex: '#FF1493' },
-    { name: 'Flamingo Pink', hex: '#FC8EAC' }
-  ],
-  blue: [
-    { name: 'Navy Blue', hex: '#000080' },
-    { name: 'Royal Blue', hex: '#4169E1' },
-    { name: 'Sky Blue', hex: '#87CEEB' },
-    { name: 'Aqua Blue', hex: '#00FFFF' },
-    { name: 'Turquoise Blue', hex: '#40E0D0' },
-    { name: 'Midnight Blue', hex: '#191970' },
-    { name: 'Powder Blue', hex: '#B0E0E6' },
-    { name: 'Indigo Blue', hex: '#4B0082' },
-    { name: 'Teal Blue', hex: '#008080' },
-    { name: 'Ice Blue', hex: '#AFEEEE' },
-    { name: 'Denim Blue', hex: '#1560BD' },
-    { name: 'Cyan Blue', hex: '#00B7EB' }
-  ],
-  yellow: [
-    { name: 'Mustard Yellow', hex: '#E1AD01' },
-    { name: 'Lemon Yellow', hex: '#FFF44F' },
-    { name: 'Golden Yellow', hex: '#FFDF00' },
-    { name: 'Haldi Yellow', hex: '#EAA221' },
-    { name: 'Pastel Yellow', hex: '#FFFFE0' },
-    { name: 'Amber Yellow', hex: '#FFBF00' },
-    { name: 'Bright Yellow', hex: '#FFFF00' },
-    { name: 'Mango Yellow', hex: '#FF8243' }
-  ],
-  red: [
-    { name: 'Crimson Red', hex: '#DC143C' },
-    { name: 'Maroon Red', hex: '#800000' },
-    { name: 'Rusty Red', hex: '#B7410E' },
-    { name: 'Wine Red', hex: '#722F37' },
-    { name: 'Cherry Red', hex: '#D2042D' },
-    { name: 'Scarlet Red', hex: '#FF2400' },
-    { name: 'Ruby Red', hex: '#E0115F' },
-    { name: 'Brick Red', hex: '#CB4154' },
-    { name: 'Coral Red', hex: '#FF4040' },
-    { name: 'Blood Red', hex: '#660000' }
-  ],
-  orange: [
-    { name: 'Peach', hex: '#FFE5B4' },
-    { name: 'Rust Orange', hex: '#C45214' },
-    { name: 'Tangerine Orange', hex: '#F28500' },
-    { name: 'Coral Orange', hex: '#FF7F50' },
-    { name: 'Apricot', hex: '#FBCEB1' },
-    { name: 'Burnt Orange', hex: '#CC5500' },
-    { name: 'Carrot Orange', hex: '#ED9121' }
-  ],
-  purple: [
-    { name: 'Lavender', hex: '#E6E6FA' },
-    { name: 'Violet', hex: '#8F00FF' },
-    { name: 'Plum Purple', hex: '#8E4585' },
-    { name: 'Mauve', hex: '#E0B0FF' },
-    { name: 'Grape Purple', hex: '#6F2DA8' },
-    { name: 'Lilac', hex: '#C8A2C8' },
-    { name: 'Aubergine', hex: '#3B0910' }
-  ],
-  white: [
-    { name: 'Pure White', hex: '#FFFFFF' },
-    { name: 'Off White', hex: '#FAF9F6' },
-    { name: 'Ivory White', hex: '#FFFFF0' },
-    { name: 'Cream White', hex: '#FFFDD0' },
-    { name: 'Milky White', hex: '#F8F9FA' }
-  ],
-  black: [
-    { name: 'Pure Black', hex: '#000000' },
-    { name: 'Jet Black', hex: '#0A0A0A' },
-    { name: 'Charcoal Black', hex: '#36454F' },
-    { name: 'Matte Black', hex: '#28282B' }
-  ],
-  grey: [
-    { name: 'Steel Grey', hex: '#71797E' },
-    { name: 'Silver Grey', hex: '#C0C0C0' },
-    { name: 'Slate Grey', hex: '#708090' },
-    { name: 'Ash Grey', hex: '#B2BEB5' },
-    { name: 'Dark Grey', hex: '#5A5A5A' },
-    { name: 'Light Grey', hex: '#D3D3D3' }
-  ],
-  brown: [
-    { name: 'Tan Brown', hex: '#D2B48C' },
-    { name: 'Chocolate Brown', hex: '#7B3F00' },
-    { name: 'Beige', hex: '#F5F5DC' },
-    { name: 'Coffee Brown', hex: '#4B3621' },
-    { name: 'Khaki', hex: '#C3B091' },
-    { name: 'Mocha', hex: '#967969' }
-  ]
-};
+// Function to calculate appropriate text color (dark/light) based on background hex
+function getContrastTextColor(hexColor: string | null | undefined): string {
+  if (!hexColor) return '#FFFFFF';
+  let hex = hexColor.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex.split('').map((c) => c + c).join('');
+  }
+  const r = parseInt(hex.substring(0, 2), 16) || 0;
+  const g = parseInt(hex.substring(2, 4), 16) || 0;
+  const b = parseInt(hex.substring(4, 6), 16) || 0;
+  // Perceptive luminance formula
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
+}
 
 export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModalProps) {
-  const [savedColours, setSavedColours] = useState<ColourRecord[]>([]);
+  const [colours, setColours] = useState<ColourRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Search input: e.g. "Green", "Pink", "Blue", etc.
-  const [colorInputText, setColorInputText] = useState<string>('Green');
+  // Active Base Color Family Selection
+  const [searchTerm, setSearchTerm] = useState<string>('Green');
+  const [selectedBaseFamily, setSelectedBaseFamily] = useState<string>('green');
 
-  // Custom Shade creator inside the active family
-  const [customShadeName, setCustomShadeName] = useState<string>('');
-  const [customHexCode, setCustomHexCode] = useState<string>('#50C878');
+  // Currently Selected/Active Focused Shade Card (Highlights with Baby Pink Border)
+  const [selectedShadeId, setSelectedShadeId] = useState<string | null>(null);
 
-  const loadSavedColours = async () => {
+  // New Custom Shade Input
+  const [customName, setCustomName] = useState<string>('');
+  const [customHex, setCustomHex] = useState<string>('#50C878');
+
+  const loadColoursFromDB = async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -171,123 +70,74 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
         .order('name', { ascending: true });
 
       if (error) throw error;
-      setSavedColours(data || []);
+      setColours(data || []);
     } catch (err: any) {
-      console.error('Failed to load colours:', err);
+      console.error('Failed to load colours from database:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadSavedColours();
+    loadColoursFromDB();
   }, []);
 
-  // Map of saved shades by normalized lowercase name for instant lookup
-  const savedColorMap = useMemo(() => {
-    const map = new Map<string, ColourRecord>();
-    savedColours.forEach((c) => {
-      map.set(c.name.toLowerCase().trim(), c);
-    });
-    return map;
-  }, [savedColours]);
-
-  // Determine current active base family
-  const activeBaseFamily = useMemo(() => {
-    const clean = colorInputText.toLowerCase().trim();
-    if (!clean) return 'green';
-    const matchedKey = Object.keys(APPAREL_SHADE_DICTIONARY).find((k) => clean.includes(k));
-    return matchedKey || clean;
-  }, [colorInputText]);
-
-  // Generate the full shade card list for current family:
-  // Combines (1) Textile shade palette + (2) User-saved shades that match this family
-  const currentFamilyCards = useMemo(() => {
-    const baseClean = activeBaseFamily.toLowerCase().trim();
-    const presetShades = APPAREL_SHADE_DICTIONARY[baseClean] || [];
-
-    const map = new Map<string, { name: string; hex: string; isCustom?: boolean }>();
-
-    // 1. Add palette shades
-    presetShades.forEach((ps) => {
-      map.set(ps.name.toLowerCase().trim(), { name: ps.name, hex: ps.hex });
-    });
-
-    // 2. Also check DB saved items belonging to this base_color OR containing the family name
-    savedColours.forEach((sc) => {
-      const scName = sc.name.toLowerCase().trim();
-      const scBase = (sc.base_color || '').toLowerCase().trim();
-      if (scBase === baseClean || scName.includes(baseClean)) {
-        if (!map.has(scName)) {
-          map.set(scName, { name: sc.name, hex: sc.hex_code || '#6d4aff', isCustom: true });
-        }
+  // Extract distinct base color families dynamically from DB
+  const baseFamilies = useMemo(() => {
+    const set = new Set<string>();
+    colours.forEach((c) => {
+      if (c.base_color && c.base_color.trim()) {
+        set.add(c.base_color.trim().toLowerCase());
       }
     });
+    return Array.from(set);
+  }, [colours]);
 
-    // If typing custom search that doesn't match base, filter across dictionary
-    if (map.size === 0 && colorInputText.trim()) {
-      const q = colorInputText.toLowerCase().trim();
-      Object.values(APPAREL_SHADE_DICTIONARY).forEach((list) => {
-        list.forEach((it) => {
-          if (it.name.toLowerCase().includes(q)) {
-            map.set(it.name.toLowerCase().trim(), it);
-          }
-        });
-      });
+  // Sync typed search term with Base Color Family
+  useEffect(() => {
+    const clean = searchTerm.toLowerCase().trim();
+    if (!clean) return;
+    const match = baseFamilies.find((f) => clean.includes(f));
+    if (match) {
+      setSelectedBaseFamily(match);
+    } else {
+      setSelectedBaseFamily(clean);
     }
+  }, [searchTerm, baseFamilies]);
 
-    return Array.from(map.values());
-  }, [activeBaseFamily, colorInputText, savedColours]);
+  // Strictly filter only the selected base color family
+  const currentFamilyShades = useMemo(() => {
+    const fam = selectedBaseFamily.toLowerCase().trim();
+    if (!fam) return [];
 
-  // Generate Next Auto Color ID
-  const getNextColorId = async (): Promise<string> => {
+    return colours.filter((c) => {
+      const cBase = (c.base_color || '').toLowerCase().trim();
+      const cName = c.name.toLowerCase().trim();
+      // Only include shades explicitly belonging to this family or containing the base family name
+      return cBase === fam || cName.includes(fam);
+    });
+  }, [colours, selectedBaseFamily]);
+
+  // Toggle Save (Active / Inactive) on click
+  const handleCardClick = async (shade: ColourRecord) => {
+    // Set baby pink selected highlight on this card
+    setSelectedShadeId(shade.id);
+
+    // Toggle active state in DB
+    const newActiveState = !shade.active;
+    setActionLoadingId(shade.id);
+
     try {
-      const { data } = await supabase
+      const { error } = await supabase
         .from('colours')
-        .select('id')
-        .like('id', 'COL%')
-        .order('id', { ascending: false })
-        .limit(1);
+        .update({ active: newActiveState })
+        .eq('id', shade.id);
 
-      if (data && data.length > 0) {
-        const match = data[0].id.match(/\d+$/);
-        const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
-        return `COL${String(nextNum).padStart(4, '0')}`;
-      }
-      return 'COL0001';
-    } catch {
-      return `COL${Date.now().toString().slice(-4)}`;
-    }
-  };
+      if (error) throw error;
 
-  // Click card to Save (if not saved) or Delete (if saved)
-  const handleToggleShadeCard = async (shade: { name: string; hex: string }) => {
-    const cleanName = shade.name.trim();
-    const existing = savedColorMap.get(cleanName.toLowerCase());
-
-    setActionLoadingId(cleanName);
-    try {
-      if (existing) {
-        // Unsave from database
-        const { error } = await supabase.from('colours').delete().eq('id', existing.id);
-        if (error) throw error;
-        setSavedColours((prev) => prev.filter((c) => c.id !== existing.id));
-      } else {
-        // Save to database
-        const nextId = await getNextColorId();
-        const newRecord: ColourRecord = {
-          id: nextId,
-          name: cleanName,
-          hex_code: shade.hex,
-          base_color: activeBaseFamily,
-          active: true,
-          display_order: savedColours.length + 1
-        };
-
-        const { error } = await supabase.from('colours').insert([newRecord]);
-        if (error) throw error;
-        setSavedColours((prev) => [...prev, newRecord]);
-      }
+      setColours((prev) =>
+        prev.map((c) => (c.id === shade.id ? { ...c, active: newActiveState } : c))
+      );
 
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -297,37 +147,51 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     }
   };
 
-  // Add Custom User-defined Shade to the active family
-  const handleAddCustomShade = async (e: React.FormEvent) => {
+  // Add custom shade
+  const handleAddNewShade = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = customShadeName.trim();
-    if (!clean) {
+    const cleanName = customName.trim();
+    if (!cleanName) {
       alert('Please enter a shade name.');
       return;
     }
 
-    if (savedColorMap.has(clean.toLowerCase())) {
-      alert(`Shade "${clean}" is already saved.`);
+    if (colours.some((c) => c.name.toLowerCase().trim() === cleanName.toLowerCase())) {
+      alert(`Shade "${cleanName}" already exists in Database.`);
       return;
     }
 
-    setActionLoadingId('custom_add');
+    setActionLoadingId('new_add');
     try {
-      const nextId = await getNextColorId();
+      const { data: lastRecord } = await supabase
+        .from('colours')
+        .select('id')
+        .like('id', 'COL%')
+        .order('id', { ascending: false })
+        .limit(1);
+
+      let nextId = 'COL0001';
+      if (lastRecord && lastRecord.length > 0) {
+        const match = lastRecord[0].id.match(/\d+$/);
+        const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
+        nextId = `COL${String(nextNum).padStart(4, '0')}`;
+      }
+
       const newRecord: ColourRecord = {
         id: nextId,
-        name: clean,
-        hex_code: customHexCode,
-        base_color: activeBaseFamily || 'general',
+        name: cleanName,
+        hex_code: customHex,
+        base_color: selectedBaseFamily || 'general',
         active: true,
-        display_order: savedColours.length + 1
+        display_order: colours.length + 1
       };
 
       const { error } = await supabase.from('colours').insert([newRecord]);
       if (error) throw error;
 
-      setSavedColours((prev) => [...prev, newRecord]);
-      setCustomShadeName('');
+      setColours((prev) => [...prev, newRecord]);
+      setSelectedShadeId(newRecord.id);
+      setCustomName('');
       if (onSuccess) onSuccess();
     } catch (err: any) {
       alert('Error adding shade: ' + err.message);
@@ -336,17 +200,22 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     }
   };
 
-  // Delete directly from all saved registry
-  const handleDeleteDirect = async (id: string, name: string) => {
-    if (!window.confirm(`Permanently delete shade "${name}"?`)) return;
+  // Delete shade
+  const handleDeleteShade = async (id: string, name: string) => {
+    if (!window.confirm(`Permanently delete shade "${name}" from Database?`)) return;
 
+    setActionLoadingId(id);
     try {
       const { error } = await supabase.from('colours').delete().eq('id', id);
       if (error) throw error;
-      setSavedColours((prev) => prev.filter((c) => c.id !== id));
+
+      setColours((prev) => prev.filter((c) => c.id !== id));
+      if (selectedShadeId === id) setSelectedShadeId(null);
       if (onSuccess) onSuccess();
     } catch (err: any) {
       alert('Delete failed: ' + err.message);
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -364,11 +233,11 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <span>Colour & Shades Master Registry</span>
                 <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[9.5px] font-mono">
-                  {savedColours.length} Saved in DB
+                  {colours.length} Total Saved in DB
                 </span>
               </h3>
               <span className="text-[10.5px] text-[#8b9bb4]">
-                Type a base color to generate and save shades with exact hex codes
+                Shades are full-color filled • Click any shade to select & toggle saved state
               </span>
             </div>
           </div>
@@ -385,38 +254,39 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
         {/* Modal Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs">
           
-          {/* 1. Base Color Input + Family Pills */}
+          {/* Step 1: Base Color Selector */}
           <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
                 <Search className="w-3.5 h-3.5" /> 1. Select or Enter Base Color Family
               </span>
               <span className="text-[10px] text-[#8b9bb4]">
-                Active Family: <strong className="text-white capitalize">{activeBaseFamily}</strong> ({currentFamilyCards.length} shades ready)
+                Active Family: <strong className="text-white capitalize">{selectedBaseFamily}</strong> ({currentFamilyShades.length} shades)
               </span>
             </div>
 
             <div className="relative">
               <input
                 type="text"
-                placeholder="Type base color (e.g. Green, Pink, Blue, Yellow, Red, Maroon, White)..."
-                value={colorInputText}
-                onChange={(e) => setColorInputText(e.target.value)}
+                placeholder="Type base color (e.g. Green, Pink, Blue, Yellow, Red, Orange, Brown)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 rounded-xl bg-[#101628] border border-white/20 text-white font-semibold text-xs outline-none focus:border-[#00d9ff]"
               />
               <Palette className="w-4 h-4 text-[#8b9bb4] absolute left-3 top-1/2 -translate-y-1/2" />
             </div>
 
-            {/* Quick Family Shortcuts */}
+            {/* Base Color Pills */}
             <div className="flex flex-wrap gap-1.5 pt-1">
-              {Object.keys(APPAREL_SHADE_DICTIONARY).map((fam) => {
-                const isActive = activeBaseFamily === fam;
+              {baseFamilies.map((fam) => {
+                const isActive = selectedBaseFamily === fam;
                 return (
                   <button
                     key={fam}
                     type="button"
                     onClick={() => {
-                      setColorInputText(fam.charAt(0).toUpperCase() + fam.slice(1));
+                      setSelectedBaseFamily(fam);
+                      setSearchTerm(fam.charAt(0).toUpperCase() + fam.slice(1));
                     }}
                     className={`px-2.5 py-1 rounded-xl font-mono text-[10.5px] font-semibold transition-all capitalize cursor-pointer ${
                       isActive
@@ -431,72 +301,121 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
             </div>
           </div>
 
-          {/* 2. MINI CARDS: SHADES PREVIEW & VISUAL STATES */}
+          {/* Step 2: COLOR-FILLED SHADE MINI CARDS (FULL FILL + BABY PINK SELECT + OPPOSITE SAVED BORDER) */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs">
               <span className="font-mono font-bold text-white uppercase flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-[#00ff9d]" /> 
-                2. Shades for &quot;{activeBaseFamily.toUpperCase()}&quot; — Click Card to Save / Remove
+                2. Shades for &quot;{selectedBaseFamily.toUpperCase()}&quot; ({currentFamilyShades.length})
               </span>
-              <span className="text-[10px] text-[#8b9bb4]">
-                <strong className="text-[#00ff9d]">Green Border (SAVED)</strong> = Stored in DB • <strong className="text-white">Dark Card (+ SAVE)</strong> = Click to Store
+              <span className="text-[10px] text-[#8b9bb4] flex items-center gap-2">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full border-2 border-[#FFB6C1] bg-[#FFB6C1]" />
+                  <span>Selected = <strong>Baby Pink Border</strong></span>
+                </span>
+                <span>•</span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full border-2 border-[#00ff9d] bg-[#00ff9d]" />
+                  <span>Saved = <strong>Green / Contrast Border</strong></span>
+                </span>
               </span>
             </div>
 
-            {currentFamilyCards.length === 0 ? (
+            {loading ? (
+              <div className="p-8 text-center text-[#8b9bb4]">
+                <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-1.5" />
+                Loading shades...
+              </div>
+            ) : currentFamilyShades.length === 0 ? (
               <div className="p-6 rounded-2xl bg-[#0a0e17] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs space-y-1">
-                <p>No presets found for &quot;{colorInputText}&quot;.</p>
-                <p className="text-[10px] text-white/40">You can type a new shade name and hex code below to add it.</p>
+                <p>No shades found in Database for &quot;{selectedBaseFamily}&quot;.</p>
+                <p className="text-[10px] text-white/40">Use the form below to add your first shade for this family.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
-                {currentFamilyCards.map((shade) => {
-                  const isSaved = savedColorMap.has(shade.name.toLowerCase().trim());
-                  const isLoading = actionLoadingId === shade.name.trim();
+                {currentFamilyShades.map((shade) => {
+                  const isLoading = actionLoadingId === shade.id;
+                  const isSaved = shade.active !== false;
+                  const isSelected = selectedShadeId === shade.id;
+                  const cardBg = shade.hex_code || '#006400';
+                  const textColor = getContrastTextColor(cardBg);
+
+                  // Border styling rules:
+                  // 1. If currently selected/clicked -> Baby Pink border (#FFB6C1 / #FF69B4)
+                  // 2. If Saved -> Opposite contrasting glowing border (#00ff9d)
+                  // 3. If Unsaved -> Dark border with subtle opacity
+                  let borderClasses = 'border-white/20';
+                  if (isSelected) {
+                    borderClasses = 'border-4 border-[#FFB6C1] shadow-[0_0_20px_rgba(255,182,193,0.9)] ring-2 ring-[#FF69B4] scale-[1.03] z-10';
+                  } else if (isSaved) {
+                    borderClasses = 'border-2 border-[#00ff9d] shadow-[0_0_12px_rgba(0,255,157,0.35)] ring-1 ring-[#00ff9d]/50';
+                  } else {
+                    borderClasses = 'border-2 border-white/15 opacity-70 hover:opacity-100';
+                  }
 
                   return (
                     <div
-                      key={shade.name}
-                      onClick={() => !isLoading && handleToggleShadeCard(shade)}
-                      className={`p-2.5 rounded-2xl border transition-all cursor-pointer relative group flex flex-col justify-between ${
-                        isSaved
-                          ? 'bg-[#00ff9d]/10 border-[#00ff9d] shadow-[0_0_15px_rgba(0,255,157,0.15)] ring-1 ring-[#00ff9d]/40'
-                          : 'bg-[#0a0e17] border-white/10 hover:border-white/30 hover:bg-[#101628]'
-                      }`}
+                      key={shade.id}
+                      onClick={() => !isLoading && handleCardClick(shade)}
+                      style={{ backgroundColor: cardBg }}
+                      className={`p-3 rounded-2xl transition-all duration-150 cursor-pointer relative group flex flex-col justify-between min-h-[92px] ${borderClasses}`}
                     >
-                      {/* Top: Swatch & Status Badge */}
-                      <div className="flex items-center justify-between gap-1.5 mb-2">
-                        <div
-                          className="w-7 h-7 rounded-xl border border-white/20 shadow-inner shrink-0"
-                          style={{ backgroundColor: shade.hex }}
-                        />
+                      {/* Top: Status Badges */}
+                      <div className="flex items-center justify-between gap-1 mb-2">
                         {isSaved ? (
-                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] text-[9px] font-mono font-extrabold border border-[#00ff9d]/40">
-                            <CheckCircle2 className="w-2.5 h-2.5 stroke-[3]" />
+                          <span
+                            style={{
+                              backgroundColor: textColor === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)',
+                              color: textColor
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-mono font-extrabold backdrop-blur-xs border border-white/20"
+                          >
+                            <CheckCircle2 className="w-2.5 h-2.5 stroke-[3] text-[#00ff9d]" />
                             <span>SAVED</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white/5 text-[#8b9bb4] group-hover:text-white text-[9px] font-mono border border-white/10">
+                          <span
+                            style={{
+                              backgroundColor: textColor === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)',
+                              color: textColor
+                            }}
+                            className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold backdrop-blur-xs border border-white/15"
+                          >
                             <Plus className="w-2.5 h-2.5" />
                             <span>SAVE</span>
                           </span>
                         )}
+
+                        {/* Selected Indicator Pill */}
+                        {isSelected && (
+                          <span className="px-1.5 py-0.2 rounded-full bg-[#FF69B4] text-neutral-950 text-[8px] font-mono font-black uppercase tracking-wider shadow">
+                            PICKED
+                          </span>
+                        )}
                       </div>
 
-                      {/* Bottom: Title & Hex */}
+                      {/* Bottom: Shade Title & Hex Code */}
                       <div>
-                        <span className="font-bold text-white text-xs block truncate" title={shade.name}>
+                        <span
+                          style={{ color: textColor }}
+                          className="font-extrabold text-xs block truncate drop-shadow-sm"
+                          title={shade.name}
+                        >
                           {shade.name}
                         </span>
-                        <span className="font-mono text-[10px] text-[#8b9bb4] block uppercase">
-                          {shade.hex}
-                        </span>
+                        <div
+                          style={{ color: textColor, opacity: 0.85 }}
+                          className="flex items-center justify-between text-[9.5px] font-mono font-bold pt-0.5"
+                        >
+                          <span className="uppercase">{shade.hex_code || '—'}</span>
+                          <span className="text-[8.5px] opacity-75">[{shade.id}]</span>
+                        </div>
                       </div>
 
                       {/* Loading spinner */}
                       {isLoading && (
                         <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center backdrop-blur-xs">
-                          <Loader2 className="w-4 h-4 animate-spin text-[#00d9ff]" />
+                          <Loader2 className="w-4 h-4 animate-spin text-white" />
                         </div>
                       )}
                     </div>
@@ -506,96 +425,46 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
             )}
           </div>
 
-          {/* 3. ADD CUSTOM SHADE FORM */}
-          <form onSubmit={handleAddCustomShade} className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2">
+          {/* Step 3: Add Custom Shade Form */}
+          <form onSubmit={handleAddNewShade} className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2">
             <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-              3. Need Another Specific Shade? Add Custom Shade
+              3. Insert Additional Shade for &quot;{selectedBaseFamily}&quot;
             </span>
 
             <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
-                placeholder={`Custom shade name (e.g. Pistachio ${activeBaseFamily}, Pastel ${activeBaseFamily})...`}
-                value={customShadeName}
-                onChange={(e) => setCustomShadeName(e.target.value)}
+                placeholder={`New shade name (e.g. Pistachio ${selectedBaseFamily})...`}
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
                 className="flex-1 min-w-[200px] px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff]"
               />
 
               <div className="flex items-center gap-1.5 bg-[#101628] px-2 py-1 rounded-xl border border-white/15">
                 <input
                   type="color"
-                  value={customHexCode}
-                  onChange={(e) => setCustomHexCode(e.target.value)}
+                  value={customHex}
+                  onChange={(e) => setCustomHex(e.target.value)}
                   className="w-5 h-5 rounded cursor-pointer border-0 p-0 bg-transparent"
                 />
                 <input
                   type="text"
-                  value={customHexCode}
-                  onChange={(e) => setCustomHexCode(e.target.value)}
+                  value={customHex}
+                  onChange={(e) => setCustomHex(e.target.value)}
                   className="w-16 text-white font-mono text-[11px] outline-none uppercase bg-transparent"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={actionLoadingId === 'custom_add'}
-                className="px-4 py-1.5 rounded-xl bg-[#6d4aff] hover:bg-[#5b3adb] text-white font-bold text-xs flex items-center gap-1 cursor-pointer active:scale-95 shadow"
+                disabled={actionLoadingId === 'new_add'}
+                className="px-4 py-1.5 rounded-xl bg-[#6d4aff] hover:bg-[#5b3adb] text-white font-bold text-xs flex items-center gap-1 cursor-pointer active:scale-95 shadow disabled:opacity-50"
               >
-                {actionLoadingId === 'custom_add' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 stroke-[3]" />}
-                <span>Save Shade</span>
+                {actionLoadingId === 'new_add' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5 stroke-[3]" />}
+                <span>Insert Shade</span>
               </button>
             </div>
           </form>
-
-          {/* 4. CURRENTLY SAVED REGISTRY IN DATABASE */}
-          <div className="space-y-2 pt-2 border-t border-white/10">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-mono font-bold text-white uppercase flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-[#00d9ff]" />
-                Registered Shades in Database ({savedColours.length})
-              </span>
-              <button
-                type="button"
-                onClick={loadSavedColours}
-                className="p-1 text-[#00d9ff] hover:text-white cursor-pointer"
-                title="Refresh DB"
-              >
-                <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-
-            <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] max-h-40 overflow-y-auto custom-scrollbar p-2">
-              {savedColours.length === 0 ? (
-                <div className="p-3 text-center text-[#8b9bb4] italic text-xs">
-                  No shades saved in database yet. Click on any shade card above to save it.
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-1.5">
-                  {savedColours.map((sc) => (
-                    <div
-                      key={sc.id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#101628] border border-white/15 text-xs text-white"
-                    >
-                      <span
-                        className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
-                        style={{ backgroundColor: sc.hex_code || '#6d4aff' }}
-                      />
-                      <span className="font-bold">{sc.name}</span>
-                      <span className="font-mono text-[9px] text-[#00ff9d]">[{sc.id}]</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteDirect(sc.id, sc.name)}
-                        className="text-[#8b9bb4] hover:text-[#ff6b6b] ml-1 cursor-pointer"
-                        title="Delete from DB"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
 
         </div>
 
