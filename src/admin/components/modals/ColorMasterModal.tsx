@@ -29,7 +29,6 @@ interface ColorMasterModalProps {
   onSuccess?: () => void;
 }
 
-// Function to calculate appropriate text color (dark/light) based on background hex
 function getContrastTextColor(hexColor: string | null | undefined): string {
   if (!hexColor) return '#FFFFFF';
   let hex = hexColor.replace('#', '');
@@ -39,7 +38,6 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   const r = parseInt(hex.substring(0, 2), 16) || 0;
   const g = parseInt(hex.substring(2, 4), 16) || 0;
   const b = parseInt(hex.substring(4, 6), 16) || 0;
-  // Perceptive luminance formula
   const yiq = (r * 299 + g * 587 + b * 114) / 1000;
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
 }
@@ -49,14 +47,9 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
   const [loading, setLoading] = useState<boolean>(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Active Base Color Family Selection
   const [searchTerm, setSearchTerm] = useState<string>('Green');
   const [selectedBaseFamily, setSelectedBaseFamily] = useState<string>('green');
 
-  // Currently Selected/Active Focused Shade Card (Highlights with Baby Pink Border)
-  const [selectedShadeId, setSelectedShadeId] = useState<string | null>(null);
-
-  // New Custom Shade Input
   const [customName, setCustomName] = useState<string>('');
   const [customHex, setCustomHex] = useState<string>('#50C878');
 
@@ -82,7 +75,6 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     loadColoursFromDB();
   }, []);
 
-  // Extract distinct base color families dynamically from DB
   const baseFamilies = useMemo(() => {
     const set = new Set<string>();
     colours.forEach((c) => {
@@ -93,7 +85,6 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     return Array.from(set);
   }, [colours]);
 
-  // Sync typed search term with Base Color Family
   useEffect(() => {
     const clean = searchTerm.toLowerCase().trim();
     if (!clean) return;
@@ -105,7 +96,6 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     }
   }, [searchTerm, baseFamilies]);
 
-  // Strictly filter only the selected base color family
   const currentFamilyShades = useMemo(() => {
     const fam = selectedBaseFamily.toLowerCase().trim();
     if (!fam) return [];
@@ -113,41 +103,35 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     return colours.filter((c) => {
       const cBase = (c.base_color || '').toLowerCase().trim();
       const cName = c.name.toLowerCase().trim();
-      // Only include shades explicitly belonging to this family or containing the base family name
       return cBase === fam || cName.includes(fam);
     });
   }, [colours, selectedBaseFamily]);
 
-  // Toggle Save (Active / Inactive) on click
-  const handleCardClick = async (shade: ColourRecord) => {
-    // Set baby pink selected highlight on this card
-    setSelectedShadeId(shade.id);
-
-    // Toggle active state in DB
-    const newActiveState = !shade.active;
+  // Click card to Toggle Select (Picked vs Unpicked)
+  const handleToggleCardSelection = async (shade: ColourRecord) => {
+    const nextActive = !Boolean(shade.active);
     setActionLoadingId(shade.id);
 
     try {
       const { error } = await supabase
         .from('colours')
-        .update({ active: newActiveState })
+        .update({ active: nextActive })
         .eq('id', shade.id);
 
       if (error) throw error;
 
       setColours((prev) =>
-        prev.map((c) => (c.id === shade.id ? { ...c, active: newActiveState } : c))
+        prev.map((c) => (c.id === shade.id ? { ...c, active: nextActive } : c))
       );
 
       if (onSuccess) onSuccess();
     } catch (err: any) {
-      alert('Error updating shade: ' + err.message);
+      alert('Error updating shade selection: ' + err.message);
     } finally {
       setActionLoadingId(null);
     }
   };
 
-  // Add custom shade
   const handleAddNewShade = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = customName.trim();
@@ -190,7 +174,6 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
       if (error) throw error;
 
       setColours((prev) => [...prev, newRecord]);
-      setSelectedShadeId(newRecord.id);
       setCustomName('');
       if (onSuccess) onSuccess();
     } catch (err: any) {
@@ -200,24 +183,9 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
     }
   };
 
-  // Delete shade
-  const handleDeleteShade = async (id: string, name: string) => {
-    if (!window.confirm(`Permanently delete shade "${name}" from Database?`)) return;
-
-    setActionLoadingId(id);
-    try {
-      const { error } = await supabase.from('colours').delete().eq('id', id);
-      if (error) throw error;
-
-      setColours((prev) => prev.filter((c) => c.id !== id));
-      if (selectedShadeId === id) setSelectedShadeId(null);
-      if (onSuccess) onSuccess();
-    } catch (err: any) {
-      alert('Delete failed: ' + err.message);
-    } finally {
-      setActionLoadingId(null);
-    }
-  };
+  const activeFamilyCount = useMemo(() => {
+    return currentFamilyShades.filter((c) => Boolean(c.active)).length;
+  }, [currentFamilyShades]);
 
   return (
     <div className="fixed inset-0 z-[100000] p-3 sm:p-5 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
@@ -232,12 +200,12 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <span>Colour & Shades Master Registry</span>
-                <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[9.5px] font-mono">
-                  {colours.length} Total Saved in DB
+                <span className="px-2 py-0.5 rounded-full bg-[#FF69B4]/20 text-[#FF69B4] border border-[#FF69B4]/40 text-[9.5px] font-mono font-bold">
+                  {activeFamilyCount} Selected for {selectedBaseFamily}
                 </span>
               </h3>
               <span className="text-[10.5px] text-[#8b9bb4]">
-                Shades are full-color filled • Click any shade to select & toggle saved state
+                Click on any shade card to Select / Unselect (Selected shades show Baby Pink Border)
               </span>
             </div>
           </div>
@@ -254,14 +222,14 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
         {/* Modal Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-4 custom-scrollbar text-xs">
           
-          {/* Step 1: Base Color Selector */}
+          {/* Base Color Search */}
           <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
                 <Search className="w-3.5 h-3.5" /> 1. Select or Enter Base Color Family
               </span>
               <span className="text-[10px] text-[#8b9bb4]">
-                Active Family: <strong className="text-white capitalize">{selectedBaseFamily}</strong> ({currentFamilyShades.length} shades)
+                Active Family: <strong className="text-white capitalize">{selectedBaseFamily}</strong> ({currentFamilyShades.length} shades in DB)
               </span>
             </div>
 
@@ -276,7 +244,7 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
               <Palette className="w-4 h-4 text-[#8b9bb4] absolute left-3 top-1/2 -translate-y-1/2" />
             </div>
 
-            {/* Base Color Pills */}
+            {/* Base Color Family Pills */}
             <div className="flex flex-wrap gap-1.5 pt-1">
               {baseFamilies.map((fam) => {
                 const isActive = selectedBaseFamily === fam;
@@ -301,22 +269,17 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
             </div>
           </div>
 
-          {/* Step 2: COLOR-FILLED SHADE MINI CARDS (FULL FILL + BABY PINK SELECT + OPPOSITE SAVED BORDER) */}
+          {/* COLOR CARDS (PICKED = BABY PINK BORDER, UNPICKED = DEFAULT) */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs">
               <span className="font-mono font-bold text-white uppercase flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#00ff9d]" /> 
-                2. Shades for &quot;{selectedBaseFamily.toUpperCase()}&quot; ({currentFamilyShades.length})
+                <Sparkles className="w-3.5 h-3.5 text-[#FF69B4]" /> 
+                2. Shades for &quot;{selectedBaseFamily.toUpperCase()}&quot; (Click card to Pick / Unpick)
               </span>
               <span className="text-[10px] text-[#8b9bb4] flex items-center gap-2">
                 <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full border-2 border-[#FFB6C1] bg-[#FFB6C1]" />
-                  <span>Selected = <strong>Baby Pink Border</strong></span>
-                </span>
-                <span>•</span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full border-2 border-[#00ff9d] bg-[#00ff9d]" />
-                  <span>Saved = <strong>Green / Contrast Border</strong></span>
+                  <span className="w-2.5 h-2.5 rounded-full border-2 border-[#FFB6C1] bg-[#FFB6C1]" />
+                  <strong className="text-[#FF69B4]">Baby Pink Border = SELECTED (Active for Purchase)</strong>
                 </span>
               </span>
             </div>
@@ -329,65 +292,54 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
             ) : currentFamilyShades.length === 0 ? (
               <div className="p-6 rounded-2xl bg-[#0a0e17] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs space-y-1">
                 <p>No shades found in Database for &quot;{selectedBaseFamily}&quot;.</p>
-                <p className="text-[10px] text-white/40">Use the form below to add your first shade for this family.</p>
+                <p className="text-[10px] text-white/40">Use the form below to add a custom shade.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5">
                 {currentFamilyShades.map((shade) => {
                   const isLoading = actionLoadingId === shade.id;
-                  const isSaved = shade.active !== false;
-                  const isSelected = selectedShadeId === shade.id;
+                  const isPicked = Boolean(shade.active);
                   const cardBg = shade.hex_code || '#006400';
                   const textColor = getContrastTextColor(cardBg);
-
-                  // Border styling rules:
-                  // 1. If currently selected/clicked -> Baby Pink border (#FFB6C1 / #FF69B4)
-                  // 2. If Saved -> Opposite contrasting glowing border (#00ff9d)
-                  // 3. If Unsaved -> Dark border with subtle opacity
-                  let borderClasses = 'border-white/20';
-                  if (isSelected) {
-                    borderClasses = 'border-4 border-[#FFB6C1] shadow-[0_0_20px_rgba(255,182,193,0.9)] ring-2 ring-[#FF69B4] scale-[1.03] z-10';
-                  } else if (isSaved) {
-                    borderClasses = 'border-2 border-[#00ff9d] shadow-[0_0_12px_rgba(0,255,157,0.35)] ring-1 ring-[#00ff9d]/50';
-                  } else {
-                    borderClasses = 'border-2 border-white/15 opacity-70 hover:opacity-100';
-                  }
 
                   return (
                     <div
                       key={shade.id}
-                      onClick={() => !isLoading && handleCardClick(shade)}
+                      onClick={() => !isLoading && handleToggleCardSelection(shade)}
                       style={{ backgroundColor: cardBg }}
-                      className={`p-3 rounded-2xl transition-all duration-150 cursor-pointer relative group flex flex-col justify-between min-h-[92px] ${borderClasses}`}
+                      className={`p-3 rounded-2xl transition-all duration-150 cursor-pointer relative group flex flex-col justify-between min-h-[92px] ${
+                        isPicked
+                          ? 'border-4 border-[#FFB6C1] shadow-[0_0_22px_rgba(255,182,193,0.95)] ring-2 ring-[#FF69B4] scale-[1.02] z-10'
+                          : 'border-2 border-black/25 opacity-75 hover:opacity-100 hover:border-white/40'
+                      }`}
                     >
-                      {/* Top: Status Badges */}
+                      {/* Top: Status Badge */}
                       <div className="flex items-center justify-between gap-1 mb-2">
-                        {isSaved ? (
+                        {isPicked ? (
                           <span
                             style={{
-                              backgroundColor: textColor === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)',
-                              color: textColor
+                              backgroundColor: 'rgba(0,0,0,0.65)',
+                              color: '#FFB6C1'
                             }}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-mono font-extrabold backdrop-blur-xs border border-white/20"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-mono font-extrabold border border-[#FFB6C1]/50 backdrop-blur-xs shadow"
                           >
-                            <CheckCircle2 className="w-2.5 h-2.5 stroke-[3] text-[#00ff9d]" />
-                            <span>SAVED</span>
+                            <CheckCircle2 className="w-2.5 h-2.5 stroke-[3] text-[#FF69B4]" />
+                            <span>SELECTED</span>
                           </span>
                         ) : (
                           <span
                             style={{
-                              backgroundColor: textColor === '#FFFFFF' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.75)',
+                              backgroundColor: textColor === '#FFFFFF' ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.65)',
                               color: textColor
                             }}
-                            className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold backdrop-blur-xs border border-white/15"
+                            className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[9px] font-mono font-bold backdrop-blur-xs border border-white/20"
                           >
                             <Plus className="w-2.5 h-2.5" />
-                            <span>SAVE</span>
+                            <span>SELECT</span>
                           </span>
                         )}
 
-                        {/* Selected Indicator Pill */}
-                        {isSelected && (
+                        {isPicked && (
                           <span className="px-1.5 py-0.2 rounded-full bg-[#FF69B4] text-neutral-950 text-[8px] font-mono font-black uppercase tracking-wider shadow">
                             PICKED
                           </span>
@@ -425,10 +377,10 @@ export default function ColorMasterModal({ onClose, onSuccess }: ColorMasterModa
             )}
           </div>
 
-          {/* Step 3: Add Custom Shade Form */}
+          {/* Add Custom Shade */}
           <form onSubmit={handleAddNewShade} className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2">
             <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-              3. Insert Additional Shade for &quot;{selectedBaseFamily}&quot;
+              3. Need Another Specific Shade? Insert for &quot;{selectedBaseFamily}&quot;
             </span>
 
             <div className="flex flex-wrap items-center gap-2">
