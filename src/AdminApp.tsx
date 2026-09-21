@@ -191,7 +191,8 @@ export default function AdminApp() {
         />
       </div>
 
-      <div className="relative z-40">
+      {/* Top Navbar */}
+      <div className="relative z-30">
         <AdminNavbar
           unreadCount={activeAlerts.length}
           currentUser={currentUser}
