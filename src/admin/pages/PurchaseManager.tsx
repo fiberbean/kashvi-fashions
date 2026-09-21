@@ -81,7 +81,6 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
 }
 
-// Representative color mapping for Base Color family tabs
 const BASE_FAMILY_PALETTE: { [key: string]: string } = {
   green: '#00843D',
   pink: '#E30B5C',
@@ -228,7 +227,6 @@ export default function PurchaseManager() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // Base colors sorted alphabetically A to Z
   const availableBaseFamilies = useMemo(() => {
     const set = new Set<string>();
     masterColours.forEach((c) => {
@@ -239,7 +237,6 @@ export default function PurchaseManager() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [masterColours]);
 
-  // Shades strictly filtered and sorted alphabetically A to Z
   const selectableShadesForFamily = useMemo(() => {
     const fam = (selectedBaseFilter || '').toLowerCase().trim();
     if (!fam) return [];
@@ -379,7 +376,6 @@ export default function PurchaseManager() {
     }
   };
 
-  // Delete an existing item directly from saved purchase bill
   const handleDeleteExistingItem = async (item: any) => {
     if (!editingPurchase) return;
     const confirmDel = window.confirm(`Delete "${item.product_id} (${item.variant_color} / ${item.variant_size})" from this bill? Stock will be rolled back.`);
@@ -387,14 +383,12 @@ export default function PurchaseManager() {
 
     setDeletingItemId(item.id);
     try {
-      // 1. Delete line item
       const { error: delErr } = await supabase
         .from('purchase_items')
         .delete()
         .eq('id', item.id);
       if (delErr) throw delErr;
 
-      // 2. Rollback inventory stock
       const { data: inv } = await supabase
         .from('inventory')
         .select('id, stock_quantity')
@@ -411,11 +405,9 @@ export default function PurchaseManager() {
           .eq('id', inv.id);
       }
 
-      // 3. Update existing items in state
       const updatedExisting = existingItems.filter((it) => it.id !== item.id);
       setExistingItems(updatedExisting);
 
-      // 4. Update total on purchase record
       const itemCost = Number(item.total_cost) || (item.quantity * item.unit_cost) || 0;
       const updatedTotal = Math.max(0, (editingPurchase.total_amount || 0) - itemCost);
 
@@ -1100,14 +1092,18 @@ export default function PurchaseManager() {
                           <button
                             type="button"
                             onClick={() => setIsColorMasterOpen(true)}
-                            className="px-2 py-0.5 rounded-lg bg-[#FF69B4]/20 border border-[#FF69B4]/40 text-[#FF69B4] hover:text-white text-[10px] font-bold"
+                            className="px-2 py-0.5 rounded-lg bg-[#FF69B4]/20 border border-[#FF69B4]/40 text-[#FF69B4] hover:text-white text-[10px] font-bold cursor-pointer"
                           >
                             Colour Master
                           </button>
                           <button
                             type="button"
-                            onClick={() => setIsProductMasterOpen(true)}
-                            className="px-2 py-0.5 rounded-lg bg-[#6d4aff]/20 border border-[#6d4aff]/40 text-[#00d9ff] hover:text-white text-[10px] font-bold"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setIsProductMasterOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-[#6d4aff]/30 border border-[#6d4aff]/60 text-[#00d9ff] hover:bg-[#6d4aff] hover:text-white text-[10.5px] font-bold cursor-pointer transition-all active:scale-95"
                           >
                             + Product Master
                           </button>
@@ -1504,7 +1500,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 4. DEDICATED POPUP FOR SHADE SELECTION (DYNAMIC ACTIVE COLOR TABS WITH AUTO CONTRAST TEXT) */}
+      {/* 4. DEDICATED POPUP FOR SHADE SELECTION */}
       {isShadePickerModalOpen && activeProduct && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -1789,49 +1785,53 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 7. QUICK ADD PRODUCT MASTER MODAL */}
+      {/* 7. QUICK ADD PRODUCT MASTER MODAL (FIXED Z-INDEX TO POP OVER INWARD DESK) */}
       {isProductMasterOpen && (
-        <ProductMasterModal
-          onClose={() => {
-            setIsProductMasterOpen(false);
-            supabase
-              .from('products')
-              .select('*')
-              .then(({ data }) => {
-                if (data) {
-                  const sorted = [...data].sort((a, b) =>
-                    String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' })
-                  );
-                  setProductsList(sorted);
-                }
-              });
-          }}
-        />
+        <div className="relative z-[100005]">
+          <ProductMasterModal
+            onClose={() => {
+              setIsProductMasterOpen(false);
+              supabase
+                .from('products')
+                .select('*')
+                .then(({ data }) => {
+                  if (data) {
+                    const sorted = [...data].sort((a, b) =>
+                      String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' })
+                    );
+                    setProductsList(sorted);
+                  }
+                });
+            }}
+          />
+        </div>
       )}
 
-      {/* 8. DIRECT COLOUR MASTER MODAL */}
+      {/* 8. DIRECT COLOUR MASTER MODAL (FIXED Z-INDEX TO POP OVER INWARD DESK) */}
       {isColorMasterOpen && (
-        <ColorMasterModal
-          onClose={() => {
-            setIsColorMasterOpen(false);
-            supabase
-              .from('colours')
-              .select('*')
-              .order('name', { ascending: true })
-              .then(({ data }) => {
-                if (data) setMasterColours(data);
-              });
-          }}
-          onSuccess={() => {
-            supabase
-              .from('colours')
-              .select('*')
-              .order('name', { ascending: true })
-              .then(({ data }) => {
-                if (data) setMasterColours(data);
-              });
-          }}
-        />
+        <div className="relative z-[100005]">
+          <ColorMasterModal
+            onClose={() => {
+              setIsColorMasterOpen(false);
+              supabase
+                .from('colours')
+                .select('*')
+                .order('name', { ascending: true })
+                .then(({ data }) => {
+                  if (data) setMasterColours(data);
+                });
+            }}
+            onSuccess={() => {
+              supabase
+                .from('colours')
+                .select('*')
+                .order('name', { ascending: true })
+                .then(({ data }) => {
+                  if (data) setMasterColours(data);
+                });
+            }}
+          />
+        </div>
       )}
 
     </div>
