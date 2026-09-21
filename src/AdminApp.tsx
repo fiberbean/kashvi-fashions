@@ -176,7 +176,40 @@ export default function AdminApp() {
   const isSupplierSection = normalizedSection === 'supplier' || normalizedSection === 'suppliers';
 
   return (
-    <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
+    <div
+      data-user-role={currentUser.role}
+      className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden"
+    >
+      {/* Global CSS Role Permission Engine */}
+      <style>{`
+        /* Operations Role: Create & View Only (Hide Edit and Delete) */
+        [data-user-role="operations"] button[title*="Edit" i],
+        [data-user-role="operations"] button[title*="Delete" i],
+        [data-user-role="operations"] button[aria-label*="Edit" i],
+        [data-user-role="operations"] button[aria-label*="Delete" i],
+        [data-user-role="operations"] .btn-edit,
+        [data-user-role="operations"] .btn-delete,
+        [data-user-role="operations"] svg.lucide-trash,
+        [data-user-role="operations"] svg.lucide-trash-2,
+        [data-user-role="operations"] svg.lucide-edit,
+        [data-user-role="operations"] svg.lucide-edit-2,
+        [data-user-role="operations"] svg.lucide-edit-3,
+        [data-user-role="operations"] svg.lucide-pencil {
+          display: none !important;
+          pointer-events: none !important;
+        }
+
+        /* Manager Role: Create, Edit & View (Hide Delete Only) */
+        [data-user-role="manager"] button[title*="Delete" i],
+        [data-user-role="manager"] button[aria-label*="Delete" i],
+        [data-user-role="manager"] .btn-delete,
+        [data-user-role="manager"] svg.lucide-trash,
+        [data-user-role="manager"] svg.lucide-trash-2 {
+          display: none !important;
+          pointer-events: none !important;
+        }
+      `}</style>
+
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute -top-48 -right-48 w-[500px] h-[500px] bg-[#6d4aff]/15 rounded-full blur-[130px] animate-pulse" />
         <div className="absolute top-1/2 -left-48 w-[450px] h-[450px] bg-[#00d9ff]/10 rounded-full blur-[130px] animate-pulse delay-1000" />

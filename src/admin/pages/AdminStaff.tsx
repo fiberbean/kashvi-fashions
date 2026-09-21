@@ -172,7 +172,7 @@ export default function AdminStaff({ currentUser }: AdminStaffProps) {
       return;
     }
 
-    if (!confirm(`Are you sure you want to delete profile for ${name}?`)) {
+    if (!confirm('Are you sure you want to delete profile for ' + name + '?')) {
       return;
     }
 
@@ -207,7 +207,7 @@ export default function AdminStaff({ currentUser }: AdminStaffProps) {
         </div>
         <h2 className="font-bold text-lg text-white tracking-wide">Access Restricted</h2>
         <p className="text-xs text-[#8b9bb4] leading-relaxed">
-          System users & PIN configuration is exclusively available to <strong>Super Admin</strong> role accounts.
+          System users and PIN configuration is exclusively available to <strong>Super Admin</strong> role accounts.
         </p>
       </div>
     );
@@ -307,7 +307,7 @@ export default function AdminStaff({ currentUser }: AdminStaffProps) {
                       </span>
                     </td>
                     <td className="py-4 px-5 font-mono font-bold text-white tracking-widest text-xs">
-                      •••• <span className="text-[#8b9bb4] font-normal">({staff.pin})</span>
+                      •••• <span className="text-[#8b9bb4] font-normal font-sans">({staff.pin})</span>
                     </td>
                     <td className="py-4 px-5">
                       {staff.is_active ? (
@@ -407,7 +407,7 @@ export default function AdminStaff({ currentUser }: AdminStaffProps) {
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Enter employee/user name"
+                  placeholder="Enter employee or user name"
                   className="w-full px-3.5 py-2 rounded-xl border border-white/10 bg-[#0a0e17] text-xs font-semibold text-white outline-none focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/40"
                 />
               </div>
@@ -435,9 +435,9 @@ export default function AdminStaff({ currentUser }: AdminStaffProps) {
                     onChange={(e) => setRole(e.target.value as AdminRole)}
                     className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#0a0e17] text-xs font-semibold text-white outline-none focus:border-[#00d9ff] cursor-pointer [&>option]:bg-[#101628]"
                   >
-                    <option value="operations">Operations (View Only)</option>
-                    <option value="manager">Manager (Edit Only)</option>
-                    <option value="admin">Admin (Full Control)</option>
+                    <option value="operations">Operations: Create & View Only</option>
+                    <option value="manager">Manager: Create, Edit & View</option>
+                    <option value="admin">Admin: Full Access</option>
                   </select>
                 </div>
 
