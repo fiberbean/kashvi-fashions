@@ -51,6 +51,47 @@ interface StagedMatrixItem {
   total_cost: number;
 }
 
+// Helper color swatches map
+const COLOR_HEX_MAP: { [key: string]: string } = {
+  'baby pink': '#F4C2C2',
+  'beige': '#F5F5DC',
+  'black': '#1A1A1A',
+  'crimson red': '#DC143C',
+  'dark green': '#006400',
+  'grey': '#808080',
+  'gray': '#808080',
+  'maroon': '#800000',
+  'mustard yellow': '#E1AD01',
+  'navy blue': '#000080',
+  'peach': '#FFDAB9',
+  'pink': '#FFC0CB',
+  'rani pink': '#E30B5C',
+  'sky blue': '#87CEEB',
+  'turquoise': '#40E0D0',
+  'violet': '#8A2BE2',
+  'white': '#FFFFFF',
+  'yellow': '#FFD700',
+  'red': '#FF0000',
+  'green': '#008000',
+  'blue': '#0000FF',
+  'orange': '#FFA500',
+  'purple': '#800080',
+  'brown': '#A52A2A',
+  'rusty red': '#B7410E',
+  'tan brown': '#D2B48C',
+  'gold': '#D4AF37',
+  'silver': '#C0C0C0'
+};
+
+function getBadgeColor(colorName: string): string {
+  const clean = (colorName || '').toLowerCase().trim();
+  if (COLOR_HEX_MAP[clean]) return COLOR_HEX_MAP[clean];
+  for (const [k, v] of Object.entries(COLOR_HEX_MAP)) {
+    if (clean.includes(k)) return v;
+  }
+  return '#6d4aff';
+}
+
 export default function PurchaseManager() {
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -153,19 +194,72 @@ export default function PurchaseManager() {
     return productsList.find((p) => p.id === selectedProductId);
   }, [productsList, selectedProductId]);
 
+  // Robust parsing to fetch all registered colors
   const productColors: string[] = useMemo(() => {
     if (!activeProduct) return [];
-    if (activeProduct.variants?.colors && activeProduct.variants.colors.length > 0) {
-      return activeProduct.variants.colors;
+    const colorSet = new Set<string>();
+
+    // 1. Check variants object
+    let vars = activeProduct.variants;
+    if (typeof vars === 'string') {
+      try {
+        vars = JSON.parse(vars);
+      } catch (e) {
+        vars = null;
+      }
     }
-    return activeProduct.colour ? [activeProduct.colour] : ['Standard'];
+
+    if (vars && Array.isArray(vars.colors) && vars.colors.length > 0) {
+      vars.colors.forEach((c: any) => {
+        if (typeof c === 'string' && c.trim()) colorSet.add(c.trim());
+      });
+    }
+
+    // 2. Check colour (British) or color (American) columns
+    const rawColour = activeProduct.colour || activeProduct.color;
+    if (rawColour) {
+      if (typeof rawColour === 'string') {
+        rawColour.split(',').forEach((c) => {
+          if (c.trim()) colorSet.add(c.trim());
+        });
+      } else if (Array.isArray(rawColour)) {
+        rawColour.forEach((c) => {
+          if (typeof c === 'string' && c.trim()) colorSet.add(c.trim());
+        });
+      }
+    }
+
+    // 3. Extract colors tagged on uploaded product images
+    if (Array.isArray(activeProduct.images)) {
+      activeProduct.images.forEach((img: any) => {
+        if (img && img.color_tag && typeof img.color_tag === 'string') {
+          const tag = img.color_tag.trim();
+          if (tag && tag.toLowerCase() !== 'universal' && tag.toLowerCase() !== 'standard') {
+            colorSet.add(tag);
+          }
+        }
+      });
+    }
+
+    const result = Array.from(colorSet);
+    return result.length > 0 ? result : ['Standard'];
   }, [activeProduct]);
 
+  // Filter linked sizes for the product's sub-category
   const productSizes: string[] = useMemo(() => {
     if (!activeProduct) return [];
 
-    if (activeProduct.variants?.sizes && activeProduct.variants.sizes.length > 0) {
-      return activeProduct.variants.sizes;
+    let vars = activeProduct.variants;
+    if (typeof vars === 'string') {
+      try {
+        vars = JSON.parse(vars);
+      } catch (e) {
+        vars = null;
+      }
+    }
+
+    if (vars && Array.isArray(vars.sizes) && vars.sizes.length > 0) {
+      return vars.sizes;
     }
 
     const subCatId = activeProduct.sub_category_id;
@@ -187,7 +281,13 @@ export default function PurchaseManager() {
       }
     }
 
-    return activeProduct.size ? [activeProduct.size] : ['Free Size'];
+    if (activeProduct.size) {
+      return typeof activeProduct.size === 'string'
+        ? activeProduct.size.split(',').map((s: string) => s.trim())
+        : activeProduct.size;
+    }
+
+    return ['Free Size'];
   }, [activeProduct, subCategories, allSizes]);
 
   useEffect(() => {
@@ -235,7 +335,7 @@ export default function PurchaseManager() {
     });
 
     if (newAdditions.length === 0) {
-      alert('Please enter quantity for at least one color & size variant.');
+      alert('Please enter quantity for at least one color & size variant in the matrix.');
       return;
     }
 
@@ -481,7 +581,7 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* NEW PURCHASE MODAL: Fixed positioning, pt-20 added to fully clear sticky Navbar */}
+      {/* NEW PURCHASE MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[99999] pt-20 pb-8 px-3 sm:px-6 flex items-start justify-center bg-black/90 backdrop-blur-2xl overflow-y-auto animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full overflow-hidden shadow-[0_25px_80px_rgba(0,0,0,0.95),0_0_40px_rgba(255,165,0,0.25)] relative animate-in zoom-in-95 flex flex-col my-auto max-h-[88vh]">
@@ -644,7 +744,7 @@ export default function PurchaseManager() {
                   <div className="space-y-2.5 pt-1">
                     <div className="flex items-center justify-between text-[10px] font-mono text-[#8b9bb4]">
                       <span>
-                        Sub-Category: <strong className="text-white">{activeProduct.sub_category || 'General'}</strong> (Sizes linked directly to this group)
+                        Sub-Category: <strong className="text-white">{activeProduct.sub_category || 'General'}</strong> ({productColors.length} Colors • {productSizes.length} Sizes)
                       </span>
                       <span className="text-[#00d9ff]">Enter quantities in matrix cells below</span>
                     </div>
@@ -653,7 +753,7 @@ export default function PurchaseManager() {
                       <table className="w-full text-center border-collapse">
                         <thead>
                           <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
-                            <th className="p-2.5 text-left min-w-[120px]">Colour \ Size</th>
+                            <th className="p-2.5 text-left min-w-[130px]">Colour \ Size</th>
                             {productSizes.map((sz) => (
                               <th key={sz} className="p-2.5 text-center text-[#00d9ff] min-w-[65px]">
                                 {sz}
@@ -662,32 +762,38 @@ export default function PurchaseManager() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
-                          {productColors.map((clr) => (
-                            <tr key={clr} className="hover:bg-white/[0.02]">
-                              <td className="p-2.5 text-left font-bold text-white text-xs whitespace-nowrap">
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span className="w-2.5 h-2.5 rounded-full bg-[#6d4aff]" />
-                                  <span>{clr}</span>
-                                </span>
-                              </td>
-                              {productSizes.map((sz) => {
-                                const key = `${clr}:::${sz}`;
-                                const val = matrixQtyMap[key] || '';
-                                return (
-                                  <td key={sz} className="p-1.5 text-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      placeholder="0"
-                                      value={val}
-                                      onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
-                                      className="w-14 px-1.5 py-1 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/10 rounded-lg outline-none focus:border-[#00ff9d] text-xs"
+                          {productColors.map((clr) => {
+                            const badgeColor = getBadgeColor(clr);
+                            return (
+                              <tr key={clr} className="hover:bg-white/[0.02]">
+                                <td className="p-2.5 text-left font-bold text-white text-xs whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <span
+                                      className="w-3 h-3 rounded-full border border-white/30 shrink-0"
+                                      style={{ backgroundColor: badgeColor }}
                                     />
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
+                                    <span>{clr}</span>
+                                  </span>
+                                </td>
+                                {productSizes.map((sz) => {
+                                  const key = `${clr}:::${sz}`;
+                                  const val = matrixQtyMap[key] || '';
+                                  return (
+                                    <td key={sz} className="p-1.5 text-center">
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        placeholder="0"
+                                        value={val}
+                                        onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
+                                        className="w-14 px-1.5 py-1 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/10 rounded-lg outline-none focus:border-[#00ff9d] text-xs"
+                                      />
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
