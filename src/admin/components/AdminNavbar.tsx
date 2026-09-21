@@ -1,345 +1,335 @@
-import React, { useState, useRef, useEffect } from 'react';
-import {
-  ExternalLink,
-  LogOut,
-  LayoutDashboard,
-  RefreshCw,
-  Package,
-  Layers,
-  ChevronDown,
-  Tag,
-  Palette,
-  Ruler,
-  Scissors,
-  Sparkles,
-  ShoppingBag,
-  TrendingUp,
-  ShoppingCart,
-  Receipt,
-  BarChart3
-} from 'lucide-react';
-import { AdminStaffUser } from '../types';
-import { AdminViewType } from '../../AdminApp';
+import React, { useEffect, useState, useRef } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { Loader2, ShieldCheck, Sparkles, TrendingUp, ShoppingCart, Receipt, BarChart3, Wrench } from 'lucide-react';
+import AdminNavbar, { MasterSectionType } from './admin/components/AdminNavbar';
+import AdminLoginScreen from './admin/components/AdminLoginScreen';
+import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
+import AdminDashboard from './admin/pages/AdminDashboard';
+import AdminStaff from './admin/pages/AdminStaff';
+import AdminProducts from './admin/pages/AdminProducts';
+import OrdersManager from './admin/components/OrdersManager';
+import ProductMasterManager from './admin/pages/ProductMasterManager';
+import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
+import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
+import ColorMasterModal from './admin/components/modals/ColorMasterModal';
+import SizeMasterModal from './admin/components/modals/SizeMasterModal';
+import { OrderRecord, AdminStaffUser } from './admin/types';
 
-export type MasterSectionType = 'product' | 'category' | 'subcategory' | 'colours' | 'sizes' | 'fabrics';
+// Supported view types
+export type AdminViewType = 
+  | 'dashboard' 
+  | 'orders' 
+  | 'sales' 
+  | 'purchase' 
+  | 'expenses' 
+  | 'reports' 
+  | 'products' 
+  | 'product_master'
+  | 'staff';
 
-interface AdminNavbarProps {
-  unreadCount: number;
-  currentUser: AdminStaffUser | null;
-  isSyncing: boolean;
-  onManualSync: () => void;
-  onLogout: () => void;
-  currentView: AdminViewType;
-  onViewChange: (view: AdminViewType) => void;
-  onSelectMaster?: (masterKey: MasterSectionType) => void;
-}
+export default function AdminApp() {
+  const location = useLocation();
+  const [currentUser, setCurrentUser] = useState<AdminStaffUser | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState<boolean>(true);
+  const [activeAlerts, setActiveAlerts] = useState<OrderRecord[]>([]);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncTrigger, setSyncTrigger] = useState<number>(0);
 
-export default function AdminNavbar({
-  currentUser,
-  isSyncing,
-  onManualSync,
-  onLogout,
-  currentView,
-  onViewChange,
-  onSelectMaster
-}: AdminNavbarProps) {
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const navRef = useRef<HTMLDivElement>(null);
+  const [currentView, setCurrentView] = useState<AdminViewType>('dashboard');
+  const [selectedMasterSection, setSelectedMasterSection] = useState<MasterSectionType | null>(null);
+
+  const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const logoutSession = () => {
+    sessionStorage.removeItem('kfmama_auth_session');
+    sessionStorage.removeItem('kfmama_auth_user');
+    sessionStorage.removeItem('kfmama_auth_timestamp');
+    setCurrentUser(null);
+    setCurrentView('dashboard');
+    setSelectedMasterSection(null);
+    if (timerRef.current) clearTimeout(timerRef.current);
+  };
+
+  const resetInactivityTimer = () => {
+    if (!currentUser) return;
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    timerRef.current = setTimeout(() => {
+      logoutSession();
+    }, INACTIVITY_TIMEOUT_MS);
+  };
+
+  const handleManualSync = () => {
+    setIsSyncing(true);
+    setSyncTrigger((prev) => prev + 1);
+    setTimeout(() => {
+      setIsSyncing(false);
+    }, 600);
+  };
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (navRef.current && !navRef.current.contains(event.target as Node)) {
-        setOpenDropdown(null);
+    const hasSession = sessionStorage.getItem('kfmama_auth_session');
+    const storedUser = sessionStorage.getItem('kfmama_auth_user');
+
+    if (hasSession === 'true' && storedUser) {
+      try {
+        setCurrentUser(JSON.parse(storedUser));
+      } catch (e) {
+        logoutSession();
       }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+    setCheckingAuth(false);
   }, []);
 
-  const toggleDropdown = (menu: string) => {
-    setOpenDropdown((prev) => (prev === menu ? null : menu));
+  useEffect(() => {
+    const interval = setInterval(() => {
+      handleManualSync();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
+    resetInactivityTimer();
+
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'];
+    const handleActivity = () => resetInactivityTimer();
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        resetInactivityTimer();
+      }
+    };
+
+    activityEvents.forEach((ev) => window.addEventListener(ev, handleActivity));
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      activityEvents.forEach((ev) => window.removeEventListener(ev, handleActivity));
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [currentUser]);
+
+  if (!location.pathname.startsWith('/kfmama')) {
+    return <Navigate to="/" replace />;
+  }
+
+  useEffect(() => {
+    document.title = currentUser
+      ? `Kashvi Command Deck — ${currentUser.role.toUpperCase()}`
+      : 'Kashvi Studio OS — Secure Staff Gateway';
+  }, [currentUser]);
+
+  const handleNewOrderAlert = (ord: OrderRecord) => {
+    setActiveAlerts((prev) => [ord, ...prev]);
   };
 
-  const handleSelectView = (view: AdminViewType) => {
-    onViewChange(view);
-    setOpenDropdown(null);
+  const handleDismissAlert = (orderId: string) => {
+    setActiveAlerts((prev) => prev.filter((o) => o.id !== orderId));
   };
 
-  const handleMasterClick = (section: MasterSectionType) => {
-    if (onSelectMaster) {
-      onSelectMaster(section);
-    }
-    setOpenDropdown(null);
-  };
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-[#0a0e17] flex flex-col items-center justify-center text-xs font-mono text-[#00d9ff] relative overflow-hidden select-none">
+        <div className="absolute -top-32 -right-32 w-80 h-80 bg-[#6d4aff]/20 rounded-full blur-3xl animate-pulse pointer-events-none" />
+        <div className="absolute -bottom-32 -left-32 w-80 h-80 bg-[#00d9ff]/15 rounded-full blur-3xl animate-pulse delay-700 pointer-events-none" />
 
-  const getRoleBadge = (role: string = '') => {
-    switch (role) {
-      case 'admin':
-        return 'bg-[#6d4aff]/20 text-[#00d9ff] border-[#6d4aff]/40 shadow-[0_0_10px_rgba(109,74,255,0.3)]';
-      case 'manager':
-        return 'bg-[#00d9ff]/15 text-[#00d9ff] border-[#00d9ff]/30';
-      case 'operations':
-        return 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/30';
-      default:
-        return 'bg-white/10 text-white border-white/20';
-    }
-  };
-
-  return (
-    <nav
-      ref={navRef}
-      className="sticky top-0 z-50 bg-[#0a0e17]/95 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] select-none font-sans"
-    >
-      {/* Top Subtle Glowing Line */}
-      <div className="h-[1.5px] w-full bg-gradient-to-r from-transparent via-[#6d4aff] to-[#00d9ff]" />
-
-      <div className="max-w-[1680px] mx-auto px-3 sm:px-5 h-15 flex items-center justify-between gap-2.5">
-        
-        {/* Left Section: Brand Logo & Navigation Links */}
-        <div className="flex items-center gap-2 lg:gap-3 flex-1 min-w-0">
-          <button
-            type="button"
-            onClick={() => handleSelectView('dashboard')}
-            className="flex items-center gap-2 shrink-0 group cursor-pointer mr-1"
-          >
-            <div className="relative w-8.5 h-8.5 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] p-[1px] shadow-lg shadow-[#6d4aff]/30 group-hover:shadow-[0_0_20px_rgba(0,217,255,0.4)] transition-all duration-300">
-              <div className="w-full h-full bg-[#101628] rounded-2xl flex items-center justify-center font-serif font-black text-xs text-white">
-                <span className="bg-gradient-to-r from-white via-slate-100 to-[#00d9ff] bg-clip-text text-transparent">
-                  KF
-                </span>
-              </div>
-              <Sparkles className="absolute -top-1 -right-1 w-3 h-3 text-[#00d9ff] animate-pulse" />
+        <div className="relative z-10 bg-[rgba(16,22,40,0.92)] border border-[#6d4aff]/30 p-6 rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.7),0_0_20px_rgba(109,74,255,0.25)] flex flex-col items-center gap-3 backdrop-blur-2xl">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] p-[1px] shadow-lg shadow-[#6d4aff]/30">
+            <div className="w-full h-full bg-[#101628] rounded-2xl flex items-center justify-center">
+              <Loader2 className="w-5 h-5 text-[#00d9ff] animate-spin" />
             </div>
-
-            <div className="flex flex-col text-left">
-              <span className="font-serif font-black text-xs tracking-wider text-white leading-none group-hover:text-[#00d9ff] transition-colors">
-                KASHVI
-              </span>
-              <span className="text-[7.5px] font-mono font-extrabold tracking-widest text-[#00ff9d] uppercase mt-1">
-                COMMAND OS
-              </span>
-            </div>
-          </button>
-
-          {/* Navigation Buttons: overflow visible to allow absolute dropdown to float freely */}
-          <div className="flex items-center gap-1 text-[11.5px] font-semibold flex-wrap">
-            
-            {/* Dashboard */}
-            <button
-              type="button"
-              onClick={() => handleSelectView('dashboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
-                currentView === 'dashboard'
-                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
-                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span>Dashboard</span>
-            </button>
-
-            {/* Orders */}
-            <button
-              type="button"
-              onClick={() => handleSelectView('orders')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
-                currentView === 'orders'
-                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
-                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <ShoppingBag className="w-3.5 h-3.5 text-[#00ff9d]" />
-              <span>Orders</span>
-            </button>
-
-            {/* Sales */}
-            <button
-              type="button"
-              onClick={() => handleSelectView('sales')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
-                currentView === 'sales'
-                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
-                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <TrendingUp className="w-3.5 h-3.5 text-[#00d9ff]" />
-              <span>Sales</span>
-            </button>
-
-            {/* Purchase */}
-            <button
-              type="button"
-              onClick={() => handleSelectView('purchase')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
-                currentView === 'purchase'
-                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
-                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <ShoppingCart className="w-3.5 h-3.5 text-[#ffa500]" />
-              <span>Purchase</span>
-            </button>
-
-            {/* Expenses */}
-            <button
-              type="button"
-              onClick={() => handleSelectView('expenses')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
-                currentView === 'expenses'
-                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
-                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <Receipt className="w-3.5 h-3.5 text-[#ff6b6b]" />
-              <span>Expenses</span>
-            </button>
-
-            {/* Reports */}
-            <button
-              type="button"
-              onClick={() => handleSelectView('reports')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
-                currentView === 'reports'
-                  ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
-                  : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5 text-[#a78bfa]" />
-              <span>Reports</span>
-            </button>
-
-            {/* Masters Floating Dropdown Menu */}
-            <div className="relative shrink-0 z-[100]">
-              <button
-                type="button"
-                onClick={() => toggleDropdown('masters')}
-                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl transition-all cursor-pointer border ${
-                  openDropdown === 'masters'
-                    ? 'bg-white/15 text-white border-white/30 shadow-lg shadow-[#6d4aff]/30'
-                    : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5 text-[#00d9ff]" />
-                <span>Masters</span>
-                <ChevronDown className={`w-3 h-3 text-[#8b9bb4] transition-transform duration-200 ${openDropdown === 'masters' ? 'rotate-180 text-white' : ''}`} />
-              </button>
-
-              {openDropdown === 'masters' && (
-                <div className="absolute top-full left-0 mt-2 w-56 bg-[#101628]/98 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_20px_rgba(109,74,255,0.25)] border border-white/15 py-2 z-[9999] animate-in fade-in zoom-in-95 duration-150">
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('product')}
-                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                  >
-                    <Package className="w-4 h-4 text-[#6d4aff] group-hover:text-[#00d9ff] transition-colors" />
-                    <span className="font-semibold">Product Master</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('category')}
-                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                  >
-                    <Tag className="w-4 h-4 text-[#00d9ff] group-hover:text-white transition-colors" />
-                    <span className="font-semibold">Category Master</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('subcategory')}
-                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                  >
-                    <Layers className="w-4 h-4 text-[#8b9bb4] group-hover:text-[#00d9ff] transition-colors" />
-                    <span className="font-semibold">Sub-Category Master</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('colours')}
-                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                  >
-                    <Palette className="w-4 h-4 text-[#ff6b6b] group-hover:text-white transition-colors" />
-                    <span className="font-semibold">Colours Master</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('sizes')}
-                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                  >
-                    <Ruler className="w-4 h-4 text-[#00d9ff] group-hover:text-white transition-colors" />
-                    <span className="font-semibold">Size Master</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleMasterClick('fabrics')}
-                    className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                  >
-                    <Scissors className="w-4 h-4 text-[#00ff9d] group-hover:text-white transition-colors" />
-                    <span className="font-semibold">Fabric Master</span>
-                  </button>
-                </div>
-              )}
-            </div>
-
+          </div>
+          <div className="text-center">
+            <span className="font-bold text-white tracking-wide block">Authenticating Terminal</span>
+            <span className="text-[10px] text-[#8b9bb4]">Verifying cryptographic credentials...</span>
           </div>
         </div>
+      </div>
+    );
+  }
 
-        {/* Right Section: Sync, User Profile, Store, Logout */}
-        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          
-          {/* Sync Stream */}
-          <button
-            type="button"
-            onClick={onManualSync}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[10.5px] font-mono text-white transition-all cursor-pointer active:scale-95 shadow-inner"
-            title="Click for Realtime Sync"
-          >
-            <span className="flex h-1.5 w-1.5 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00ff9d] opacity-75" />
-              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#00ff9d]" />
-            </span>
-            <span className="font-semibold tracking-wide hidden md:inline">Sync</span>
-            <RefreshCw className={`w-3 h-3 text-[#00d9ff] ${isSyncing ? 'animate-spin' : ''}`} />
-          </button>
+  if (!currentUser) {
+    return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
+  }
 
-          {/* User Profile */}
-          {currentUser && (
-            <div className="hidden xl:flex items-center gap-2 pl-2 border-l border-white/10">
-              <div className="text-right">
-                <div className="text-[11px] font-bold text-white leading-none">
-                  {currentUser.full_name}
-                </div>
-                <div className="text-[9px] font-mono text-[#8b9bb4] mt-0.5">
-                  ID: {currentUser.employee_id}
-                </div>
+  const normalizedSection = selectedMasterSection ? String(selectedMasterSection).toLowerCase().trim() : '';
+  const isCategorySection = normalizedSection === 'category' || normalizedSection === 'categories';
+  const isSubCategorySection = 
+    normalizedSection === 'sub_category' || 
+    normalizedSection === 'sub-category' || 
+    normalizedSection === 'subcategory' ||
+    normalizedSection === 'subcategories';
+  const isColorSection = 
+    normalizedSection === 'color' || 
+    normalizedSection === 'colors' || 
+    normalizedSection === 'colour' || 
+    normalizedSection === 'colours';
+  const isSizeSection = normalizedSection === 'size' || normalizedSection === 'sizes';
+
+  return (
+    <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
+      {/* Background Neon Glow Matrix */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute -top-48 -right-48 w-[500px] h-[500px] bg-[#6d4aff]/15 rounded-full blur-[130px] animate-pulse" />
+        <div className="absolute top-1/2 -left-48 w-[450px] h-[450px] bg-[#00d9ff]/10 rounded-full blur-[130px] animate-pulse delay-1000" />
+        <div className="absolute -bottom-48 right-1/4 w-[450px] h-[450px] bg-[#ff6b6b]/10 rounded-full blur-[140px] animate-pulse delay-500" />
+        
+        <div 
+          className="absolute inset-0 opacity-[0.03]" 
+          style={{ 
+            backgroundImage: 'radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 0)', 
+            backgroundSize: '32px 32px' 
+          }} 
+        />
+      </div>
+
+      {/* Top Navbar */}
+      <div className="relative z-40">
+        <AdminNavbar
+          unreadCount={activeAlerts.length}
+          currentUser={currentUser}
+          isSyncing={isSyncing}
+          onManualSync={handleManualSync}
+          onLogout={logoutSession}
+          currentView={currentView}
+          onViewChange={(view) => {
+            setSelectedMasterSection(null);
+            setCurrentView(view);
+          }}
+          onSelectMaster={(section) => {
+            if (section === 'product') {
+              setSelectedMasterSection(null);
+              setCurrentView('product_master');
+            } else {
+              setSelectedMasterSection(section);
+            }
+          }}
+        />
+      </div>
+
+      {/* Realtime Order Alerts */}
+      <StickyOrderAlerts
+        notifications={activeAlerts}
+        onDismiss={handleDismissAlert}
+      />
+
+      {/* Masters Modal Popups for Category, Sub-Category, Color, Size */}
+      {isCategorySection && (
+        <CategoryMasterModal
+          onClose={() => setSelectedMasterSection(null)}
+          onSuccess={() => handleManualSync()}
+        />
+      )}
+      {isSubCategorySection && (
+        <SubCategoryMasterModal
+          onClose={() => setSelectedMasterSection(null)}
+          onSuccess={() => handleManualSync()}
+        />
+      )}
+      {isColorSection && (
+        <ColorMasterModal
+          onClose={() => setSelectedMasterSection(null)}
+          onSuccess={() => handleManualSync()}
+        />
+      )}
+      {isSizeSection && (
+        <SizeMasterModal
+          onClose={() => setSelectedMasterSection(null)}
+          onSuccess={() => handleManualSync()}
+        />
+      )}
+
+      {/* Main Content View Switcher */}
+      {(!selectedMasterSection || (
+        !isCategorySection && 
+        !isSubCategorySection && 
+        !isColorSection && 
+        !isSizeSection
+      )) && (
+        <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-5 relative z-10">
+          {currentView === 'dashboard' && (
+            <AdminDashboard
+              currentUser={currentUser}
+              onNewOrderNotice={handleNewOrderAlert}
+              syncTrigger={syncTrigger}
+            />
+          )}
+
+          {currentView === 'orders' && (
+            <OrdersManager />
+          )}
+
+          {/* Product Master Full Table View */}
+          {currentView === 'product_master' && (
+            <ProductMasterManager />
+          )}
+
+          {/* Sales View */}
+          {currentView === 'sales' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#00d9ff]/10 text-[#00d9ff] border border-[#00d9ff]/20 flex items-center justify-center mx-auto shadow-lg">
+                <TrendingUp className="w-7 h-7" />
               </div>
-              <span className={`px-2.5 py-0.5 rounded-full text-[8.5px] font-mono font-extrabold uppercase border ${getRoleBadge(currentUser.role)}`}>
-                {currentUser.role}
-              </span>
+              <h2 className="text-lg font-bold text-white">Sales Management Deck</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                POS billing, offline counter sales, custom discounts, customer loyalty points and transaction ledgers.
+              </p>
             </div>
           )}
 
-          {/* Store Link */}
-          <a
-            href="/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white text-[10.5px] font-semibold transition-all"
-          >
-            <span>Store</span>
-            <ExternalLink className="w-3 h-3 text-[#00d9ff]" />
-          </a>
+          {/* Purchase View */}
+          {currentView === 'purchase' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#ffa500]/10 text-[#ffa500] border border-[#ffa500]/20 flex items-center justify-center mx-auto shadow-lg">
+                <ShoppingCart className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Purchase & Stock Inward Hub</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                Supplier bills, purchase orders, bulk variant inwards, inventory updates and vendor payment trackings.
+              </p>
+            </div>
+          )}
 
-          {/* Logout Button */}
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#ff6b6b]/15 border border-[#ff6b6b]/30 text-[#ff6b6b] hover:bg-[#ff6b6b]/25 hover:shadow-[0_0_15px_rgba(255,107,107,0.3)] text-[10.5px] font-bold transition-all cursor-pointer"
-            title="Lock & Logout Shift Session"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Lock Shift</span>
-          </button>
-        </div>
+          {/* Expenses View */}
+          {currentView === 'expenses' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#ff6b6b]/10 text-[#ff6b6b] border border-[#ff6b6b]/20 flex items-center justify-center mx-auto shadow-lg">
+                <Receipt className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Operating Expenses Tracker</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                Store rent, staff salaries, electricity bills, packaging, transport and everyday operational costs.
+              </p>
+            </div>
+          )}
 
-      </div>
-    </nav>
+          {/* Reports View */}
+          {currentView === 'reports' && (
+            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
+              <div className="w-14 h-14 rounded-2xl bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20 flex items-center justify-center mx-auto shadow-lg">
+                <BarChart3 className="w-7 h-7" />
+              </div>
+              <h2 className="text-lg font-bold text-white">Analytics & Financial Reports</h2>
+              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
+                Profit & loss statements, GST filing summaries, fast-moving items analysis and monthly sales trends.
+              </p>
+            </div>
+          )}
+
+          {currentView === 'products' && (
+            <AdminProducts currentUser={currentUser} />
+          )}
+
+          {currentView === 'staff' && (
+            <AdminStaff currentUser={currentUser} />
+          )}
+        </main>
+      )}
+    </div>
   );
 }
