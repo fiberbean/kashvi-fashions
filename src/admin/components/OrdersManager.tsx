@@ -42,6 +42,9 @@ export interface OrderRecord {
   payment_status?: string;
   payment_method?: string;
   payment_reference?: string;
+  payment_type?: string;
+  payment_mode?: string;
+  bank_reference?: string;
   customer?: {
     name?: string;
     phone?: string;
@@ -64,6 +67,9 @@ export interface OrderRecord {
     method?: string;
     status?: string;
     delivery_charge?: number;
+    payment_type?: string;
+    utr?: string;
+    bank_reference?: string;
   } | null;
   items?: Array<{
     name: string;
@@ -74,6 +80,9 @@ export interface OrderRecord {
     color?: string;
     size?: string;
     image?: string;
+    code?: string;
+    sku?: string;
+    product_code?: string;
   }> | null;
   refund?: {
     utr?: string;
@@ -288,7 +297,6 @@ export default function OrdersManager() {
     const currentRank = getStageRank(currentStatus);
     const targetRank = getStageRank(targetStatus);
 
-    // Rollback to previous step -> PIN verification required
     if (targetRank < currentRank) {
       setPendingRollback({ orderId, targetStatus, prevStatus: currentStatus });
       setEnteredPin('');
@@ -296,14 +304,12 @@ export default function OrdersManager() {
       return;
     }
 
-    // Special Requirement: Dispatched
     if (targetStatus === 'dispatched') {
       setDispatchOrderId(orderId);
       setTrackingNumber('');
       return;
     }
 
-    // Special Requirement: Cancelled
     if (targetStatus === 'cancelled') {
       setRefundOrderId(orderId);
       setRefundUtr('');
@@ -368,7 +374,7 @@ export default function OrdersManager() {
     setRefundUtr('');
   };
 
-  // SUPER STYLISH 4x6 SHIPPING LABEL (NO LOGO, NO GST)
+  // SUPER STYLISH 4x6 SHIPPING LABEL
   const printShippingLabel = (order: OrderRecord) => {
     const custName = order.customer?.name || order.customer_name || 'Customer';
     const custPhone = order.customer?.phone || order.customer_phone || '-';
@@ -631,11 +637,14 @@ export default function OrdersManager() {
     printWindow.document.close();
   };
 
-  // SUPER STYLISH ORDER INVOICE (NO LOGO, NO GST)
+  // SUPER STYLISH A4 BILL (CUSTOMER & SHIPPING DETAILS SIDE BY SIDE, PAYMENT DETAILS BELOW)
   const handlePrintTaxInvoice = (order: OrderRecord) => {
     const custName = order.customer?.name || order.customer_name || 'Customer';
     const custPhone = order.customer?.phone || order.customer_phone || '';
+    const custEmail = order.customer?.email || order.customer_email || '';
     const shipAddr = order.shipping?.address || order.shipping_address || 'Address on file';
+    const shipCity = order.shipping?.city || '';
+    const shipPin = order.shipping?.pincode || order.pincode || '';
     const items = order.items || [];
     const formattedDate = new Date(order.created_at).toLocaleDateString('en-IN', {
       day: 'numeric',
@@ -646,9 +655,37 @@ export default function OrdersManager() {
     const storeTitle = (storeConfig.store_name || 'Kashvi Fashions').toUpperCase();
     const returnAddressText = `${storeConfig.sender_address}, ${storeConfig.city}, ${storeConfig.state} - ${storeConfig.pincode}`;
 
+    // Resolve Payment Type (Credit Card / Debit Card / UPI / Net Banking etc.)
+    const rawPayMethod = (order.payment_method || order.payment?.method || '').toLowerCase();
+    const rawPayType = (order.payment_type || order.payment_mode || order.payment?.payment_type || '').toLowerCase();
+    
+    let resolvedPaymentType = 'Online Payment';
+    if (rawPayType.includes('credit') || rawPayMethod.includes('credit')) {
+      resolvedPaymentType = 'Credit Card';
+    } else if (rawPayType.includes('debit') || rawPayMethod.includes('debit')) {
+      resolvedPaymentType = 'Debit Card';
+    } else if (rawPayType.includes('upi') || rawPayMethod.includes('upi') || rawPayMethod.includes('gpay') || rawPayMethod.includes('phonepe')) {
+      resolvedPaymentType = 'UPI Payment';
+    } else if (rawPayType.includes('net') || rawPayMethod.includes('netbanking')) {
+      resolvedPaymentType = 'Net Banking';
+    } else if (rawPayMethod.includes('cashfree')) {
+      resolvedPaymentType = 'Online (UPI / Card / Net Banking)';
+    } else if (rawPayMethod) {
+      resolvedPaymentType = order.payment_method || 'Prepaid';
+    }
+
+    // Resolve UTR / Bank Reference Number
+    const resolvedUtr =
+      order.bank_reference ||
+      order.payment?.utr ||
+      order.payment?.bank_reference ||
+      order.refund?.utr ||
+      order.payment_reference ||
+      order.id;
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      alert('Pop-up was blocked. Please allow pop-ups to print invoice.');
+      alert('Pop-up was blocked. Please allow pop-ups to print bill.');
       return;
     }
 
@@ -656,9 +693,13 @@ export default function OrdersManager() {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Order Receipt • ${order.id}</title>
+        <title>Bill • ${order.id}</title>
         <meta charset="utf-8" />
         <style>
+          @page {
+            size: A4 portrait;
+            margin: 12mm 15mm;
+          }
           * {
             box-sizing: border-box;
             margin: 0;
@@ -668,61 +709,55 @@ export default function OrdersManager() {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             color: #0f172a;
             background: #ffffff;
-            padding: 40px;
-            font-size: 12px;
-            line-height: 1.5;
+            font-size: 11.5px;
+            line-height: 1.45;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
-          .invoice-card {
-            max-width: 780px;
+          .bill-card {
+            width: 100%;
+            max-width: 820px;
             margin: 0 auto;
             border: 1px solid #e2e8f0;
-            border-radius: 20px;
-            padding: 36px;
-            box-shadow: 0 4px 20px -5px rgba(0, 0, 0, 0.05);
+            border-radius: 16px;
+            padding: 26px 30px;
           }
           .top-brand-bar {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             border-bottom: 2px solid #0f172a;
-            padding-bottom: 24px;
+            padding-bottom: 18px;
           }
           .brand-name {
-            font-size: 26px;
+            font-size: 24px;
             font-weight: 900;
-            letter-spacing: 3px;
+            letter-spacing: 2px;
             color: #0f172a;
-          }
-          .brand-sub {
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: #64748b;
-            font-weight: 600;
-            margin-top: 3px;
           }
           .brand-contact {
             font-size: 11px;
             color: #475569;
-            margin-top: 6px;
+            margin-top: 5px;
+            line-height: 1.4;
           }
           .receipt-tag {
             text-align: right;
           }
-          .receipt-pill {
+          .bill-pill {
             display: inline-block;
             background: #0f172a;
             color: #ffffff;
-            font-size: 10px;
-            font-weight: 800;
+            font-size: 11px;
+            font-weight: 900;
             text-transform: uppercase;
-            letter-spacing: 2px;
-            padding: 5px 12px;
+            letter-spacing: 2.5px;
+            padding: 5px 14px;
             border-radius: 9999px;
             margin-bottom: 6px;
           }
           .invoice-num {
-            font-size: 18px;
+            font-size: 17px;
             font-weight: 800;
             color: #0f172a;
             font-family: monospace;
@@ -731,109 +766,182 @@ export default function OrdersManager() {
             font-size: 11px;
             color: #64748b;
           }
+
+          /* CUSTOMER & SHIPPING SIDE BY SIDE */
           .details-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 24px;
-            margin: 28px 0;
+            gap: 16px;
+            margin: 20px 0 14px 0;
           }
           .info-block {
             background: #f8fafc;
             border: 1px solid #f1f5f9;
-            border-radius: 14px;
-            padding: 16px;
+            border-radius: 12px;
+            padding: 14px 16px;
           }
           .info-block-title {
             font-size: 10px;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: #64748b;
+            letter-spacing: 1.2px;
+            color: #475569;
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 4px;
           }
           .info-block-val {
             font-size: 13px;
-            font-weight: 700;
+            font-weight: 800;
             color: #0f172a;
           }
           .info-block-text {
-            font-size: 11.5px;
+            font-size: 11px;
             color: #334155;
             line-height: 1.5;
-            margin-top: 2px;
+            margin-top: 3px;
           }
+
+          /* PAYMENT DETAILS BELOW */
+          .payment-block {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+          }
+          .payment-title {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: #334155;
+            display: block;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 3px;
+          }
+          .payment-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1.8fr 1fr;
+            gap: 12px;
+            align-items: center;
+          }
+          .pay-item-label {
+            font-size: 9.5px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: 700;
+            display: block;
+          }
+          .pay-item-val {
+            font-size: 12px;
+            font-weight: 800;
+            color: #0f172a;
+          }
+
+          /* PRODUCT TABLE */
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 8px;
+            margin-top: 6px;
           }
           th {
-            background: #f1f5f9;
+            background: #f8fafc;
             color: #475569;
             font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.8px;
             font-weight: 800;
-            padding: 12px 14px;
+            padding: 10px 12px;
             text-align: left;
             border-top: 1px solid #e2e8f0;
             border-bottom: 1px solid #e2e8f0;
           }
-          th:first-child { border-top-left-radius: 10px; border-bottom-left-radius: 10px; }
-          th:last-child { border-top-right-radius: 10px; border-bottom-right-radius: 10px; text-align: right; }
+          th:first-child { border-top-left-radius: 8px; border-bottom-left-radius: 8px; }
+          th:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px; text-align: right; }
           td {
-            padding: 14px;
+            padding: 10px 12px;
             border-bottom: 1px solid #f1f5f9;
-            font-size: 12px;
+            font-size: 11.5px;
+            vertical-align: middle;
           }
           td:last-child {
             text-align: right;
+            font-weight: 800;
+            color: #0f172a;
+          }
+          .product-code-badge {
+            font-family: monospace;
+            font-size: 9.5px;
+            font-weight: 700;
+            color: #64748b;
+            background: #e2e8f0;
+            padding: 1.5px 5px;
+            border-radius: 4px;
+            display: inline-block;
+            margin-bottom: 2px;
+          }
+          .product-name-title {
+            font-weight: 800;
+            color: #0f172a;
+            font-size: 12px;
+          }
+          .size-val {
             font-weight: 700;
             color: #0f172a;
           }
-          .item-name {
-            font-weight: 700;
-            color: #0f172a;
-            font-size: 12.5px;
-          }
-          .item-variant {
+          .color-val {
             font-size: 10.5px;
             color: #64748b;
-            margin-top: 2px;
           }
+          .qty-val {
+            font-weight: 800;
+            color: #0f172a;
+            font-size: 12px;
+          }
+          .units-label {
+            font-size: 9.5px;
+            color: #64748b;
+          }
+
+          /* TOTALS SUMMARY */
           .summary-card {
-            width: 50%;
+            width: 48%;
             margin-left: auto;
-            margin-top: 24px;
+            margin-top: 18px;
             background: #f8fafc;
-            border-radius: 14px;
-            padding: 18px;
+            border-radius: 12px;
+            padding: 14px 18px;
             border: 1px solid #f1f5f9;
           }
           .summary-row {
             display: flex;
             justify-content: space-between;
-            font-size: 12px;
+            font-size: 11.5px;
             color: #475569;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
           }
           .summary-row.total {
             border-top: 2px solid #0f172a;
-            padding-top: 10px;
-            margin-top: 10px;
+            padding-top: 8px;
+            margin-top: 8px;
             margin-bottom: 0;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 900;
             color: #0f172a;
           }
+
+          /* FOOTER */
           .thank-you-footer {
-            margin-top: 40px;
-            padding-top: 20px;
+            margin-top: 30px;
+            padding-top: 16px;
             border-top: 1px dashed #cbd5e1;
             text-align: center;
             color: #64748b;
             font-size: 11px;
+            line-height: 1.5;
           }
           .thank-you-footer strong {
             color: #0f172a;
@@ -841,70 +949,94 @@ export default function OrdersManager() {
         </style>
       </head>
       <body>
-        <div class="invoice-card">
+        <div class="bill-card">
+          
+          {/* Top Brand Header */}
           <div class="top-brand-bar">
             <div>
               <div class="brand-name">${storeTitle}</div>
-              <div class="brand-sub">Premium Customer Order Receipt</div>
               <div class="brand-contact">
                 ${returnAddressText}<br/>
                 Helpline: +91 ${storeConfig.support_phone} • Email: ${storeConfig.support_email}
               </div>
             </div>
             <div class="receipt-tag">
-              <span class="receipt-pill">ORDER RECEIPT</span>
+              <span class="bill-pill">BILL</span>
               <div class="invoice-num">${order.id}</div>
               <div class="invoice-date">${formattedDate}</div>
             </div>
           </div>
 
+          {/* Customer Details & Shipping Details Side-by-Side */}
           <div class="details-grid">
             <div class="info-block">
-              <span class="info-block-title">Customer & Delivery Details</span>
+              <span class="info-block-title">Customer Details</span>
               <div class="info-block-val">${custName}</div>
               <div class="info-block-text">
-                WhatsApp: <b>${custPhone}</b><br/>
-                ${shipAddr}
+                WhatsApp: <b>${custPhone}</b>
+                ${custEmail ? `<br/>Email: ${custEmail}` : ''}
               </div>
             </div>
 
             <div class="info-block">
-              <span class="info-block-title">Payment & Fulfillment Details</span>
-              <div class="info-block-val">${(order.payment_method || order.payment?.method || 'Prepaid PG').toUpperCase()}</div>
+              <span class="info-block-title">Shipping Details</span>
+              <div class="info-block-val">${custName}</div>
               <div class="info-block-text">
-                Status: <b style="color: #059669;">${(order.payment_status || order.payment?.status || 'Confirmed').toUpperCase()}</b><br/>
-                Payment Ref: <code>${order.payment_reference || order.id}</code><br/>
-                Logistics: India Post Speed Post
+                ${shipAddr}<br/>
+                ${shipCity ? `${shipCity}, ` : ''}${shipPin ? `PIN: <b>${shipPin}</b>` : ''}
               </div>
             </div>
           </div>
 
+          {/* Payment Details Box (Below) */}
+          <div class="payment-block">
+            <span class="payment-title">Payment Details</span>
+            <div class="payment-grid">
+              <div>
+                <span class="pay-item-label">Payment Type</span>
+                <span class="pay-item-val">${resolvedPaymentType}</span>
+              </div>
+              <div>
+                <span class="pay-item-label">UTR / Reference Number</span>
+                <span class="pay-item-val" style="font-family: monospace; font-size: 11px;">${resolvedUtr}</span>
+              </div>
+              <div style="text-align: right;">
+                <span class="pay-item-label">Payment Status</span>
+                <span class="pay-item-val" style="color: #059669;">${(order.payment_status || order.payment?.status || 'PAID').toUpperCase()}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Product Items Table */}
           <table>
             <thead>
               <tr>
-                <th>Product Description</th>
-                <th>Specifications</th>
-                <th style="text-align: center;">Qty</th>
-                <th style="text-align: right;">Unit Price</th>
-                <th>Total</th>
+                <th style="width: 42%;">Product Code / Name</th>
+                <th style="width: 22%;">Size / Colour</th>
+                <th style="width: 14%; text-align: center;">Qty / Units</th>
+                <th style="width: 11%; text-align: right;">Price</th>
+                <th style="width: 11%;">Total</th>
               </tr>
             </thead>
             <tbody>
               ${items
-                .map((item) => {
+                .map((item, idx) => {
                   const q = item.quantity || item.qty || 1;
+                  const itemCode = item.product_code || item.sku || item.code || `PRD-${String(idx + 1).padStart(3, '0')}`;
                   return `
                     <tr>
                       <td>
-                        <div class="item-name">${item.name}</div>
+                        <div class="product-code-badge">${itemCode}</div>
+                        <div class="product-name-title">${item.name}</div>
                       </td>
                       <td>
-                        <div class="item-variant">
-                          ${item.size ? `Size: <b>${item.size}</b>` : ''} 
-                          ${item.color ? `• Color: <b>${item.color}</b>` : ''}
-                        </div>
+                        <div class="size-val">Size: ${item.size || 'Free Size'}</div>
+                        <div class="color-val">Colour: ${item.color || 'Standard'}</div>
                       </td>
-                      <td style="text-align: center; font-weight: 700;">${q}</td>
+                      <td style="text-align: center;">
+                        <div class="qty-val">${q}</div>
+                        <div class="units-label">Units</div>
+                      </td>
                       <td style="text-align: right; color: #475569;">₹${item.price.toLocaleString('en-IN')}</td>
                       <td>₹${(item.price * q).toLocaleString('en-IN')}</td>
                     </tr>
@@ -914,6 +1046,7 @@ export default function OrdersManager() {
             </tbody>
           </table>
 
+          {/* Total Summary */}
           <div class="summary-card">
             <div class="summary-row">
               <span>Items Subtotal</span>
@@ -929,10 +1062,12 @@ export default function OrdersManager() {
             </div>
           </div>
 
+          {/* Footer Thank you note */}
           <div class="thank-you-footer">
             Thank you for shopping with <strong>${storeTitle}</strong>.<br/>
             For support or tracking queries, reach us on WhatsApp at <strong>+91 ${storeConfig.whatsapp_no}</strong>.
           </div>
+
         </div>
         <script>
           window.onload = function() { window.print(); }
@@ -1572,7 +1707,7 @@ export default function OrdersManager() {
                   className="px-3.5 py-2 bg-white/10 hover:bg-white/15 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
                 >
                   <FileText className="w-3.5 h-3.5 text-[#00d9ff]" />
-                  <span>Order Receipt</span>
+                  <span>Bill</span>
                 </button>
                 <button
                   type="button"
