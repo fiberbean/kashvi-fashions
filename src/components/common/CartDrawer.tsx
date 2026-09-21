@@ -138,7 +138,6 @@ export default function CartDrawer() {
     shippingCharge,
     setShippingCharge,
     setUserPincode,
-    totalDue,
   } = useCart();
 
   const authContext = useAuth();
@@ -181,6 +180,18 @@ export default function CartDrawer() {
   } | null>(null);
 
   const hasJewelleryItems = cart.some((item) => item?.department === 'jewellery');
+
+  // Total weight in grams (default 250g per item if weight not specified)
+  const totalWeightGrams = cart.reduce((acc, item: any) => {
+    const itemWeight = Number(item.weight) || Number(item.weight_grams) || 250;
+    return acc + itemWeight * (item.qty || 1);
+  }, 0);
+
+  // Weight units in 500g slabs
+  const weightSlabs = Math.max(1, Math.ceil(totalWeightGrams / 500));
+
+  // Dynamic Total calculation: Bag view displays only subtotal; Address/Payment view includes weight-based shipping
+  const finalPayableAmount = activeStep === 'cart' ? subtotal : subtotal + (shippingCharge || 0);
 
   // Fetch addresses directly from Supabase customer_addresses table
   const fetchAddressesFromDb = async () => {
@@ -241,10 +252,6 @@ export default function CartDrawer() {
         if (mapped.length > 0) {
           const def = mapped.find((a) => a.is_default) || mapped[0];
           setSelectedAddressId(def.id);
-          if (def.pincode) {
-            setUserPincode(def.pincode);
-            fetchShippingByPincode(def.pincode);
-          }
         }
       }
     } catch (err) {
@@ -332,6 +339,17 @@ export default function CartDrawer() {
     }
   }, [isCartOpen]);
 
+  // Recalculate shipping whenever user switches to address step
+  useEffect(() => {
+    if (activeStep === 'address' && savedAddresses.length > 0) {
+      const target = savedAddresses.find((a) => a.id === selectedAddressId) || savedAddresses[0];
+      if (target?.pincode) {
+        setUserPincode(target.pincode);
+        fetchShippingByPincode(target.pincode);
+      }
+    }
+  }, [activeStep, selectedAddressId, savedAddresses, cart]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -361,6 +379,7 @@ export default function CartDrawer() {
     closeCart();
   };
 
+  // Calculate Shipping based on Pincode AND Product Weight (Quantity x Weight)
   const fetchShippingByPincode = async (pincode: string): Promise<number> => {
     const cleanPin = pincode.trim();
     if (cleanPin.length !== 6) return 0;
@@ -411,43 +430,46 @@ export default function CartDrawer() {
         rateCard = cards.find((c: any) => c.active === true || c.active === 'true') || cards[0];
       }
 
-      let calculatedRate = 0;
+      let baseRate = 0;
       const zoneNorm = detectedZone.toLowerCase().trim();
 
       if (rateCard) {
         if (zoneNorm.includes('local')) {
-          calculatedRate = parseFloat(rateCard.local_rate) || 0;
+          baseRate = parseFloat(rateCard.local_rate) || 0;
         } else if (zoneNorm.includes('within state') || zoneNorm.includes('state')) {
-          calculatedRate = parseFloat(rateCard.within_state_rate) || 0;
+          baseRate = parseFloat(rateCard.within_state_rate) || 0;
         } else if (zoneNorm.includes('zone') || zoneNorm.includes('metro')) {
-          calculatedRate = parseFloat(rateCard.zone_metro_rate) || 0;
+          baseRate = parseFloat(rateCard.zone_metro_rate) || 0;
         } else if (zoneNorm.includes('other')) {
-          calculatedRate = parseFloat(rateCard.other_states_rate) || 0;
+          baseRate = parseFloat(rateCard.other_states_rate) || 0;
         } else {
-          calculatedRate = parseFloat(rateCard.local_rate) || 40;
+          baseRate = parseFloat(rateCard.local_rate) || 40;
         }
       }
 
-      if (calculatedRate === 0) {
-        calculatedRate = zoneNorm.includes('local')
+      if (baseRate === 0) {
+        baseRate = zoneNorm.includes('local')
           ? 30
           : zoneNorm.includes('within state')
           ? 50
           : 70;
       }
 
+      // Multiply base rate by weight slabs (Every 500g slab)
+      const calculatedRate = Math.round(baseRate * weightSlabs);
+
       setShippingCharge(calculatedRate);
       setUserPincode(cleanPin);
       setPincodeStatus({
         zoneType: detectedZone,
         deliveryAvailable: true,
-        message: `${detectedZone} Delivery`,
+        message: `${detectedZone} Delivery (${totalWeightGrams}g)`,
       });
 
       return calculatedRate;
     } catch (err) {
       console.error('Error in shipping calculation:', err);
-      const fallbackRate = cleanPin.startsWith('533') ? 30 : 50;
+      const fallbackRate = (cleanPin.startsWith('533') ? 30 : 50) * weightSlabs;
       setShippingCharge(fallbackRate);
       setPincodeStatus({
         zoneType: cleanPin.startsWith('533') ? 'Local' : 'Within State',
@@ -738,6 +760,8 @@ export default function CartDrawer() {
         user?.email?.trim() ||
         `${currentAddress.whatsapp_number}@kashvifashions.local`;
 
+      const totalOrderAmount = subtotal + shippingCharge;
+
       // Supabase Edge Function Call
       const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
         'create-payment-order',
@@ -745,8 +769,8 @@ export default function CartDrawer() {
           body: {
             orderId: orderId,
             order_id: orderId,
-            orderAmount: totalDue,
-            order_amount: totalDue,
+            orderAmount: totalOrderAmount,
+            order_amount: totalOrderAmount,
             customerPhone: currentAddress.whatsapp_number,
             customer_phone: currentAddress.whatsapp_number,
             customerName: currentAddress.name,
@@ -783,14 +807,15 @@ export default function CartDrawer() {
         pincode: currentAddress.pincode,
         subtotal: subtotal,
         delivery_fee: shippingCharge,
-        total_amount: totalDue,
-        total: totalDue,
+        total_amount: totalOrderAmount,
+        total: totalOrderAmount,
         items: cartSnapshot,
         shipping: {
           address: fullAddressText,
           pincode: currentAddress.pincode,
           fee: shippingCharge,
           zone: pincodeStatus?.zoneType || 'Standard',
+          total_weight_grams: totalWeightGrams,
         },
         customer: {
           name: currentAddress.name,
@@ -805,7 +830,7 @@ export default function CartDrawer() {
           {
             status: 'order_initiated',
             time: new Date().toISOString(),
-            note: `Order initiated using gateway: ${usedGatewayName}`,
+            note: `Order initiated using gateway: ${usedGatewayName} with weight ${totalWeightGrams}g`,
           },
         ],
       };
@@ -854,7 +879,7 @@ export default function CartDrawer() {
                 await handlePaymentSuccess(
                   orderId,
                   currentAddress,
-                  totalDue,
+                  totalOrderAmount,
                   usedGatewayName,
                   cartSnapshot
                 );
@@ -1393,22 +1418,27 @@ export default function CartDrawer() {
                 <span className="font-bold text-neutral-900">₹{subtotal.toLocaleString('en-IN')}</span>
               </div>
 
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-1">
-                  <Truck className="w-3.5 h-3.5 text-neutral-500" />
-                  Delivery Charge {pincodeStatus?.zoneType ? `(${pincodeStatus.zoneType})` : ''}
-                </span>
-                <span className="font-bold text-neutral-900">₹{shippingCharge}</span>
-              </div>
+              {/* Delivery Charge is strictly shown ONLY during the Address / Payment step */}
+              {activeStep === 'address' && (
+                <div className="flex justify-between items-center animate-in fade-in duration-150">
+                  <span className="flex items-center gap-1">
+                    <Truck className="w-3.5 h-3.5 text-neutral-500" />
+                    Delivery Charge {pincodeStatus?.zoneType ? `(${pincodeStatus.zoneType} • ${totalWeightGrams}g)` : ''}
+                  </span>
+                  <span className="font-bold text-neutral-900">
+                    {pincodeLoading ? '...' : `₹${shippingCharge}`}
+                  </span>
+                </div>
+              )}
 
               <div className="flex justify-between text-sm font-bold text-neutral-900 pt-2 border-t border-neutral-100">
-                <span>Total Due</span>
+                <span>{activeStep === 'cart' ? 'Subtotal Due' : 'Total Due'}</span>
                 <span
                   className={`text-lg font-serif font-black ${
                     hasJewelleryItems ? 'text-[#0b3b2c]' : 'text-neutral-950'
                   }`}
                 >
-                  ₹{totalDue.toLocaleString('en-IN')}
+                  ₹{finalPayableAmount.toLocaleString('en-IN')}
                 </span>
               </div>
             </div>
@@ -1455,7 +1485,7 @@ export default function CartDrawer() {
                 <span>
                   {isCheckingOut
                     ? 'Connecting Gateway...'
-                    : `Pay via ${activeGatewayName} • ₹${totalDue.toLocaleString('en-IN')}`}
+                    : `Pay via ${activeGatewayName} • ₹${(subtotal + shippingCharge).toLocaleString('en-IN')}`}
                 </span>
                 {!isCheckingOut && <ArrowRight className="w-4 h-4" />}
               </button>
