@@ -32,14 +32,20 @@ import jewelleryLogo from '../../assets/jewellery-logo.png';
 interface Product {
   id: string;
   name: string;
-  category: string | null;
-  sub_category: string | null;
-  colour: string | null;
-  size: string | null;
-  selling_price: number | null;
-  mrp: number | null;
-  images: any;
-  active: boolean | null;
+  category?: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  sub_category?: string | null;
+  sub_category_id?: string | null;
+  sub_category_name?: string | null;
+  department?: string | null;
+  colour?: string | null;
+  size?: string | null;
+  selling_price?: number | null;
+  price?: number | null;
+  mrp?: number | null;
+  images?: any;
+  active?: boolean | null;
   fabric?: string | null;
   brand?: string | null;
   description?: string | null;
@@ -51,7 +57,9 @@ interface SubCategory {
   name: string;
   category_id?: string | null;
   category_name?: string | null;
+  department?: string | null;
   image_url?: string | null;
+  active?: boolean | null;
 }
 
 interface ComboItem {
@@ -64,6 +72,8 @@ interface ComboItem {
 
 const COLOR_HEX_MAP: Record<string, string> = {
   pink: '#e83e8c',
+  'baby pink': '#f4c2c2',
+  'rani pink': '#e30b5c',
   magenta: '#d63384',
   beige: '#f5e1d5',
   skin: '#e8beac',
@@ -71,14 +81,24 @@ const COLOR_HEX_MAP: Record<string, string> = {
   black: '#1f2937',
   white: '#ffffff',
   red: '#dc2626',
+  'crimson red': '#dc143c',
   maroon: '#800000',
   wine: '#722f37',
   navy: '#0f172a',
+  'navy blue': '#000080',
   blue: '#2563eb',
+  'sky blue': '#87ceeb',
+  turquoise: '#40e0d0',
   green: '#16a34a',
+  'dark green': '#006400',
   purple: '#9333ea',
+  violet: '#8a2be2',
   yellow: '#eab308',
+  'mustard yellow': '#e1ad01',
+  'musturd yellow': '#e1ad01',
+  peach: '#ffdab9',
   grey: '#4b5563',
+  gray: '#4b5563',
   gold: '#d4af37',
   antique: '#996515',
   silver: '#c0c0c0',
@@ -88,7 +108,7 @@ const COLOR_HEX_MAP: Record<string, string> = {
 
 const isLightColor = (colorName: string): boolean => {
   const lower = colorName.toLowerCase().trim();
-  return ['white', 'beige', 'skin', 'yellow', 'nude', 'gold', 'silver'].includes(lower);
+  return ['white', 'beige', 'skin', 'yellow', 'nude', 'gold', 'silver', 'peach', 'baby pink', 'sky blue'].includes(lower);
 };
 
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
@@ -122,80 +142,108 @@ export default function CategoryProductListPage() {
   const [comboList, setComboList] = useState<ComboItem[]>([]);
   const [isZoomOpen, setIsZoomOpen] = useState<boolean>(false);
 
-  const isJewellery = department === 'jewellery' || slug?.toLowerCase().includes('jewel');
+  const isJewellery = department === 'jewellery' || slug?.toLowerCase().includes('jewel') || searchParams.get('tab') === 'jewellery';
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
-  // Load Meta and Subs
+  // 1. Load Category Meta and Sub-Categories (Robust Unrestricted Query)
   useEffect(() => {
     let isCurrent = true;
 
     async function loadMetaAndSubs() {
-      const slugKey = slug || '';
+      const slugKey = (slug || '').trim();
       let activeCatId = '';
       let activeCatName = slugKey;
       let currentDept: 'fashions' | 'jewellery' = slugKey.toLowerCase().includes('jewel')
         ? 'jewellery'
         : 'fashions';
 
-      if (categoryMetaCache.has(slugKey)) {
-        const cached = categoryMetaCache.get(slugKey)!;
-        activeCatId = cached.id;
-        activeCatName = cached.name;
-        currentDept = cached.dept;
-      } else if (slugKey) {
-        const { data: catData } = await supabase
-          .from('categories')
-          .select('id, name, slug, department')
-          .eq('id', slugKey)
-          .maybeSingle();
-
-        if (catData) {
-          activeCatId = catData.id;
-          activeCatName = catData.name;
-          currentDept = (catData.department || '').toLowerCase() === 'jewellery' ? 'jewellery' : 'fashions';
-          categoryMetaCache.set(slugKey, { name: activeCatName, dept: currentDept, id: activeCatId });
-        } else {
-          const { data: altCat } = await supabase
+      try {
+        if (categoryMetaCache.has(slugKey)) {
+          const cached = categoryMetaCache.get(slugKey)!;
+          activeCatId = cached.id;
+          activeCatName = cached.name;
+          currentDept = cached.dept;
+        } else if (slugKey) {
+          // Check by ID first, then by slug, then by name
+          const { data: catData } = await supabase
             .from('categories')
             .select('id, name, slug, department')
-            .eq('slug', slugKey)
+            .or(`id.eq.${slugKey},slug.eq.${slugKey},name.ilike.${slugKey}`)
+            .limit(1)
             .maybeSingle();
 
-          if (altCat) {
-            activeCatId = altCat.id;
-            activeCatName = altCat.name;
-            currentDept = (altCat.department || '').toLowerCase() === 'jewellery' ? 'jewellery' : 'fashions';
+          if (catData) {
+            activeCatId = String(catData.id);
+            activeCatName = catData.name;
+            const d = (catData.department || '').toLowerCase().trim();
+            currentDept = d.includes('jewel') ? 'jewellery' : 'fashions';
             categoryMetaCache.set(slugKey, { name: activeCatName, dept: currentDept, id: activeCatId });
+          } else if (slugKey.toLowerCase().includes('jewel')) {
+            activeCatName = 'Jewellery';
+            currentDept = 'jewellery';
           }
         }
-      }
 
-      if (isCurrent) {
-        setCategoryName(activeCatName);
-        setDepartment(currentDept);
-        setHeaderLoading(false);
-      }
+        if (isCurrent) {
+          setCategoryName(activeCatName);
+          setDepartment(currentDept);
+          setHeaderLoading(false);
+        }
 
-      if (subCategoryCache.has(activeCatId)) {
-        if (isCurrent) setSubCategories(subCategoryCache.get(activeCatId)!);
-      } else {
-        const { data } = await supabase
+        // Fetch Sub-Categories without strict active=true to avoid null drops
+        const { data: subData } = await supabase
           .from('sub_categories')
-          .select('id, name, category_id, category_name, image_url')
-          .eq('active', true);
+          .select('id, name, category_id, category_name, department, image_url, active')
+          .order('name');
 
-        const filtered = (data || []).filter((sub) => {
-          const mId = activeCatId && String(sub.category_id).trim() === String(activeCatId).trim();
-          const mName =
-            sub.category_name &&
-            activeCatName &&
-            sub.category_name.toLowerCase().trim() === activeCatName.toLowerCase().trim();
-          return mId || mName;
-        });
+        if (isCurrent && subData) {
+          let filtered: SubCategory[] = [];
 
-        if (activeCatId) subCategoryCache.set(activeCatId, filtered);
-        if (isCurrent) setSubCategories(filtered);
+          if (currentDept === 'jewellery') {
+            filtered = subData.filter((sub) => {
+              if (sub.active === false) return false;
+              const subDept = (sub.department || '').toLowerCase().trim();
+              if (subDept.includes('jewel')) return true;
+              if (activeCatId && String(sub.category_id).trim() === activeCatId) return true;
+              const cName = (sub.category_name || '').toLowerCase();
+              return cName.includes('jewel');
+            });
+
+            // If empty, match common jewellery items
+            if (filtered.length === 0) {
+              filtered = subData.filter((sub) => {
+                if (sub.active === false) return false;
+                const sName = (sub.name || '').toLowerCase();
+                return (
+                  sName.includes('bangle') ||
+                  sName.includes('necklace') ||
+                  sName.includes('earring') ||
+                  sName.includes('chain') ||
+                  sName.includes('ring') ||
+                  sName.includes('choker') ||
+                  sName.includes('chuda')
+                );
+              });
+            }
+          } else {
+            filtered = subData.filter((sub) => {
+              if (sub.active === false) return false;
+              const matchesId = activeCatId && String(sub.category_id).trim() === activeCatId;
+              const matchesName =
+                sub.category_name &&
+                activeCatName &&
+                sub.category_name.toLowerCase().trim() === activeCatName.toLowerCase().trim();
+              return matchesId || matchesName;
+            });
+          }
+
+          setSubCategories(filtered);
+        }
+      } catch (err) {
+        console.error('Meta/Sub-categories loading error:', err);
+      } finally {
+        if (isCurrent) setHeaderLoading(false);
       }
     }
 
@@ -206,50 +254,58 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // Load Products
+  // 2. Load Products (Supports Both New & Legacy Schema Columns)
   useEffect(() => {
     let isCurrent = true;
 
     async function loadProductsData() {
       setProductsLoading(true);
       try {
-        const slugKey = slug || '';
+        const slugKey = (slug || '').trim();
         const catInfo = categoryMetaCache.get(slugKey);
+        const activeCatId = catInfo?.id || '';
         const activeCatName = catInfo?.name || slugKey;
         const currentDept = catInfo?.dept || (slugKey.toLowerCase().includes('jewel') ? 'jewellery' : 'fashions');
 
-        let prodQuery = supabase
+        // Fetch active products
+        const { data: prodData, error: prodError } = await supabase
           .from('products')
-          .select('id, name, category, sub_category, colour, size, selling_price, mrp, images, active, fabric, brand, description, variants')
-          .eq('active', true);
+          .select('*')
+          .order('created_at', { ascending: false });
 
-        if (selectedSub) {
-          prodQuery = prodQuery.eq('sub_category', selectedSub);
-        } else if (currentDept === 'jewellery') {
-          prodQuery = prodQuery.ilike('category', '%jewel%');
-        } else if (activeCatName && activeCatName !== slugKey) {
-          prodQuery = prodQuery.eq('category', activeCatName);
-        }
+        if (prodError) throw prodError;
 
-        const { data: prodData, error: prodError } = await prodQuery;
+        if (isCurrent && prodData) {
+          const filtered = prodData.filter((p: any) => {
+            if (p.active === false) return false;
 
-        if (isCurrent) {
-          if (!prodError && prodData && prodData.length > 0) {
-            setProducts(prodData);
-          } else if (selectedSub) {
-            const { data: fallbackData } = await supabase
-              .from('products')
-              .select('id, name, category, sub_category, colour, size, selling_price, mrp, images, active, fabric, brand, description, variants')
-              .eq('active', true)
-              .ilike('sub_category', `%${selectedSub}%`);
+            // Sub-category Match
+            if (selectedSub) {
+              const sel = selectedSub.toLowerCase().trim();
+              const pSub = (p.sub_category || p.sub_category_name || '').toLowerCase().trim();
+              const pSubId = String(p.sub_category_id || '').toLowerCase().trim();
+              return pSub === sel || pSubId === sel || pSub.includes(sel);
+            }
 
-            setProducts(fallbackData || []);
-          } else {
-            setProducts([]);
-          }
+            // Department Match
+            const pDept = (p.department || '').toLowerCase().trim();
+            if (currentDept === 'jewellery') {
+              if (pDept.includes('jewel')) return true;
+              const pCat = (p.category || p.category_name || '').toLowerCase();
+              return pCat.includes('jewel');
+            }
+
+            // Fashion Category Match
+            if (activeCatId && String(p.category_id).trim() === activeCatId) return true;
+            const pCatName = (p.category_name || p.category || '').toLowerCase().trim();
+            const targetName = activeCatName.toLowerCase().trim();
+            return pCatName === targetName || (!pDept.includes('jewel') && slugKey === 'fashions');
+          });
+
+          setProducts(filtered);
         }
       } catch (err) {
-        console.error('Error in product load:', err);
+        console.error('Error loading category products:', err);
         if (isCurrent) setProducts([]);
       } finally {
         if (isCurrent) setProductsLoading(false);
@@ -263,6 +319,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug, selectedSub]);
 
+  // Image Parser Helper
   const getProductImage = (images: any): string => {
     const fallback = isJewellery
       ? 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&q=80'
@@ -286,7 +343,7 @@ export default function CategoryProductListPage() {
     return fallback;
   };
 
-  // ఖచ్చితంగా డేటాబేస్ ఆధారంగా కలర్స్ తీసుకునే ఫంక్షన్ (నో ఫాల్‌బ్యాక్)
+  // Colors Parser
   const getProductColors = (prod: Product | null): string[] => {
     if (!prod) return [];
     const colorsSet = new Set<string>();
@@ -303,6 +360,9 @@ export default function CategoryProductListPage() {
       if (typeof vars === 'string') {
         try { vars = JSON.parse(vars); } catch {}
       }
+      if (Array.isArray(vars?.colors)) {
+        vars.colors.forEach((c: string) => { if (c && c.trim()) colorsSet.add(c.trim()); });
+      }
       if (Array.isArray(vars?.colours)) {
         vars.colours.forEach((c: string) => { if (c && c.trim()) colorsSet.add(c.trim()); });
       }
@@ -314,10 +374,19 @@ export default function CategoryProductListPage() {
       }
     }
 
+    if (Array.isArray(prod.images)) {
+      prod.images.forEach((img: any) => {
+        const tag = img.color_tag || img.color;
+        if (tag && typeof tag === 'string' && tag.toLowerCase() !== 'universal') {
+          colorsSet.add(tag.trim());
+        }
+      });
+    }
+
     return Array.from(colorsSet);
   };
 
-  // ఖచ్చితంగా డేటాబేస్ ఆధారంగా సైజులు తీసుకునే ఫంక్షన్ (నో ఫాల్‌బ్యాక్)
+  // Sizes Parser
   const getProductSizes = (prod: Product | null): string[] => {
     if (!prod) return [];
     const sizesSet = new Set<string>();
@@ -356,11 +425,12 @@ export default function CategoryProductListPage() {
       const pImage = getProductImage(product.images);
       const colors = getProductColors(product);
       const sizes = getProductSizes(product);
+      const price = product.selling_price || product.price || 0;
 
       addToWishlist({
         id: pid,
         name: product.name,
-        price: product.selling_price || 0,
+        price,
         originalPrice: product.mrp || undefined,
         image: pImage,
         color: colors[0] || undefined,
@@ -379,14 +449,16 @@ export default function CategoryProductListPage() {
     let parsedImgs: { url: string; color?: string }[] = [];
     if (Array.isArray(product.images)) {
       parsedImgs = product.images.map((item: any) =>
-        typeof item === 'string' ? { url: item } : { url: item.url || '', color: item.color || item.colour }
+        typeof item === 'string'
+          ? { url: item }
+          : { url: item.url || '', color: item.color_tag || item.color || item.colour }
       );
     } else if (typeof product.images === 'string') {
       try {
         const p = JSON.parse(product.images);
         if (Array.isArray(p)) {
           parsedImgs = p.map((item: any) =>
-            typeof item === 'string' ? { url: item } : { url: item.url || '', color: item.color }
+            typeof item === 'string' ? { url: item } : { url: item.url || '', color: item.color_tag || item.color }
           );
         }
       } catch {
@@ -468,13 +540,14 @@ export default function CategoryProductListPage() {
 
   const handleFinalCheckoutAction = (shouldOpenCart: boolean = false) => {
     if (!activeProduct) return;
+    const finalPrice = activeProduct.selling_price || activeProduct.price || 0;
 
     if (comboList.length > 0) {
       const itemsToAdd = comboList.map((item) => ({
         id: `${activeProduct.id}-${item.size || 'std'}-${item.color || 'orig'}`,
         productId: activeProduct.id,
         name: activeProduct.name,
-        price: activeProduct.selling_price || 0,
+        price: finalPrice,
         mrp: activeProduct.mrp,
         image: selectedImage,
         color: item.color || undefined,
@@ -489,7 +562,7 @@ export default function CategoryProductListPage() {
         id: `${activeProduct.id}-${selectedSize || 'std'}-${selectedColor || 'orig'}`,
         productId: activeProduct.id,
         name: activeProduct.name,
-        price: activeProduct.selling_price || 0,
+        price: finalPrice,
         mrp: activeProduct.mrp,
         image: selectedImage,
         color: selectedColor || undefined,
@@ -518,8 +591,8 @@ export default function CategoryProductListPage() {
   }, [isZoomOpen]);
 
   const sortedProducts = [...products].sort((a, b) => {
-    const priceA = a.selling_price || 0;
-    const priceB = b.selling_price || 0;
+    const priceA = a.selling_price || a.price || 0;
+    const priceB = b.selling_price || b.price || 0;
     if (sortBy === 'price-asc') return priceA - priceB;
     if (sortBy === 'price-desc') return priceB - priceA;
     return 0;
@@ -530,7 +603,7 @@ export default function CategoryProductListPage() {
     setSearchParams(searchParams);
   };
 
-  const activeSellingPrice = activeProduct?.selling_price || 0;
+  const activeSellingPrice = activeProduct?.selling_price || activeProduct?.price || 0;
   const activeMrp = activeProduct?.mrp || 0;
   const activeDiscount = activeMrp > activeSellingPrice ? Math.round(((activeMrp - activeSellingPrice) / activeMrp) * 100) : 0;
   
@@ -776,8 +849,8 @@ export default function CategoryProductListPage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {sortedProducts.map((product, index) => {
-              const currentPrice = product.selling_price || 0;
+            {sortedProducts.map((product) => {
+              const currentPrice = product.selling_price || product.price || 0;
               const originalPrice = product.mrp && product.mrp > currentPrice ? product.mrp : null;
               const discountPercent = originalPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0;
               const imageUrl = getProductImage(product.images);
@@ -843,13 +916,13 @@ export default function CategoryProductListPage() {
 
                   <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                     <div>
-                      {product.sub_category && (
+                      {(product.sub_category || product.sub_category_name) && (
                         <span
                           className={`text-[9px] uppercase tracking-[0.2em] font-bold block mb-1 ${
                             isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
                           }`}
                         >
-                          {product.sub_category}
+                          {product.sub_category || product.sub_category_name}
                         </span>
                       )}
                       <h3 className="text-xs sm:text-sm font-serif font-bold text-neutral-900 group-hover:text-neutral-600 line-clamp-2 leading-snug transition-colors">
@@ -954,13 +1027,13 @@ export default function CategoryProductListPage() {
               <div className="md:col-span-6 flex flex-col justify-between space-y-4">
                 <div className="space-y-4">
                   <div>
-                    {activeProduct.sub_category && (
+                    {(activeProduct.sub_category || activeProduct.sub_category_name) && (
                       <span
                         className={`text-[10px] font-bold uppercase tracking-wider ${
                           isJewellery ? 'text-[#b38728]' : 'text-[#ff4d6d]'
                         }`}
                       >
-                        {activeProduct.sub_category}
+                        {activeProduct.sub_category || activeProduct.sub_category_name}
                       </span>
                     )}
                     <h2 className="text-xl sm:text-2xl font-serif font-bold text-neutral-900 mt-0.5 leading-snug">
@@ -991,7 +1064,7 @@ export default function CategoryProductListPage() {
 
                   <hr className="border-neutral-100" />
 
-                  {/* 1. Color Shade Selection (డేటాబేస్‌లో ఉంటే మాత్రమే వస్తుంది) */}
+                  {/* 1. Color Shade Selection */}
                   {modalColorOptions.length > 0 && (
                     <div className="space-y-2">
                       <span className="text-xs font-semibold text-neutral-800 block">
@@ -1033,7 +1106,7 @@ export default function CategoryProductListPage() {
                     </div>
                   )}
 
-                  {/* 2. Size Selection (డేటాబేస్‌లో ఉన్న సైజులు మాత్రమే వస్తాయి) */}
+                  {/* 2. Size Selection */}
                   {modalSizeOptions.length > 0 && (
                     <div className="space-y-2 pt-1">
                       <span className="text-xs font-semibold text-neutral-800 block">
@@ -1064,7 +1137,7 @@ export default function CategoryProductListPage() {
                     </div>
                   )}
 
-                  {/* 3. Quantity Counter (సింగిల్ ఐటమ్ కొనుగోలుకు) */}
+                  {/* 3. Quantity Counter */}
                   <div className="space-y-1.5 pt-1">
                     <span className="text-xs font-semibold text-neutral-800 block">
                       Quantity:
@@ -1090,7 +1163,7 @@ export default function CategoryProductListPage() {
                     </div>
                   </div>
 
-                  {/* 4. Add Variant Button (కలర్ లేదా సైజులలో వేర్వేరు కాంబినేషన్లు ఎంచుకోవడానికి) */}
+                  {/* 4. Add Variant Button */}
                   {hasVariants && (
                     <div className="pt-1">
                       <button
