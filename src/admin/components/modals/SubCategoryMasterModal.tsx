@@ -15,7 +15,6 @@ import {
   RefreshCw,
   AlertCircle,
   Plus,
-  Tag,
   Filter,
   Lock
 } from 'lucide-react';
@@ -27,8 +26,6 @@ interface SubCategoryMasterModalProps {
   onClose: () => void;
   onSuccess?: () => void;
 }
-
-type SizeGroupType = 'apparel' | 'bangles' | 'lingerie' | 'free_size';
 
 export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCategoryMasterModalProps) {
   // Master lists
@@ -45,7 +42,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
   const [originalId, setOriginalId] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
   const [name, setName] = useState<string>('');
-  const [sizeGroup, setSizeGroup] = useState<SizeGroupType>('apparel');
   const [imageUrl, setImageUrl] = useState<string>('');
   const [displayOrder, setDisplayOrder] = useState<number>(0);
   const [isActive, setIsActive] = useState<boolean>(true);
@@ -127,7 +123,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     generateSubCategoryCode();
   }, []);
 
-  // Reset form to Create Mode (New creation is strictly auto-generated and read-only)
+  // Reset form to Create Mode
   const resetForm = () => {
     setEditingMode(false);
     setOriginalId(null);
@@ -138,7 +134,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     setCompressionStats(null);
     setDisplayOrder(subCategories.length > 0 ? subCategories.length + 1 : 1);
     setIsActive(true);
-    setSizeGroup('apparel');
     if (categories.length > 0) setSelectedCategoryId(categories[0].id);
     generateSubCategoryCode();
   };
@@ -150,7 +145,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     setSubCategoryCode(sub.id);
     setSelectedCategoryId(sub.category_id || '');
     setName(sub.name);
-    setSizeGroup((sub.size_group as SizeGroupType) || 'apparel');
     setImageUrl(sub.image_url || '');
     setImagePreview(sub.image_url || null);
     setOptimizedBlob(null);
@@ -206,10 +200,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     }
   };
 
-  // Check whether ID should be editable:
-  // - New Record: NOT editable (locked to auto-series)
-  // - Existing Record with SUBCAT series: NOT editable (locked permanently)
-  // - Existing Record with OLD/RANDOM ID: EDITABLE (so you can assign SUBCAT series)
   const isSubCatSeries = (idString: string | null) => {
     if (!idString) return false;
     return /^SUBCAT\d+$/i.test(idString.trim());
@@ -217,7 +207,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
 
   const isIdEditable = editingMode && originalId ? !isSubCatSeries(originalId) : false;
 
-  // Save (Create or Update with ID Override for old IDs)
+  // Save (Create or Update)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCategoryId) {
@@ -263,8 +253,10 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)+/g, '');
 
+      const parentCategoryObj = categories.find((c) => String(c.id) === String(selectedCategoryId));
+      const categoryNameValue = parentCategoryObj?.name || null;
+
       if (editingMode && originalId) {
-        // Check if ID was migrated from old random ID to SUBCAT series
         if (targetId !== originalId) {
           const { data: exists } = await supabase.from('sub_categories').select('id').eq('id', targetId).maybeSingle();
           if (exists) {
@@ -274,9 +266,9 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
           const { error: insertErr } = await supabase.from('sub_categories').insert([{
             id: targetId,
             category_id: selectedCategoryId,
+            category_name: categoryNameValue,
             name: name.trim(),
             slug: slug,
-            size_group: sizeGroup,
             image_url: finalImageUrl || null,
             display_order: Number(displayOrder) || 0,
             active: isActive,
@@ -284,20 +276,18 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
           }]);
           if (insertErr) throw insertErr;
 
-          // Cascade update sizes and products referencing old ID
           await supabase.from('sizes').update({ sub_category_id: targetId }).eq('sub_category_id', originalId);
           await supabase.from('products').update({ sub_category_id: targetId }).eq('sub_category_id', originalId);
 
           await supabase.from('sub_categories').delete().eq('id', originalId);
         } else {
-          // Standard Update
           const { error: updateErr } = await supabase
             .from('sub_categories')
             .update({
               category_id: selectedCategoryId,
+              category_name: categoryNameValue,
               name: name.trim(),
               slug: slug,
-              size_group: sizeGroup,
               image_url: finalImageUrl || null,
               display_order: Number(displayOrder) || 0,
               active: isActive
@@ -307,13 +297,12 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
           if (updateErr) throw updateErr;
         }
       } else {
-        // Insert brand new Sub-Category
         const { error: insertErr } = await supabase.from('sub_categories').insert([{
           id: targetId,
           category_id: selectedCategoryId,
+          category_name: categoryNameValue,
           name: name.trim(),
           slug: slug,
-          size_group: sizeGroup,
           image_url: finalImageUrl || null,
           display_order: Number(displayOrder) || 0,
           active: isActive,
@@ -334,7 +323,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     }
   };
 
-  // Filter sub-categories for left cards pane
   const filteredSubCategories = subCategories.filter((sc) => {
     if (filterCategory === 'ALL') return true;
     return String(sc.category_id) === String(filterCategory);
@@ -361,7 +349,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Link to Parent Category, assign size groups & manage cards
+                Link to Parent Category & manage sub-catalog cards
               </span>
             </div>
           </div>
@@ -388,7 +376,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
         {/* Dual Pane Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-4 flex-1 overflow-y-auto pr-1">
           
-          {/* LEFT PANE: EXISTING SUB-CATEGORIES IN CARD MODEL (7 COLS) */}
+          {/* LEFT PANE: EXISTING SUB-CATEGORIES (7 COLS) */}
           <div className="lg:col-span-7 flex flex-col space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
@@ -459,12 +447,10 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                             : 'bg-[#0a0e17]/80 border-white/10 hover:border-[#00d9ff]/50 hover:bg-[#151c33]/70'
                         }`}
                       >
-                        {/* Order Badge (Top-Left) */}
                         <div className="absolute top-2 left-2 z-10 bg-black/75 px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold text-[#00ff9d] border border-white/10 backdrop-blur-md">
                           #{sub.display_order ?? 0}
                         </div>
 
-                        {/* Delete Button (Top-Right on Hover) */}
                         <button
                           type="button"
                           onClick={(e) => handleDeleteSubCategory(e, sub.id, sub.name)}
@@ -474,7 +460,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                           <Trash2 className="w-3 h-3" />
                         </button>
 
-                        {/* 1. Sub-Category Image */}
                         <div className="w-full h-24 sm:h-28 bg-[#151c33] relative overflow-hidden flex items-center justify-center">
                           {sub.image_url ? (
                             <img
@@ -488,14 +473,13 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0e17] via-transparent to-transparent opacity-80" />
                         </div>
 
-                        {/* 2. Image Kinda: Name, ID and Parent Category */}
                         <div className="p-2.5 flex flex-col items-center text-center space-y-1 bg-[#101628]/60 flex-1 justify-between">
                           <div className="w-full">
                             <h3 className="font-bold text-white text-[12px] truncate w-full" title={sub.name}>
                               {sub.name}
                             </h3>
                             <span className="text-[8.5px] font-mono text-[#8b9bb4] block truncate">
-                              📁 {parentCat?.name || sub.category_id}
+                              📁 {parentCat?.name || sub.category_name || sub.category_id}
                             </span>
                           </div>
 
@@ -507,9 +491,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                             }`}>
                               {isLockedSeries && <Lock className="w-2.5 h-2.5" />}
                               {sub.id}
-                            </span>
-                            <span className="font-mono text-[8.5px] px-1 py-0.5 rounded bg-white/5 text-[#00d9ff] border border-white/10 uppercase">
-                              {sub.size_group || 'apparel'}
                             </span>
                           </div>
 
@@ -561,7 +542,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                   required
                   value={selectedCategoryId}
                   onChange={(e) => setSelectedCategoryId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors"
+                  className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors cursor-pointer"
                 >
                   {categories.length === 0 ? (
                     <option value="">No categories available</option>
@@ -575,7 +556,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                 </select>
               </div>
 
-              {/* Sub-Category ID Field (Conditional Editing Rules Applied) */}
+              {/* Sub-Category ID Field */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1 flex items-center justify-between">
                   <span>Sub-Category ID *</span>
@@ -625,70 +606,9 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Silk Sarees / Bangles / Bras"
+                  placeholder="e.g. Silk Sarees / Bangles / Non-Padded Bras"
                   className="w-full px-3 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors placeholder:text-slate-600"
                 />
-              </div>
-
-              {/* Size Group Classification */}
-              <div>
-                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1 flex items-center justify-between">
-                  <span>Size System Assigned *</span>
-                  <span className="text-[8.5px] text-[#00d9ff]">DRIVES PRODUCT SIZES</span>
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setSizeGroup('apparel')}
-                    className={`p-2 rounded-xl border text-left font-mono transition-all cursor-pointer ${
-                      sizeGroup === 'apparel'
-                        ? 'bg-[#6d4aff]/20 border-[#6d4aff] text-white shadow-sm'
-                        : 'bg-[#101628] border-white/10 text-[#8b9bb4] hover:text-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[10.5px] text-white">Apparel</div>
-                    <div className="text-[8.5px] text-[#8b9bb4]">XS, S, M, L, XL...</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSizeGroup('bangles')}
-                    className={`p-2 rounded-xl border text-left font-mono transition-all cursor-pointer ${
-                      sizeGroup === 'bangles'
-                        ? 'bg-[#00d9ff]/20 border-[#00d9ff] text-white shadow-sm'
-                        : 'bg-[#101628] border-white/10 text-[#8b9bb4] hover:text-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[10.5px] text-[#00d9ff]">Bangles</div>
-                    <div className="text-[8.5px] text-[#8b9bb4]">2.2, 2.4, 2.6, 2.8...</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSizeGroup('lingerie')}
-                    className={`p-2 rounded-xl border text-left font-mono transition-all cursor-pointer ${
-                      sizeGroup === 'lingerie'
-                        ? 'bg-[#ff6b6b]/20 border-[#ff6b6b] text-white shadow-sm'
-                        : 'bg-[#101628] border-white/10 text-[#8b9bb4] hover:text-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[10.5px] text-[#ff6b6b]">Lingerie</div>
-                    <div className="text-[8.5px] text-[#8b9bb4]">32B, 34B, 36C...</div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSizeGroup('free_size')}
-                    className={`p-2 rounded-xl border text-left font-mono transition-all cursor-pointer ${
-                      sizeGroup === 'free_size'
-                        ? 'bg-[#00ff9d]/20 border-[#00ff9d] text-white shadow-sm'
-                        : 'bg-[#101628] border-white/10 text-[#8b9bb4] hover:text-white'
-                    }`}
-                  >
-                    <div className="font-bold text-[10.5px] text-[#00ff9d]">Free Size</div>
-                    <div className="text-[8.5px] text-[#8b9bb4]">Sarees / Fabrics</div>
-                  </button>
-                </div>
               </div>
 
               {/* Image Upload & WebP Compression */}
