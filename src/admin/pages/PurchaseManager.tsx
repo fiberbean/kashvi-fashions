@@ -51,7 +51,13 @@ interface StagedMatrixItem {
   total_cost: number;
 }
 
-// Helper color swatches map
+interface ColourMasterRecord {
+  id: string;
+  name: string;
+  color_code?: string | null;
+  hex?: string | null;
+}
+
 const COLOR_HEX_MAP: { [key: string]: string } = {
   'baby pink': '#F4C2C2',
   'beige': '#F5F5DC',
@@ -98,6 +104,7 @@ export default function PurchaseManager() {
   const [productsList, setProductsList] = useState<any[]>([]);
   const [allSizes, setAllSizes] = useState<any[]>([]);
   const [subCategories, setSubCategories] = useState<any[]>([]);
+  const [masterColours, setMasterColours] = useState<ColourMasterRecord[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -121,6 +128,9 @@ export default function PurchaseManager() {
   // Line Item Matrix Staging State
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [unitCost, setUnitCost] = useState<number | string>(0);
+  const [activeMatrixColors, setActiveMatrixColors] = useState<string[]>([]);
+  const [selectedColorToAdd, setSelectedColorToAdd] = useState<string>('');
+  const [customColorInput, setCustomColorInput] = useState<string>('');
   const [matrixQtyMap, setMatrixQtyMap] = useState<{ [color_size_key: string]: number }>({});
   const [stagedItems, setStagedItems] = useState<StagedMatrixItem[]>([]);
 
@@ -152,12 +162,13 @@ export default function PurchaseManager() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [purchRes, suppRes, prodRes, sizeRes, subCatRes] = await Promise.all([
+      const [purchRes, suppRes, prodRes, sizeRes, subCatRes, colourRes] = await Promise.all([
         supabase.from('purchases').select('*').order('created_at', { ascending: false }),
         supabase.from('suppliers').select('id, name, shop_name, city, phone').order('name', { ascending: true }),
         supabase.from('products').select('*').order('name', { ascending: true }),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
-        supabase.from('sub_categories').select('*')
+        supabase.from('sub_categories').select('*'),
+        supabase.from('colours').select('*').order('name', { ascending: true })
       ]);
 
       if (purchRes.data) setPurchases(purchRes.data);
@@ -165,6 +176,7 @@ export default function PurchaseManager() {
       if (prodRes.data) setProductsList(prodRes.data);
       if (sizeRes.data) setAllSizes(sizeRes.data);
       if (subCatRes.data) setSubCategories(subCatRes.data);
+      if (colourRes.data) setMasterColours(colourRes.data);
     } catch (err) {
       console.error('Failed to load purchase prerequisites:', err);
     } finally {
@@ -185,6 +197,9 @@ export default function PurchaseManager() {
     setNotes('');
     setStagedItems([]);
     setSelectedProductId('');
+    setActiveMatrixColors([]);
+    setSelectedColorToAdd('');
+    setCustomColorInput('');
     setMatrixQtyMap({});
     setUnitCost(0);
     setIsModalOpen(true);
@@ -194,58 +209,7 @@ export default function PurchaseManager() {
     return productsList.find((p) => p.id === selectedProductId);
   }, [productsList, selectedProductId]);
 
-  // Robust parsing to fetch all registered colors
-  const productColors: string[] = useMemo(() => {
-    if (!activeProduct) return [];
-    const colorSet = new Set<string>();
-
-    // 1. Check variants object
-    let vars = activeProduct.variants;
-    if (typeof vars === 'string') {
-      try {
-        vars = JSON.parse(vars);
-      } catch (e) {
-        vars = null;
-      }
-    }
-
-    if (vars && Array.isArray(vars.colors) && vars.colors.length > 0) {
-      vars.colors.forEach((c: any) => {
-        if (typeof c === 'string' && c.trim()) colorSet.add(c.trim());
-      });
-    }
-
-    // 2. Check colour (British) or color (American) columns
-    const rawColour = activeProduct.colour || activeProduct.color;
-    if (rawColour) {
-      if (typeof rawColour === 'string') {
-        rawColour.split(',').forEach((c) => {
-          if (c.trim()) colorSet.add(c.trim());
-        });
-      } else if (Array.isArray(rawColour)) {
-        rawColour.forEach((c) => {
-          if (typeof c === 'string' && c.trim()) colorSet.add(c.trim());
-        });
-      }
-    }
-
-    // 3. Extract colors tagged on uploaded product images
-    if (Array.isArray(activeProduct.images)) {
-      activeProduct.images.forEach((img: any) => {
-        if (img && img.color_tag && typeof img.color_tag === 'string') {
-          const tag = img.color_tag.trim();
-          if (tag && tag.toLowerCase() !== 'universal' && tag.toLowerCase() !== 'standard') {
-            colorSet.add(tag);
-          }
-        }
-      });
-    }
-
-    const result = Array.from(colorSet);
-    return result.length > 0 ? result : ['Standard'];
-  }, [activeProduct]);
-
-  // Filter linked sizes for the product's sub-category
+  // Sizes strictly linked to the product's sub-category size group
   const productSizes: string[] = useMemo(() => {
     if (!activeProduct) return [];
 
@@ -290,12 +254,66 @@ export default function PurchaseManager() {
     return ['Free Size'];
   }, [activeProduct, subCategories, allSizes]);
 
+  // When product changes, populate existing colors if any, or reset for fresh inward
   useEffect(() => {
     if (activeProduct) {
       setUnitCost(activeProduct.cost_price || 0);
       setMatrixQtyMap({});
+
+      // If product already has known colors from previous inwards, preload them, else start clean
+      const existingColours: string[] = [];
+      let vars = activeProduct.variants;
+      if (typeof vars === 'string') {
+        try {
+          vars = JSON.parse(vars);
+        } catch {
+          vars = null;
+        }
+      }
+      if (vars && Array.isArray(vars.colors)) {
+        existingColours.push(...vars.colors);
+      }
+      if (activeProduct.colour) {
+        activeProduct.colour.split(',').forEach((c: string) => existingColours.push(c.trim()));
+      }
+      const unique = Array.from(new Set(existingColours.filter((c) => c && c.toLowerCase() !== 'standard')));
+      setActiveMatrixColors(unique);
+    } else {
+      setActiveMatrixColors([]);
     }
   }, [activeProduct]);
+
+  // Color dynamic addition handler
+  const handleAddColorToMatrix = () => {
+    const colorToAdd = (customColorInput.trim() || selectedColorToAdd.trim());
+    if (!colorToAdd) {
+      alert('Please select or type a color name.');
+      return;
+    }
+
+    if (activeMatrixColors.some((c) => c.toLowerCase() === colorToAdd.toLowerCase())) {
+      alert(`Color "${colorToAdd}" is already in the matrix.`);
+      return;
+    }
+
+    setActiveMatrixColors((prev) => [...prev, colorToAdd]);
+    setSelectedColorToAdd('');
+    setCustomColorInput('');
+  };
+
+  const handleRemoveColorFromMatrix = (colorToRemove: string) => {
+    setActiveMatrixColors((prev) => prev.filter((c) => c !== colorToRemove));
+    // Clean up qty map for this color
+    setMatrixQtyMap((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith(`${colorToRemove}:::`)) {
+          delete next[key];
+        }
+      });
+      return next;
+    });
+  };
 
   const handleMatrixQtyChange = (color: string, size: string, value: string) => {
     const count = parseInt(value, 10);
@@ -314,9 +332,14 @@ export default function PurchaseManager() {
       return;
     }
 
+    if (activeMatrixColors.length === 0) {
+      alert('Please add at least one color to the matrix.');
+      return;
+    }
+
     const newAdditions: StagedMatrixItem[] = [];
 
-    productColors.forEach((clr) => {
+    activeMatrixColors.forEach((clr) => {
       productSizes.forEach((sz) => {
         const key = `${clr}:::${sz}`;
         const count = matrixQtyMap[key] || 0;
@@ -341,6 +364,7 @@ export default function PurchaseManager() {
 
     setStagedItems((prev) => [...prev, ...newAdditions]);
     setSelectedProductId('');
+    setActiveMatrixColors([]);
     setMatrixQtyMap({});
     setUnitCost(0);
   };
@@ -376,6 +400,7 @@ export default function PurchaseManager() {
     const supplierObj = suppliers.find((s) => s.id === selectedSupplierId);
 
     try {
+      // 1. Insert Master Purchase Record
       const { error: purErr } = await supabase.from('purchases').insert([
         {
           id: purchaseNo.trim(),
@@ -395,6 +420,7 @@ export default function PurchaseManager() {
       ]);
       if (purErr) throw purErr;
 
+      // 2. Insert Purchase Line Items
       const linePayloads = stagedItems.map((it, idx) => ({
         id: `pi_${purchaseNo.trim()}_${Date.now()}_${idx}`,
         purchase_id: purchaseNo.trim(),
@@ -410,7 +436,15 @@ export default function PurchaseManager() {
       const { error: lineErr } = await supabase.from('purchase_items').insert(linePayloads);
       if (lineErr) throw lineErr;
 
+      // 3. Atomically Update Inventory stock & Sync newly discovered colors to Product Record
+      const productInwardColorsMap = new Map<string, Set<string>>();
+
       for (const it of stagedItems) {
+        if (!productInwardColorsMap.has(it.product_id)) {
+          productInwardColorsMap.set(it.product_id, new Set<string>());
+        }
+        productInwardColorsMap.get(it.product_id)!.add(it.color);
+
         const { data: existInv } = await supabase
           .from('inventory')
           .select('id, stock_quantity')
@@ -439,12 +473,28 @@ export default function PurchaseManager() {
             }
           ]);
         }
+      }
 
-        if (it.unit_cost > 0) {
+      // 4. Update Product Master with new colors discovered during inward
+      for (const [prodId, newColors] of productInwardColorsMap.entries()) {
+        const prod = productsList.find((p) => p.id === prodId);
+        if (prod) {
+          let currentColors: string[] = [];
+          if (prod.variants?.colors && Array.isArray(prod.variants.colors)) {
+            currentColors = [...prod.variants.colors];
+          }
+          newColors.forEach((nc) => {
+            if (!currentColors.includes(nc)) currentColors.push(nc);
+          });
+
+          const currentVars = prod.variants || {};
           await supabase
             .from('products')
-            .update({ cost_price: it.unit_cost })
-            .eq('id', it.product_id);
+            .update({
+              variants: { ...currentVars, colors: currentColors },
+              colour: currentColors.join(', ')
+            })
+            .eq('id', prodId);
         }
       }
 
@@ -487,7 +537,7 @@ export default function PurchaseManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Variant Color & Size Matrix Inward, Auto Purchase Code & Supplier Bills
+              Variant Color & Size Matrix Inward, Dynamic Colors & Supplier Bills
             </span>
           </div>
         </div>
@@ -741,73 +791,156 @@ export default function PurchaseManager() {
                 </div>
 
                 {activeProduct ? (
-                  <div className="space-y-2.5 pt-1">
-                    <div className="flex items-center justify-between text-[10px] font-mono text-[#8b9bb4]">
-                      <span>
-                        Sub-Category: <strong className="text-white">{activeProduct.sub_category || 'General'}</strong> ({productColors.length} Colors • {productSizes.length} Sizes)
-                      </span>
-                      <span className="text-[#00d9ff]">Enter quantities in matrix cells below</span>
+                  <div className="space-y-3 pt-1">
+                    
+                    {/* DYNAMIC COLOR SELECTION SECTION */}
+                    <div className="p-3 rounded-xl bg-[#101628] border border-white/10 space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-mono font-bold text-[#00d9ff] flex items-center gap-1.5 uppercase">
+                          <Palette className="w-3.5 h-3.5 text-[#ff6b6b]" /> Select Inward Colors for this Bill
+                        </span>
+                        <span className="text-[9px] font-mono text-[#8b9bb4]">
+                          {activeMatrixColors.length} color(s) selected
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Dropdown from Master Colours */}
+                        <select
+                          value={selectedColorToAdd}
+                          onChange={(e) => {
+                            setSelectedColorToAdd(e.target.value);
+                            setCustomColorInput('');
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-[#0a0e17] border border-white/10 text-white text-xs outline-none focus:border-[#00d9ff] [&>option]:bg-[#101628]"
+                        >
+                          <option value="">Select from Colour Master...</option>
+                          {masterColours.map((c) => (
+                            <option key={c.id} value={c.name}>
+                              {c.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <span className="text-[10px] text-[#8b9bb4]">OR</span>
+
+                        {/* Custom Color Input if not in Master */}
+                        <input
+                          type="text"
+                          placeholder="Type new color name..."
+                          value={customColorInput}
+                          onChange={(e) => {
+                            setCustomColorInput(e.target.value);
+                            setSelectedColorToAdd('');
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-[#0a0e17] border border-white/10 text-white text-xs outline-none focus:border-[#00d9ff] max-w-[170px]"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={handleAddColorToMatrix}
+                          className="px-3 py-1.5 rounded-lg bg-[#6d4aff] hover:bg-[#5b3adb] text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Add to Grid</span>
+                        </button>
+                      </div>
+
+                      {/* Active Color Badges */}
+                      {activeMatrixColors.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {activeMatrixColors.map((clr) => (
+                            <span
+                              key={clr}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#0a0e17] border border-white/15 text-xs text-white shadow-sm"
+                            >
+                              <span
+                                className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
+                                style={{ backgroundColor: getBadgeColor(clr) }}
+                              />
+                              <span className="font-semibold">{clr}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveColorFromMatrix(clr)}
+                                className="text-[#8b9bb4] hover:text-[#ff6b6b] ml-1 cursor-pointer"
+                                title="Remove color"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
-                    <div className="border border-white/10 rounded-2xl overflow-x-auto bg-[#101628]">
-                      <table className="w-full text-center border-collapse">
-                        <thead>
-                          <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
-                            <th className="p-2.5 text-left min-w-[130px]">Colour \ Size</th>
-                            {productSizes.map((sz) => (
-                              <th key={sz} className="p-2.5 text-center text-[#00d9ff] min-w-[65px]">
-                                {sz}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                          {productColors.map((clr) => {
-                            const badgeColor = getBadgeColor(clr);
-                            return (
-                              <tr key={clr} className="hover:bg-white/[0.02]">
-                                <td className="p-2.5 text-left font-bold text-white text-xs whitespace-nowrap">
-                                  <span className="inline-flex items-center gap-1.5">
-                                    <span
-                                      className="w-3 h-3 rounded-full border border-white/30 shrink-0"
-                                      style={{ backgroundColor: badgeColor }}
-                                    />
-                                    <span>{clr}</span>
-                                  </span>
-                                </td>
-                                {productSizes.map((sz) => {
-                                  const key = `${clr}:::${sz}`;
-                                  const val = matrixQtyMap[key] || '';
-                                  return (
-                                    <td key={sz} className="p-1.5 text-center">
-                                      <input
-                                        type="number"
-                                        min="0"
-                                        placeholder="0"
-                                        value={val}
-                                        onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
-                                        className="w-14 px-1.5 py-1 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/10 rounded-lg outline-none focus:border-[#00ff9d] text-xs"
+                    {/* DYNAMIC MATRIX TABLE */}
+                    {activeMatrixColors.length > 0 ? (
+                      <div className="border border-white/10 rounded-2xl overflow-x-auto bg-[#101628]">
+                        <table className="w-full text-center border-collapse">
+                          <thead>
+                            <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
+                              <th className="p-2.5 text-left min-w-[130px]">Colour \ Size</th>
+                              {productSizes.map((sz) => (
+                                <th key={sz} className="p-2.5 text-center text-[#00d9ff] min-w-[65px]">
+                                  {sz}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {activeMatrixColors.map((clr) => {
+                              const badgeColor = getBadgeColor(clr);
+                              return (
+                                <tr key={clr} className="hover:bg-white/[0.02]">
+                                  <td className="p-2.5 text-left font-bold text-white text-xs whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <span
+                                        className="w-3 h-3 rounded-full border border-white/30 shrink-0"
+                                        style={{ backgroundColor: badgeColor }}
                                       />
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
+                                      <span>{clr}</span>
+                                    </span>
+                                  </td>
+                                  {productSizes.map((sz) => {
+                                    const key = `${clr}:::${sz}`;
+                                    const val = matrixQtyMap[key] || '';
+                                    return (
+                                      <td key={sz} className="p-1.5 text-center">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          placeholder="0"
+                                          value={val}
+                                          onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
+                                          className="w-14 px-1.5 py-1 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/10 rounded-lg outline-none focus:border-[#00ff9d] text-xs"
+                                        />
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-xl bg-[#101628] border border-dashed border-white/15 text-center text-[#8b9bb4] text-[11px] italic">
+                        No colors selected yet. Choose or enter the colors from your vendor bill above to generate matrix rows.
+                      </div>
+                    )}
 
-                    <div className="flex justify-end pt-1">
-                      <button
-                        type="button"
-                        onClick={handleAddMatrixToStaged}
-                        className="px-4 py-2 bg-[#00d9ff] hover:bg-[#00b8d9] text-neutral-950 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
-                      >
-                        <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                        <span>Add Matrix Quantities to Inward</span>
-                      </button>
-                    </div>
+                    {activeMatrixColors.length > 0 && (
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={handleAddMatrixToStaged}
+                          className="px-4 py-2 bg-[#00d9ff] hover:bg-[#00b8d9] text-neutral-950 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md transition-all active:scale-95"
+                        >
+                          <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                          <span>Add Matrix Quantities to Inward</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-4 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-[11px]">
