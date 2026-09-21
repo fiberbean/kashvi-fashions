@@ -34,7 +34,6 @@ interface TaggedImage {
   size_bytes?: string;
 }
 
-// Built-in color map to guarantee color background even if DB hex is missing/named differently
 const STANDARD_COLOR_MAP: { [key: string]: string } = {
   'baby pink': '#F4C2C2',
   'beige': '#F5F5DC',
@@ -134,14 +133,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [images, setImages] = useState<TaggedImage[]>([]);
 
-  // Sub-Category Searchable Dropdown state
   const [isSubCatDropdownOpen, setIsSubCatDropdownOpen] = useState<boolean>(false);
   const [subCatSearch, setSubCatSearch] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fast WebP Compression Upload state
   const [isCompressingQuickUpload, setIsCompressingQuickUpload] = useState<boolean>(false);
-
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -155,7 +151,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load all Masters from Supabase DB
   useEffect(() => {
     const fetchMasters = async () => {
       try {
@@ -175,7 +170,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         if (fabRes.data) setFabrics(fabRes.data);
         if (unitRes.data) {
           setUnits(unitRes.data);
-          if (unitRes.data.length > 0) setSelectedUnit(unitRes.data[0].id);
+          if (unitRes.data.length > 0) setSelectedUnit(unitRes.data[0].name || unitRes.data[0].id);
         }
       } catch (err) {
         console.error('Error loading masters:', err);
@@ -184,7 +179,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     fetchMasters();
   }, []);
 
-  // Generate Next Product Code automatically
   useEffect(() => {
     const generateProductCode = async () => {
       setCodeLoading(true);
@@ -192,13 +186,13 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
       try {
         const { data } = await supabase
           .from('products')
-          .select('product_code')
-          .like('product_code', `${prefix}%`)
-          .order('product_code', { ascending: false })
+          .select('id')
+          .like('id', `${prefix}%`)
+          .order('id', { ascending: false })
           .limit(1);
 
         if (data && data.length > 0) {
-          const match = data[0].product_code.match(/\d+$/);
+          const match = data[0].id.match(/\d+$/);
           const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
           setProductCode(`${prefix}${String(nextNum).padStart(4, '0')}`);
         } else {
@@ -213,7 +207,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     generateProductCode();
   }, [brand]);
 
-  // Filter Categories by selected Brand - applicable for Fashions
   const filteredCategories = useMemo(() => {
     if (brand === 'jewellery') return [];
     return categories.filter((c) => {
@@ -222,7 +215,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     });
   }, [categories, brand]);
 
-  // Filter Sub-Categories for Fashion and Jewellery
   const filteredSubCats = useMemo(() => {
     if (brand === 'jewellery') {
       const jewelleryCategoryIds = new Set(
@@ -262,7 +254,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         });
       }
 
-      // If still empty, display all sub-categories not assigned to standard fashion categories
       if (list.length === 0 && subCategories.length > 0) {
         const fashionCatIds = new Set(
           categories
@@ -287,7 +278,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     );
   }, [subCategories, selectedCategory, brand, categories]);
 
-  // Live Filter for Sub-Category Dropdown Search
   const searchedSubCats = useMemo(() => {
     if (!subCatSearch.trim()) return filteredSubCats;
     return filteredSubCats.filter((sc) =>
@@ -390,7 +380,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
       const subCatObj = subCategories.find((sc) => String(sc.id) === String(selectedSubCategory));
       
       let catId = selectedCategory || null;
-      let catName = null;
+      let catName = '';
 
       if (brand === 'jewellery') {
         catId = subCatObj?.category_id ? String(subCatObj.category_id) : null;
@@ -398,36 +388,52 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         catName = parentCat?.name || 'Jewellery';
       } else {
         const catObj = categories.find((c) => String(c.id) === String(selectedCategory));
-        catName = catObj?.name || null;
+        catName = catObj?.name || '';
       }
 
+      const selectedUnitObj = units.find((u) => u.id === selectedUnit || u.name === selectedUnit);
+      const unitValue = selectedUnitObj?.name || selectedUnit || 'Piece';
+
       const payload = {
-        id: `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-        product_code: productCode,
+        id: productCode.trim(),
         name: name.trim(),
-        description: description.trim(),
-        department: brand,
+        category: catName,
+        sub_category: subCatObj?.name || null,
         category_id: catId,
-        category_name: catName,
         sub_category_id: selectedSubCategory || null,
-        sub_category_name: subCatObj?.name || null,
-        unit_id: selectedUnit || null,
-        stock_quantity: 0,
+        colour: selectedColors[0] || null,
+        size: selectedSizes[0] || null,
+        unit: unitValue,
+        brand: brand === 'jewellery' ? 'Kashvi Jewellery' : 'Kashvi Fashions',
+        sub_brand: null,
+        model_no: productCode.trim(),
+        barcode: productCode.trim(),
+        selling_price: 0,
+        cost_price: 0,
+        gst: 0,
+        weight: 0,
+        weight_unit: 'grams',
+        images: images,
+        active: true,
+        created_at: new Date().toISOString(),
         variants: { 
           colors: selectedColors, 
           sizes: selectedSizes, 
           fabrics: selectedFabrics 
         },
-        images: images,
-        barcode: productCode,
-        active: true,
-        created_at: new Date().toISOString()
+        description: description.trim(),
+        features: '',
+        notes: '',
+        mrp: 0,
+        stock_quantity: 0,
+        low_stock_threshold: 3,
+        fabric: selectedFabrics.join(', ') || null
       };
 
       const { error } = await supabase.from('products').insert([payload]);
       if (error) throw error;
 
-      alert(`Product ${productCode} saved successfully! Stock will be managed via Purchase Inward.`);
+      alert(`Product ${productCode} saved successfully!`);
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save product.');
@@ -440,10 +446,8 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     <div className="fixed inset-0 z-[999] flex items-center justify-center p-3 sm:p-6 bg-[#0a0e17]/85 backdrop-blur-xl select-none font-sans animate-in fade-in">
       <div className="bg-[#101628]/95 backdrop-blur-2xl rounded-3xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(109,74,255,0.2)] border border-white/10 space-y-4 text-xs relative">
         
-        {/* Top Neon Ambient Line */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#6d4aff] via-[#00d9ff] to-[#ff6b6b] rounded-t-3xl" />
 
-        {/* Header */}
         <div className="flex justify-between items-center border-b border-white/10 pb-3.5 sticky top-0 bg-[#101628]/90 backdrop-blur-md z-20">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] text-white flex items-center justify-center shadow-lg shadow-[#6d4aff]/30">
@@ -463,7 +467,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
           </div>
 
           <div className="flex items-center gap-3">
-            {/* PRODUCT CODE: PROMINENT & CLEAR */}
             <div className="bg-[#0a0e17]/90 px-4 py-1.5 rounded-2xl border border-white/15 text-right shadow-inner min-w-[125px]">
               <span className="text-[8.5px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] block">PRODUCT CODE</span>
               <span className="font-mono text-base font-extrabold text-[#00ff9d] tracking-wide leading-tight block">
@@ -487,8 +490,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         )}
 
         <form onSubmit={handleSave} className="space-y-4">
-          
-          {/* Brand Domain Selector */}
           <div>
             <label className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
               Brand Domain *
@@ -533,7 +534,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             </div>
           </div>
 
-          {/* Title & Description */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
@@ -562,10 +562,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             </div>
           </div>
 
-          {/* Category / Sub-Category / Unit */}
           <div className={`grid grid-cols-1 ${brand === 'fashions' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
-            
-            {/* Category: Only for Fashion */}
             {brand === 'fashions' && (
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
@@ -590,7 +587,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             )}
 
-            {/* Sub-Category Searchable Dropdown */}
             <div className="relative" ref={dropdownRef}>
               <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5 flex items-center justify-between">
                 <span>{brand === 'jewellery' ? 'Jewellery Sub-Category *' : 'Sub-Category *'}</span>
@@ -660,7 +656,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               )}
             </div>
 
-            {/* Unit */}
             <div>
               <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1.5">
                 Unit *
@@ -673,19 +668,17 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               >
                 <option value="">Select Unit</option>
                 {units.map((u) => (
-                  <option key={u.id} value={u.id}>{u.name}</option>
+                  <option key={u.id} value={u.name || u.id}>{u.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Variants Matrix */}
           <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-4">
             <span className="text-[11px] font-mono font-bold text-[#00d9ff] block uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
             </span>
             
-            {/* UNIVERSAL COLOURS: SELECTED BUTTON CHANGES COMPLETELY TO THAT COLOR */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[10px] font-mono font-bold text-[#8b9bb4] flex items-center gap-1">
@@ -718,11 +711,10 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                       }
                       className={`px-3 py-1.5 rounded-xl text-[10.5px] font-bold flex items-center gap-1.5 border transition-all cursor-pointer active:scale-95 ${
                         isSelected
-                          ? '' // Styled by inline style above
+                          ? ''
                           : 'bg-[#151c33] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/25'
                       }`}
                     >
-                      {/* Color Preview Swatch indicator */}
                       <span
                         className={`w-2.5 h-2.5 rounded-full border shrink-0 ${
                           isSelected
@@ -731,7 +723,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
                         }`}
                         style={{ backgroundColor: hexCode }}
                       />
-                      
                       {isSelected && (
                         <Check
                           className={`w-3 h-3 stroke-[2.5] ${
@@ -746,7 +737,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             </div>
 
-            {/* STRICTLY LINKED SUB-CATEGORY SIZES */}
             <div className="p-3.5 bg-[#101628] rounded-2xl border border-white/10 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -816,7 +806,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </div>
             </div>
 
-            {/* Fabrics: Optional (Mainly for Fashion) */}
             <div>
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] block mb-1.5 flex items-center gap-1">
                 <Scissors className="w-3 h-3 text-[#00ff9d]" /> Fabrics:
@@ -844,7 +833,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             </div>
           </div>
 
-          {/* Product Assets & HD WebP Compression */}
           <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-3.5">
             <div>
               <span className="text-[11px] font-mono font-bold text-white block uppercase tracking-wider flex items-center gap-1.5">
@@ -855,7 +843,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </p>
             </div>
 
-            {/* Upload Action */}
             <div className="flex items-center gap-2.5">
               <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-bold text-xs cursor-pointer transition-all">
                 {isCompressingQuickUpload ? (
@@ -875,7 +862,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               </label>
             </div>
 
-            {/* Gallery Grid */}
             {images.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                 {images.map((img) => (
@@ -917,7 +903,6 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             )}
           </div>
 
-          {/* Bottom Actions */}
           <div className="flex justify-end gap-2.5 pt-3 border-t border-white/10">
             <button
               type="button"
