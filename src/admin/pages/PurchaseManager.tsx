@@ -149,12 +149,10 @@ export default function PurchaseManager() {
     setIsModalOpen(true);
   };
 
-  // Selected Product Information
   const activeProduct = useMemo(() => {
     return productsList.find((p) => p.id === selectedProductId);
   }, [productsList, selectedProductId]);
 
-  // Derive Product Colors
   const productColors: string[] = useMemo(() => {
     if (!activeProduct) return [];
     if (activeProduct.variants?.colors && activeProduct.variants.colors.length > 0) {
@@ -163,29 +161,24 @@ export default function PurchaseManager() {
     return activeProduct.colour ? [activeProduct.colour] : ['Standard'];
   }, [activeProduct]);
 
-  // Filter ONLY sizes that belong to this product's sub-category size group
   const productSizes: string[] = useMemo(() => {
     if (!activeProduct) return [];
 
-    // 1. If variants sizes are explicitly stored on product
     if (activeProduct.variants?.sizes && activeProduct.variants.sizes.length > 0) {
       return activeProduct.variants.sizes;
     }
 
-    // 2. Identify linked sub-category
     const subCatId = activeProduct.sub_category_id;
     const subCatObj = subCategories.find(
       (sc) => sc.id === subCatId || sc.name === activeProduct.sub_category
     );
 
     if (subCatObj) {
-      // Direct sub_category_id matching
       const directMatches = allSizes.filter(
         (sz) => sz.sub_category_id && String(sz.sub_category_id) === String(subCatObj.id)
       );
       if (directMatches.length > 0) return directMatches.map((s) => s.name);
 
-      // Group matching
       if (subCatObj.size_group) {
         const groupMatches = allSizes.filter(
           (sz) => (sz.size_group || '').toLowerCase().trim() === subCatObj.size_group.toLowerCase().trim()
@@ -194,11 +187,9 @@ export default function PurchaseManager() {
       }
     }
 
-    // Fallback to single product size or Free Size
     return activeProduct.size ? [activeProduct.size] : ['Free Size'];
   }, [activeProduct, subCategories, allSizes]);
 
-  // When product changes, update default cost price and clear matrix counts
   useEffect(() => {
     if (activeProduct) {
       setUnitCost(activeProduct.cost_price || 0);
@@ -215,7 +206,6 @@ export default function PurchaseManager() {
     }));
   };
 
-  // Add Matrix Items to Staged Inward List
   const handleAddMatrixToStaged = () => {
     if (!activeProduct) return;
     const cost = Number(unitCost) || 0;
@@ -267,7 +257,6 @@ export default function PurchaseManager() {
     return stagedItems.reduce((sum, it) => sum + it.quantity, 0);
   }, [stagedItems]);
 
-  // Save Purchase Inward (Stock Increment, No payment transaction)
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
@@ -287,7 +276,6 @@ export default function PurchaseManager() {
     const supplierObj = suppliers.find((s) => s.id === selectedSupplierId);
 
     try {
-      // 1. Insert Master Purchase Record
       const { error: purErr } = await supabase.from('purchases').insert([
         {
           id: purchaseNo.trim(),
@@ -307,7 +295,6 @@ export default function PurchaseManager() {
       ]);
       if (purErr) throw purErr;
 
-      // 2. Insert Purchase Line Items
       const linePayloads = stagedItems.map((it, idx) => ({
         id: `pi_${purchaseNo.trim()}_${Date.now()}_${idx}`,
         purchase_id: purchaseNo.trim(),
@@ -323,7 +310,6 @@ export default function PurchaseManager() {
       const { error: lineErr } = await supabase.from('purchase_items').insert(linePayloads);
       if (lineErr) throw lineErr;
 
-      // 3. Atomically Update Inventory stock
       for (const it of stagedItems) {
         const { data: existInv } = await supabase
           .from('inventory')
@@ -354,7 +340,6 @@ export default function PurchaseManager() {
           ]);
         }
 
-        // Update product cost price
         if (it.unit_cost > 0) {
           await supabase
             .from('products')
@@ -388,7 +373,7 @@ export default function PurchaseManager() {
   return (
     <div className="space-y-4 font-sans text-xs select-none">
       
-      {/* 1. Header Bar */}
+      {/* Header Bar */}
       <div className="p-4 rounded-3xl bg-[#101628]/95 border border-white/10 shadow-xl backdrop-blur-2xl flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#ffa500] to-[#ff6b6b] text-white flex items-center justify-center shadow-lg shadow-[#ffa500]/20">
@@ -428,7 +413,7 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 2. Search & Controls */}
+      {/* Search & Controls */}
       <div className="p-3 rounded-2xl bg-[#0a0e17]/80 border border-white/10 flex items-center justify-between gap-3">
         <div className="relative flex-1 max-w-sm">
           <input
@@ -442,7 +427,7 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 3. Invoices History Table */}
+      {/* Invoices History Table */}
       <div className="rounded-3xl bg-[#101628]/95 border border-white/10 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -496,13 +481,13 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 4. NEW PURCHASE MODAL (WITH MATRIX INWARD & QUICK PRODUCT ADD) */}
+      {/* NEW PURCHASE MODAL: Fixed z-index & Navbar overlap issue */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-xl animate-in fade-in select-none">
-          <div className="bg-[#101628]/98 border border-white/15 rounded-3xl max-w-4xl w-full overflow-hidden shadow-2xl relative animate-in zoom-in-95 flex flex-col max-h-[94vh]">
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-2xl animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full overflow-hidden shadow-[0_25px_80px_rgba(0,0,0,0.9),0_0_40px_rgba(255,165,0,0.2)] relative animate-in zoom-in-95 flex flex-col max-h-[90vh]">
             
             {/* Modal Header */}
-            <div className="p-4 sm:px-6 border-b border-white/10 flex items-center justify-between bg-[#0a0e17]/90 sticky top-0 z-20">
+            <div className="p-4 sm:px-6 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#ffa500] to-[#ff6b6b] text-white flex items-center justify-center shadow-lg shadow-[#ffa500]/30">
                   <PackageCheck className="w-4.5 h-4.5 text-white" />
@@ -521,7 +506,7 @@ export default function PurchaseManager() {
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="bg-[#0a0e17] px-3.5 py-1.5 rounded-2xl border border-white/15 text-right shadow-inner min-w-[110px]">
+                <div className="bg-[#101628] px-3.5 py-1.5 rounded-2xl border border-white/15 text-right shadow-inner min-w-[110px]">
                   <span className="text-[8px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] block">
                     PURCHASE NO
                   </span>
@@ -532,7 +517,7 @@ export default function PurchaseManager() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white cursor-pointer"
+                  className="p-1.5 rounded-xl bg-white/10 hover:bg-[#ff6b6b]/30 text-[#8b9bb4] hover:text-white cursor-pointer transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -541,7 +526,7 @@ export default function PurchaseManager() {
 
             <form onSubmit={handleSavePurchase} className="p-4 sm:p-6 overflow-y-auto space-y-4 custom-scrollbar">
               
-              {/* Header Details: Supplier, Dates, Bill No */}
+              {/* Header Details */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3.5 bg-[#0a0e17]/80 rounded-2xl border border-white/10">
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
@@ -603,14 +588,13 @@ export default function PurchaseManager() {
                 </div>
               </div>
 
-              {/* Product Selection & Variant Matrix Box */}
+              {/* Product Selection & Variant Matrix */}
               <div className="p-4 bg-[#0a0e17] rounded-2xl border border-white/10 space-y-3.5">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
                   <span className="text-[11px] font-mono font-bold text-[#00d9ff] uppercase tracking-wider flex items-center gap-1.5">
                     <Layers className="w-3.5 h-3.5" /> Product Selection & Matrix Inward
                   </span>
 
-                  {/* Quick Add Product Button */}
                   <button
                     type="button"
                     onClick={() => setIsProductMasterOpen(true)}
@@ -621,7 +605,6 @@ export default function PurchaseManager() {
                   </button>
                 </div>
 
-                {/* Product Dropdown & Unit Rate */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2">
                     <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
@@ -657,7 +640,6 @@ export default function PurchaseManager() {
                   </div>
                 </div>
 
-                {/* MATRIX GRID: Colour x Size Group Matrix */}
                 {activeProduct ? (
                   <div className="space-y-2.5 pt-1">
                     <div className="flex items-center justify-between text-[10px] font-mono text-[#8b9bb4]">
@@ -728,7 +710,7 @@ export default function PurchaseManager() {
                 )}
               </div>
 
-              {/* Staged Items List Table */}
+              {/* Staged Items List */}
               <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] space-y-0">
                 <div className="p-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-[10.5px] font-mono">
                   <span className="font-bold text-white uppercase">Inward Items Summary ({stagedItems.length} lines)</span>
@@ -785,7 +767,7 @@ export default function PurchaseManager() {
                 </div>
               </div>
 
-              {/* Grand Total Bar & Notes */}
+              {/* Total Bar */}
               <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex-1 min-w-[240px]">
                   <input
@@ -830,12 +812,11 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 5. QUICK ADD PRODUCT MASTER MODAL (POPUPS WITHOUT LEAVING PURCHASE SCREEN) */}
+      {/* QUICK ADD PRODUCT MASTER MODAL */}
       {isProductMasterOpen && (
         <ProductMasterModal
           onClose={() => {
             setIsProductMasterOpen(false);
-            // Refresh products catalog and maintain current state
             supabase
               .from('products')
               .select('*')
