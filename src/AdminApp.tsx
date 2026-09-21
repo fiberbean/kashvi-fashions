@@ -10,6 +10,7 @@ import AdminProducts from './admin/pages/AdminProducts';
 import OrdersManager from './admin/components/OrdersManager';
 import ProductMasterManager from './admin/pages/ProductMasterManager';
 import InventoryManager from './admin/pages/InventoryManager';
+import PurchaseManager from './admin/pages/PurchaseManager';
 import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
 import ColorMasterModal from './admin/components/modals/ColorMasterModal';
@@ -260,13 +261,17 @@ export default function AdminApp() {
             <OrdersManager />
           )}
 
-          {/* Realtime Inventory Table View */}
           {currentView === 'inventory' && (
             <InventoryManager />
           )}
 
           {currentView === 'product_master' && (
             <ProductMasterManager />
+          )}
+
+          {/* Full Purchase Inward Deck */}
+          {currentView === 'purchase' && (
+            <PurchaseManager />
           )}
 
           {currentView === 'sales' && (
@@ -277,18 +282,6 @@ export default function AdminApp() {
               <h2 className="text-lg font-bold text-white">Sales Management Deck</h2>
               <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
                 POS billing, offline counter sales, custom discounts, customer loyalty points and transaction ledgers.
-              </p>
-            </div>
-          )}
-
-          {currentView === 'purchase' && (
-            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-[#ffa500]/10 text-[#ffa500] border border-[#ffa500]/20 flex items-center justify-center mx-auto shadow-lg">
-                <ShoppingCart className="w-7 h-7" />
-              </div>
-              <h2 className="text-lg font-bold text-white">Purchase & Stock Inward Hub</h2>
-              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
-                Supplier bills, purchase orders, bulk variant inwards, inventory updates and vendor payment trackings.
               </p>
             </div>
           )}
