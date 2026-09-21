@@ -481,13 +481,13 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* NEW PURCHASE MODAL: Fixed z-index & Navbar overlap issue */}
+      {/* NEW PURCHASE MODAL: Fixed positioning, pt-20 added to fully clear sticky Navbar */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-2xl animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full overflow-hidden shadow-[0_25px_80px_rgba(0,0,0,0.9),0_0_40px_rgba(255,165,0,0.2)] relative animate-in zoom-in-95 flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-[99999] pt-20 pb-8 px-3 sm:px-6 flex items-start justify-center bg-black/90 backdrop-blur-2xl overflow-y-auto animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full overflow-hidden shadow-[0_25px_80px_rgba(0,0,0,0.95),0_0_40px_rgba(255,165,0,0.25)] relative animate-in zoom-in-95 flex flex-col my-auto max-h-[88vh]">
             
             {/* Modal Header */}
-            <div className="p-4 sm:px-6 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30">
+            <div className="p-4 sm:px-6 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#ffa500] to-[#ff6b6b] text-white flex items-center justify-center shadow-lg shadow-[#ffa500]/30">
                   <PackageCheck className="w-4.5 h-4.5 text-white" />

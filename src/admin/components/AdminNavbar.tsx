@@ -90,7 +90,7 @@ export default function AdminNavbar({
   return (
     <nav
       ref={navRef}
-      className="sticky top-0 z-50 bg-[#0a0e17]/95 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] select-none font-sans"
+      className="sticky top-0 z-30 bg-[#0a0e17]/95 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] select-none font-sans"
     >
       <div className="h-[1.5px] w-full bg-gradient-to-r from-transparent via-[#6d4aff] to-[#00d9ff]" />
 
@@ -213,7 +213,6 @@ export default function AdminNavbar({
               <span>Reports</span>
             </button>
 
-            {/* Masters Floating Dropdown Menu */}
             <div className="relative shrink-0 z-[100]">
               <button
                 type="button"
