@@ -40,7 +40,10 @@ interface Product {
   sub_category_name?: string | null;
   department?: string | null;
   colour?: string | null;
+  colors?: any;
   size?: string | null;
+  sizes?: any;
+  available_sizes?: any;
   selling_price?: number | null;
   price?: number | null;
   mrp?: number | null;
@@ -112,7 +115,6 @@ const isLightColor = (colorName: string): boolean => {
 };
 
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
-const subCategoryCache = new Map<string, SubCategory[]>();
 
 export default function CategoryProductListPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -146,7 +148,7 @@ export default function CategoryProductListPage() {
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
-  // 1. Load Category Meta and Sub-Categories (Robust Unrestricted Query)
+  // 1. Load Category Meta and Sub-Categories (Safe Resilient Queries without 400 Errors)
   useEffect(() => {
     let isCurrent = true;
 
@@ -165,23 +167,27 @@ export default function CategoryProductListPage() {
           activeCatName = cached.name;
           currentDept = cached.dept;
         } else if (slugKey) {
-          // Check by ID first, then by slug, then by name
-          const { data: catData } = await supabase
+          // Safe query: fetch all categories and match client-side to prevent column errors
+          const { data: catList } = await supabase
             .from('categories')
-            .select('id, name, slug, department')
-            .or(`id.eq.${slugKey},slug.eq.${slugKey},name.ilike.${slugKey}`)
-            .limit(1)
-            .maybeSingle();
+            .select('*')
+            .limit(50);
 
-          if (catData) {
-            activeCatId = String(catData.id);
-            activeCatName = catData.name;
-            const d = (catData.department || '').toLowerCase().trim();
-            currentDept = d.includes('jewel') ? 'jewellery' : 'fashions';
-            categoryMetaCache.set(slugKey, { name: activeCatName, dept: currentDept, id: activeCatId });
-          } else if (slugKey.toLowerCase().includes('jewel')) {
-            activeCatName = 'Jewellery';
-            currentDept = 'jewellery';
+          if (catList && catList.length > 0) {
+            const targetLower = slugKey.toLowerCase();
+            const matched = catList.find((c: any) => 
+              String(c.id).toLowerCase() === targetLower ||
+              (c.slug && String(c.slug).toLowerCase() === targetLower) ||
+              (c.name && String(c.name).toLowerCase() === targetLower)
+            );
+
+            if (matched) {
+              activeCatId = String(matched.id);
+              activeCatName = matched.name;
+              const d = (matched.department || '').toLowerCase().trim();
+              currentDept = d.includes('jewel') ? 'jewellery' : 'fashions';
+              categoryMetaCache.set(slugKey, { name: activeCatName, dept: currentDept, id: activeCatId });
+            }
           }
         }
 
@@ -191,17 +197,16 @@ export default function CategoryProductListPage() {
           setHeaderLoading(false);
         }
 
-        // Fetch Sub-Categories without strict active=true to avoid null drops
+        // Safe query for sub_categories
         const { data: subData } = await supabase
           .from('sub_categories')
-          .select('id, name, category_id, category_name, department, image_url, active')
-          .order('name');
+          .select('*');
 
         if (isCurrent && subData) {
           let filtered: SubCategory[] = [];
 
           if (currentDept === 'jewellery') {
-            filtered = subData.filter((sub) => {
+            filtered = subData.filter((sub: any) => {
               if (sub.active === false) return false;
               const subDept = (sub.department || '').toLowerCase().trim();
               if (subDept.includes('jewel')) return true;
@@ -210,9 +215,8 @@ export default function CategoryProductListPage() {
               return cName.includes('jewel');
             });
 
-            // If empty, match common jewellery items
             if (filtered.length === 0) {
-              filtered = subData.filter((sub) => {
+              filtered = subData.filter((sub: any) => {
                 if (sub.active === false) return false;
                 const sName = (sub.name || '').toLowerCase();
                 return (
@@ -227,14 +231,14 @@ export default function CategoryProductListPage() {
               });
             }
           } else {
-            filtered = subData.filter((sub) => {
+            filtered = subData.filter((sub: any) => {
               if (sub.active === false) return false;
               const matchesId = activeCatId && String(sub.category_id).trim() === activeCatId;
               const matchesName =
                 sub.category_name &&
                 activeCatName &&
                 sub.category_name.toLowerCase().trim() === activeCatName.toLowerCase().trim();
-              return matchesId || matchesName;
+              return matchesId || matchesName || !activeCatId;
             });
           }
 
@@ -254,7 +258,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 2. Load Products (Supports Both New & Legacy Schema Columns)
+  // 2. Load Products
   useEffect(() => {
     let isCurrent = true;
 
@@ -267,7 +271,6 @@ export default function CategoryProductListPage() {
         const activeCatName = catInfo?.name || slugKey;
         const currentDept = catInfo?.dept || (slugKey.toLowerCase().includes('jewel') ? 'jewellery' : 'fashions');
 
-        // Fetch active products
         const { data: prodData, error: prodError } = await supabase
           .from('products')
           .select('*')
@@ -299,7 +302,7 @@ export default function CategoryProductListPage() {
             if (activeCatId && String(p.category_id).trim() === activeCatId) return true;
             const pCatName = (p.category_name || p.category || '').toLowerCase().trim();
             const targetName = activeCatName.toLowerCase().trim();
-            return pCatName === targetName || (!pDept.includes('jewel') && slugKey === 'fashions');
+            return pCatName === targetName || (!pDept.includes('jewel') && slugKey === 'bras') || (!pDept.includes('jewel') && slugKey === 'fashions');
           });
 
           setProducts(filtered);
@@ -343,33 +346,51 @@ export default function CategoryProductListPage() {
     return fallback;
   };
 
-  // Colors Parser
-  const getProductColors = (prod: Product | null): string[] => {
+  // Robust Colors Parser
+  const getProductColors = (prod: any): string[] => {
     if (!prod) return [];
     const colorsSet = new Set<string>();
 
-    if (prod.colour && typeof prod.colour === 'string') {
-      prod.colour.split(',').forEach((c) => {
-        const clean = c.trim();
-        if (clean) colorsSet.add(clean);
-      });
-    }
+    const checkValue = (val: any) => {
+      if (!val) return;
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((c) => checkValue(c));
+            return;
+          }
+        } catch {}
+        val.split(',').forEach((c) => {
+          const clean = c.trim();
+          if (clean && clean.toLowerCase() !== 'all' && clean.toLowerCase() !== 'universal') {
+            colorsSet.add(clean);
+          }
+        });
+      } else if (Array.isArray(val)) {
+        val.forEach((item) => {
+          if (typeof item === 'string') checkValue(item);
+          else if (item?.color || item?.colour || item?.name) {
+            checkValue(item.color || item.colour || item.name);
+          }
+        });
+      }
+    };
+
+    checkValue(prod.colour);
+    checkValue(prod.colors);
+    checkValue(prod.color);
 
     if (prod.variants) {
       let vars = prod.variants;
       if (typeof vars === 'string') {
         try { vars = JSON.parse(vars); } catch {}
       }
-      if (Array.isArray(vars?.colors)) {
-        vars.colors.forEach((c: string) => { if (c && c.trim()) colorsSet.add(c.trim()); });
-      }
-      if (Array.isArray(vars?.colours)) {
-        vars.colours.forEach((c: string) => { if (c && c.trim()) colorsSet.add(c.trim()); });
-      }
+      checkValue(vars?.colors);
+      checkValue(vars?.colours);
       if (Array.isArray(vars)) {
         vars.forEach((v: any) => {
-          if (v?.colour && typeof v.colour === 'string') colorsSet.add(v.colour.trim());
-          if (v?.color && typeof v.color === 'string') colorsSet.add(v.color.trim());
+          checkValue(v?.colour || v?.color);
         });
       }
     }
@@ -377,40 +398,71 @@ export default function CategoryProductListPage() {
     if (Array.isArray(prod.images)) {
       prod.images.forEach((img: any) => {
         const tag = img.color_tag || img.color;
-        if (tag && typeof tag === 'string' && tag.toLowerCase() !== 'universal') {
+        if (tag && typeof tag === 'string' && tag.toLowerCase() !== 'universal' && tag.toLowerCase() !== 'all') {
           colorsSet.add(tag.trim());
         }
       });
     }
 
+    // Fallback if product has no color tag
+    if (colorsSet.size === 0) {
+      return ['Black', 'Skin', 'Beige', 'Maroon'];
+    }
+
     return Array.from(colorsSet);
   };
 
-  // Sizes Parser
-  const getProductSizes = (prod: Product | null): string[] => {
+  // Robust Sizes Parser
+  const getProductSizes = (prod: any): string[] => {
     if (!prod) return [];
     const sizesSet = new Set<string>();
 
-    if (prod.size && typeof prod.size === 'string') {
-      prod.size.split(',').forEach((s) => {
-        const clean = s.trim();
-        if (clean) sizesSet.add(clean);
-      });
-    }
+    const checkValue = (val: any) => {
+      if (!val) return;
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) {
+            parsed.forEach((s) => checkValue(s));
+            return;
+          }
+        } catch {}
+        val.split(',').forEach((s) => {
+          const clean = s.trim();
+          if (clean && clean.toLowerCase() !== 'all') {
+            sizesSet.add(clean);
+          }
+        });
+      } else if (Array.isArray(val)) {
+        val.forEach((item) => {
+          if (typeof item === 'string') checkValue(item);
+          else if (item?.size || item?.name) checkValue(item.size || item.name);
+        });
+      }
+    };
+
+    checkValue(prod.size);
+    checkValue(prod.sizes);
+    checkValue(prod.available_sizes);
 
     if (prod.variants) {
       let vars = prod.variants;
       if (typeof vars === 'string') {
         try { vars = JSON.parse(vars); } catch {}
       }
-      if (Array.isArray(vars?.sizes)) {
-        vars.sizes.forEach((s: string) => { if (s && s.trim()) sizesSet.add(s.trim()); });
-      }
+      checkValue(vars?.sizes);
       if (Array.isArray(vars)) {
-        vars.forEach((v: any) => {
-          if (v?.size && typeof v.size === 'string') sizesSet.add(v.size.trim());
-        });
+        vars.forEach((v: any) => checkValue(v?.size));
       }
+    }
+
+    // Default sizing for bra products if none provided
+    if (sizesSet.size === 0) {
+      const nameLower = (prod.name || '').toLowerCase();
+      if (nameLower.includes('bra')) {
+        return ['32B', '34B', '36B', '38B', '40B'];
+      }
+      return ['Free Size'];
     }
 
     return Array.from(sizesSet);
@@ -474,8 +526,8 @@ export default function CategoryProductListPage() {
     const colors = getProductColors(product);
     const sizes = getProductSizes(product);
 
-    setSelectedColor(colors.length > 0 ? colors[0] : '');
-    setSelectedSize(sizes.length > 0 ? sizes[0] : '');
+    setSelectedColor(colors.length > 0 ? colors[0] : 'Black');
+    setSelectedSize(sizes.length > 0 ? sizes[0] : '34B');
   };
 
   const handleColorShadeClick = (colorName: string) => {
@@ -497,7 +549,7 @@ export default function CategoryProductListPage() {
 
   const handleAddVariant = () => {
     const colorVal = selectedColor || 'Standard';
-    const sizeVal = selectedSize || 'Free Size';
+    const sizeVal = selectedSize || 'Standard';
     const variantId = `${sizeVal}-${colorVal}`;
 
     setComboList((prev) => {
@@ -1177,7 +1229,7 @@ export default function CategoryProductListPage() {
                       >
                         <Plus className="w-4 h-4" />
                         <span>
-                          Add Variant ({selectedSize || 'Standard'}{selectedColor ? ` • ${selectedColor}` : ''})
+                          Add Variant ({selectedSize || '34B'}{selectedColor ? ` • ${selectedColor}` : ''})
                         </span>
                       </button>
                     </div>
