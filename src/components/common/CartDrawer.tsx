@@ -24,7 +24,6 @@ import {
   RotateCcw,
   MessageCircle,
   LogIn,
-  Sparkles,
 } from 'lucide-react';
 import { load } from '@cashfreepayments/cashfree-js';
 import { useCart } from '../../context/CartContext';
@@ -87,7 +86,6 @@ const COLOR_HEX_MAP: Record<string, string> = {
   grey: '#4b5563',
 };
 
-// KFOD0001, KFOD0002... సీరియల్ నంబర్ జనరేటర్ ఫంక్షన్
 async function generateOrderNumber(): Promise<string> {
   const PREFIX = 'KFOD';
   const PADDING = 4;
@@ -131,7 +129,6 @@ export default function CartDrawer() {
   const {
     cart,
     isCartOpen,
-    openCart,
     closeCart,
     updateQty,
     removeFromCart,
@@ -266,7 +263,6 @@ export default function CartDrawer() {
     }
   }, [isCartOpen]);
 
-  // అడ్రస్ లోడ్ అయినప్పుడు మరియు అప్‌డేట్ అయినప్పుడు ఫస్ట్/సెలెక్ట్ అడ్రస్ ను యాక్టివేట్ చేయడం
   useEffect(() => {
     if (savedAddresses.length > 0) {
       const validTarget = savedAddresses.find((a) => a.id === selectedAddressId) || savedAddresses[0];
@@ -449,7 +445,6 @@ export default function CartDrawer() {
     setIsAddressModalOpen(true);
   };
 
-  // ✅ 1. రీఫ్రెష్ అవసరం లేకుండా ఇన్‌స్టంట్‌గా అడ్రస్ యాడ్ అవ్వడం & ఆటో-సెలెక్ట్ అవ్వడం
   const handleSaveNewAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.whatsapp_number || !formData.pincode || !formData.door_no) {
@@ -475,8 +470,6 @@ export default function CartDrawer() {
     };
 
     const updated = [newAddr, ...savedAddresses];
-    
-    // స్టేట్ మరియు స్టోరేజ్‌ను తక్షణమే నవీకరించడం
     setSavedAddresses(updated);
     try {
       localStorage.setItem('kashvi_saved_addresses', JSON.stringify(updated));
@@ -484,12 +477,10 @@ export default function CartDrawer() {
       console.warn('Storage save warning:', e);
     }
 
-    // ఆటో-సెలెక్ట్ & డెలివరీ ఛార్జీలను వెంటనే వర్తింపజేయడం
     setSelectedAddressId(newAddrId);
     setUserPincode(newAddr.pincode);
     await fetchShippingByPincode(newAddr.pincode);
 
-    // మోడల్ క్లోజ్ చేసి, ఖచ్చితంగా address వ్యూ లోనే ఉండేలా చేయడం
     setIsAddressModalOpen(false);
     setActiveStep('address');
   };
@@ -600,7 +591,6 @@ export default function CartDrawer() {
     setActiveStep('address');
   };
 
-  // ✅ 2. KFOD0001 సిరీస్ నంబర్ తో చెక్‌అవుట్ జరగడం
   const handleInstantCheckout = async () => {
     if (!user) {
       triggerAuthModal();
@@ -622,7 +612,6 @@ export default function CartDrawer() {
     const cartSnapshot = [...cart];
 
     try {
-      // KFOD0001, KFOD0002... సిరీస్ ఆర్డర్ ఐడీ జనరేషన్
       const orderId = await generateOrderNumber();
 
       const fullAddressText = `${currentAddress.door_no}, ${
@@ -636,27 +625,35 @@ export default function CartDrawer() {
         user?.email?.trim() ||
         `${currentAddress.whatsapp_number}@kashvifashions.local`;
 
+      // Supabase Edge Function Call
       const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
         'create-payment-order',
         {
           body: {
             orderId: orderId,
+            order_id: orderId,
             orderAmount: totalDue,
+            order_amount: totalDue,
             customerPhone: currentAddress.whatsapp_number,
+            customer_phone: currentAddress.whatsapp_number,
             customerName: currentAddress.name,
+            customer_name: currentAddress.name,
             customerEmail: resolvedEmail,
+            customer_email: resolvedEmail,
           },
         }
       );
 
-      if (sessionError || !sessionData) {
+      const sessionId = sessionData?.paymentSessionId || sessionData?.payment_session_id;
+
+      if (sessionError || !sessionData || !sessionId) {
         console.error('Payment initialization error:', sessionError || sessionData);
         alert(sessionData?.error || 'Could not connect to the Payment Gateway.');
         setIsCheckingOut(false);
         return;
       }
 
-      const activeGateway = sessionData.gateway;
+      const activeGateway = sessionData.gateway || 'cashfree';
       const usedGatewayName = sessionData.gatewayName || 'Cashfree Payments';
 
       const orderPayload = {
@@ -708,7 +705,7 @@ export default function CartDrawer() {
 
         cashfree
           .checkout({
-            paymentSessionId: sessionData.paymentSessionId,
+            paymentSessionId: sessionId,
             redirectTarget: '_modal',
           })
           .then(async (result: any) => {
@@ -735,7 +732,7 @@ export default function CartDrawer() {
                   .update({
                     payment_status: 'paid',
                     order_status: 'confirmed',
-                    payment_reference: sessionData.orderId,
+                    payment_reference: sessionData.orderId || sessionData.order_id || orderId,
                     payment_time: new Date().toISOString(),
                     payment_verified: true,
                   })
