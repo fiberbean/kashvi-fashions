@@ -212,7 +212,6 @@ export default function PurchaseManager() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  // Distinct base color families from DB
   const availableBaseFamilies = useMemo(() => {
     const set = new Set<string>();
     masterColours.forEach((c) => {
@@ -223,7 +222,6 @@ export default function PurchaseManager() {
     return Array.from(set);
   }, [masterColours]);
 
-  // Strict filtered shades: ONLY ACTIVE/PICKED SHADES OF SELECTED BASE FAMILY
   const selectableShadesForFamily = useMemo(() => {
     const fam = (selectedBaseFilter || '').toLowerCase().trim();
     if (!fam) return [];
@@ -424,7 +422,6 @@ export default function PurchaseManager() {
     setUnitCost(prod.cost_price || 0);
     setMatrixQtyMap({});
     setActiveMatrixColors([]);
-    // Automatically open Dedicated Shade Picker Modal on Product selection
     setIsShadePickerModalOpen(true);
   };
 
@@ -458,17 +455,17 @@ export default function PurchaseManager() {
 
   const handleAddMatrixToStaged = () => {
     if (!activeProduct) {
-      alert('ముందు ఒక Product సెలెక్ట్ చేయండి.');
+      alert('Product select cheyandi.');
       return;
     }
     const cost = Number(unitCost) || 0;
     if (cost <= 0) {
-      alert('Cost Price (CP Rate) ఎంటర్ చేయండి.');
+      alert('Cost Price (CP Rate) enter cheyandi.');
       return;
     }
 
     if (activeMatrixColors.length === 0) {
-      alert('కనీసం ఒక షేడ్ కార్డ్ సెలెక్ట్ చేయండి.');
+      alert('Kanisam oka shade card select cheyandi.');
       return;
     }
 
@@ -492,7 +489,7 @@ export default function PurchaseManager() {
     });
 
     if (newAdditions.length === 0) {
-      alert('మ్యాట్రిక్స్ లో క్వాంటిటీ నంబర్లు ఎంటర్ చేయండి.');
+      alert('Matrix lo quantity numbers enter cheyandi.');
       return;
     }
 
@@ -530,11 +527,11 @@ export default function PurchaseManager() {
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
-      alert('Supplier సెలెక్ట్ చేయండి.');
+      alert('Supplier select cheyandi.');
       return;
     }
     if (!supplierBillNo.trim()) {
-      alert('Supplier Bill No ఎంటర్ చేయండి.');
+      alert('Supplier Bill No enter cheyandi.');
       return;
     }
 
@@ -614,7 +611,7 @@ export default function PurchaseManager() {
       }
 
       if (stagedItems.length === 0) {
-        alert('కుడివైపు ఇన్వార్డ్ క్యూ లోకి కనీసం ఒక ఐటమ్ అయినా యాడ్ చేయండి.');
+        alert('Kudivaipu unna Inward Queue lo kanisam oka item aina add cheyandi.');
         return;
       }
 
@@ -750,7 +747,7 @@ export default function PurchaseManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Spacious Layout • Dedicated Shade Selection Popup • Balanced Inward Workspace
+              Clean View • Dedicated Shade Selection Popup • Balanced Inward Workspace
             </span>
           </div>
         </div>
@@ -868,10 +865,10 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 3. WIDE LEFT-RIGHT INWARD MODAL */}
+      {/* 3. WIDE LEFT-RIGHT INWARD MODAL (FIXED TOP OFFSET UNDER NAVBAR) */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[99999] pt-8 pb-3 px-2 sm:px-4 flex items-start justify-center bg-black/90 backdrop-blur-xl overflow-y-auto select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[96vh]">
+        <div className="fixed inset-x-0 top-[72px] bottom-0 z-[9999] px-2 sm:px-4 pb-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-88px)]">
             
             {/* Header */}
             <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30 shrink-0">
@@ -1100,7 +1097,7 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* POPUP TRIGGER BUTTON & ACTIVE SHADE SUMMARY (CLEAN & NON-CONGESTED) */}
+                      {/* POPUP TRIGGER BUTTON & ACTIVE SHADE SUMMARY */}
                       {activeProduct ? (
                         <div className="space-y-3 pt-2 border-t border-white/5">
                           
@@ -1114,7 +1111,6 @@ export default function PurchaseManager() {
                               </span>
                             </div>
 
-                            {/* Button to open Large Shade Picker Popup */}
                             <button
                               type="button"
                               onClick={() => setIsShadePickerModalOpen(true)}
@@ -1125,7 +1121,6 @@ export default function PurchaseManager() {
                             </button>
                           </div>
 
-                          {/* Chips of Currently Selected Shades */}
                           {activeMatrixColors.length > 0 && (
                             <div className="p-2.5 rounded-xl bg-[#101628] border border-white/10 space-y-1.5">
                               <span className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block">
@@ -1259,9 +1254,9 @@ export default function PurchaseManager() {
                     </div>
 
                     {/* Staged Items List */}
-                    <div className="max-h-48 min-h-[140px] overflow-y-auto custom-scrollbar p-1">
+                    <div className="max-h-48 min-h-[130px] overflow-y-auto custom-scrollbar p-1">
                       {stagedItems.length === 0 ? (
-                        <div className="p-6 text-center text-[#8b9bb4] italic text-xs space-y-1">
+                        <div className="p-5 text-center text-[#8b9bb4] italic text-xs space-y-1">
                           <Layers className="w-5 h-5 mx-auto text-white/20" />
                           <p className="font-semibold text-white/60">Inward Queue is Empty.</p>
                           <p className="text-[10.5px] text-white/40">Select product & shades on Left, then click &quot;Add to Matrix Queue ➔&quot;.</p>
@@ -1320,7 +1315,7 @@ export default function PurchaseManager() {
                           <span className="text-[#00ff9d] font-bold">Subtotal: ₹{existingItemsTotal.toLocaleString('en-IN')}</span>
                         </div>
 
-                        <div className="max-h-36 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#0a0e17]">
+                        <div className="max-h-40 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#0a0e17]">
                           <table className="w-full text-left text-xs">
                             <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[8.5px] uppercase sticky top-0">
                               <tr>
@@ -1348,7 +1343,7 @@ export default function PurchaseManager() {
                     )}
 
                     {/* Summary & Bill Total Card */}
-                    <div className="p-3.5 bg-[#101628] border-t border-white/10 space-y-2">
+                    <div className="p-3 bg-[#101628] border-t border-white/10 space-y-2">
                       <div className="space-y-1 font-mono text-xs">
                         {editingPurchase && (
                           <div className="flex justify-between text-[#8b9bb4]">
@@ -1409,7 +1404,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 4. DEDICATED POPUP FOR SHADE SELECTION (LARGE SWATCH CARDS + ACCURATE DRESS COMPARISON) */}
+      {/* 4. DEDICATED POPUP FOR SHADE SELECTION */}
       {isShadePickerModalOpen && activeProduct && (
         <div className="fixed inset-0 z-[100000] p-3 sm:p-6 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
