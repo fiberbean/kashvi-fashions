@@ -175,7 +175,7 @@ export default function PurchaseManager() {
         supabase.from('products').select('*'),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
         supabase.from('sub_categories').select('*'),
-        supabase.from('colours').select('*').order('display_order', { ascending: true }).order('name', { ascending: true })
+        supabase.from('colours').select('*').order('name', { ascending: true })
       ]);
 
       if (purchRes.data) setPurchases(purchRes.data);
@@ -212,6 +212,7 @@ export default function PurchaseManager() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
+  // Base colors sorted alphabetically A to Z
   const availableBaseFamilies = useMemo(() => {
     const set = new Set<string>();
     masterColours.forEach((c) => {
@@ -219,19 +220,22 @@ export default function PurchaseManager() {
         set.add(c.base_color.trim().toLowerCase());
       }
     });
-    return Array.from(set);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [masterColours]);
 
+  // Shades strictly filtered and sorted alphabetically A to Z
   const selectableShadesForFamily = useMemo(() => {
     const fam = (selectedBaseFilter || '').toLowerCase().trim();
     if (!fam) return [];
 
-    return masterColours.filter((c) => {
+    const list = masterColours.filter((c) => {
       const isPicked = Boolean(c.active);
       const cBase = (c.base_color || '').toLowerCase().trim();
       const cName = c.name.toLowerCase().trim();
       return isPicked && (cBase === fam || cName.includes(fam));
     });
+
+    return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [masterColours, selectedBaseFilter]);
 
   const openNewPurchaseModal = () => {
@@ -747,7 +751,7 @@ export default function PurchaseManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Clean View • Dedicated Shade Selection Popup • Balanced Inward Workspace
+              Alphabetical Shades • Dedicated Shade Popup • Balanced Inward Workspace
             </span>
           </div>
         </div>
@@ -865,10 +869,10 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 3. WIDE LEFT-RIGHT INWARD MODAL (FIXED TOP OFFSET UNDER NAVBAR) */}
+      {/* 3. WIDE LEFT-RIGHT INWARD MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-x-0 top-[72px] bottom-0 z-[9999] px-2 sm:px-4 pb-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-88px)]">
+        <div className="fixed inset-0 z-[9999] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
             
             {/* Header */}
             <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30 shrink-0">
@@ -1304,7 +1308,7 @@ export default function PurchaseManager() {
                       )}
                     </div>
 
-                    {/* SAVED ITEMS ON BILL (SPACIOUS & EXPANDED FOR EDIT MODE) */}
+                    {/* SAVED ITEMS ON BILL */}
                     {editingPurchase && existingItems.length > 0 && (
                       <div className="p-3 bg-[#101628]/70 border-t border-white/10 space-y-1.5">
                         <div className="flex items-center justify-between text-xs font-mono">
@@ -1404,20 +1408,20 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 4. DEDICATED POPUP FOR SHADE SELECTION */}
+      {/* 4. DEDICATED POPUP FOR SHADE SELECTION (ALPHABETICAL ORDER A-Z) */}
       {isShadePickerModalOpen && activeProduct && (
-        <div className="fixed inset-0 z-[100000] p-3 sm:p-6 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
             
             {/* Popup Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div>
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <Palette className="w-4 h-4 text-[#00d9ff]" />
                   <span>Select Color Shades for [{activeProduct.id}] {activeProduct.name}</span>
                 </h4>
                 <span className="text-xs text-[#8b9bb4]">
-                  Large swatch cards allow accurate dress color comparison • Selected shades show Baby Pink Border
+                  Alphabetically sorted (A to Z) • Selected shades show Baby Pink Border
                 </span>
               </div>
               <button
@@ -1429,10 +1433,10 @@ export default function PurchaseManager() {
               </button>
             </div>
 
-            {/* Base Color Selection Tabs */}
-            <div className="space-y-2">
+            {/* Base Color Selection Tabs (A-Z) */}
+            <div className="space-y-2 shrink-0">
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                1. Pick Base Color Family:
+                1. Pick Base Color Family (A-Z):
               </span>
               <div className="flex flex-wrap gap-1.5">
                 {availableBaseFamilies.map((fam) => {
@@ -1455,11 +1459,11 @@ export default function PurchaseManager() {
               </div>
             </div>
 
-            {/* LARGE SHADE CARDS GRID */}
+            {/* LARGE SHADE CARDS GRID (ALPHABETICAL ORDER A-Z) */}
             <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar p-1">
-              <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center justify-between text-xs sticky top-0 bg-[#101628] py-1 z-10">
                 <span className="font-mono text-[#8b9bb4]">
-                  Active Shades for <strong className="text-white uppercase">{selectedBaseFilter}</strong> ({selectableShadesForFamily.length} available):
+                  Active Shades for <strong className="text-white uppercase">{selectedBaseFilter}</strong> ({selectableShadesForFamily.length} in A-Z Order):
                 </span>
                 <span className="text-[10px] text-[#FF69B4] font-mono font-bold">
                   {activeMatrixColors.length} Shades Picked
@@ -1519,7 +1523,7 @@ export default function PurchaseManager() {
             </div>
 
             {/* Popup Bottom Actions */}
-            <div className="flex items-center justify-between pt-3 border-t border-white/10">
+            <div className="flex items-center justify-between pt-3 border-t border-white/10 shrink-0">
               <span className="font-mono text-xs text-[#00ff9d] font-bold">
                 Selected: {activeMatrixColors.length} Shade(s)
               </span>
@@ -1705,7 +1709,7 @@ export default function PurchaseManager() {
             supabase
               .from('colours')
               .select('*')
-              .order('display_order', { ascending: true })
+              .order('name', { ascending: true })
               .then(({ data }) => {
                 if (data) setMasterColours(data);
               });
@@ -1714,7 +1718,7 @@ export default function PurchaseManager() {
             supabase
               .from('colours')
               .select('*')
-              .order('display_order', { ascending: true })
+              .order('name', { ascending: true })
               .then(({ data }) => {
                 if (data) setMasterColours(data);
               });
