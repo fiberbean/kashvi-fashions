@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Loader2, ShieldCheck, Sparkles, TrendingUp, ShoppingCart, Receipt, BarChart3, Wrench } from 'lucide-react';
+import { Loader2, TrendingUp, ShoppingCart, Receipt, BarChart3 } from 'lucide-react';
 import AdminNavbar, { MasterSectionType } from './admin/components/AdminNavbar';
 import AdminLoginScreen from './admin/components/AdminLoginScreen';
 import StickyOrderAlerts from './admin/components/StickyOrderAlerts';
@@ -8,14 +8,13 @@ import AdminDashboard from './admin/pages/AdminDashboard';
 import AdminStaff from './admin/pages/AdminStaff';
 import AdminProducts from './admin/pages/AdminProducts';
 import OrdersManager from './admin/components/OrdersManager';
-import ProductMasterModal from './admin/components/modals/ProductMasterModal';
+import ProductMasterManager from './admin/pages/ProductMasterManager';
 import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
 import ColorMasterModal from './admin/components/modals/ColorMasterModal';
 import SizeMasterModal from './admin/components/modals/SizeMasterModal';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
-// Supported view types
 export type AdminViewType = 
   | 'dashboard' 
   | 'orders' 
@@ -24,6 +23,7 @@ export type AdminViewType =
   | 'expenses' 
   | 'reports' 
   | 'products' 
+  | 'product_master'
   | 'staff';
 
 export default function AdminApp() {
@@ -172,7 +172,6 @@ export default function AdminApp() {
 
   return (
     <div className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden">
-      {/* Background Neon Glow Matrix */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute -top-48 -right-48 w-[500px] h-[500px] bg-[#6d4aff]/15 rounded-full blur-[130px] animate-pulse" />
         <div className="absolute top-1/2 -left-48 w-[450px] h-[450px] bg-[#00d9ff]/10 rounded-full blur-[130px] animate-pulse delay-1000" />
@@ -187,7 +186,6 @@ export default function AdminApp() {
         />
       </div>
 
-      {/* Top Navbar */}
       <div className="relative z-40">
         <AdminNavbar
           unreadCount={activeAlerts.length}
@@ -201,21 +199,21 @@ export default function AdminApp() {
             setCurrentView(view);
           }}
           onSelectMaster={(section) => {
-            setSelectedMasterSection(section);
+            if (section === 'product') {
+              setSelectedMasterSection(null);
+              setCurrentView('product_master');
+            } else {
+              setSelectedMasterSection(section);
+            }
           }}
         />
       </div>
 
-      {/* Realtime Order Alerts */}
       <StickyOrderAlerts
         notifications={activeAlerts}
         onDismiss={handleDismissAlert}
       />
 
-      {/* Masters Modals */}
-      {normalizedSection === 'product' && (
-        <ProductMasterModal onClose={() => setSelectedMasterSection(null)} />
-      )}
       {isCategorySection && (
         <CategoryMasterModal
           onClose={() => setSelectedMasterSection(null)}
@@ -241,13 +239,11 @@ export default function AdminApp() {
         />
       )}
 
-      {/* Main Content Area */}
       {(!selectedMasterSection || (
         !isCategorySection && 
         !isSubCategorySection && 
         !isColorSection && 
-        !isSizeSection && 
-        normalizedSection !== 'product'
+        !isSizeSection
       )) && (
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-5 relative z-10">
           {currentView === 'dashboard' && (
@@ -262,7 +258,10 @@ export default function AdminApp() {
             <OrdersManager />
           )}
 
-          {/* Sales Placeholder View */}
+          {currentView === 'product_master' && (
+            <ProductMasterManager />
+          )}
+
           {currentView === 'sales' && (
             <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
               <div className="w-14 h-14 rounded-2xl bg-[#00d9ff]/10 text-[#00d9ff] border border-[#00d9ff]/20 flex items-center justify-center mx-auto shadow-lg">
@@ -275,7 +274,6 @@ export default function AdminApp() {
             </div>
           )}
 
-          {/* Purchase Placeholder View */}
           {currentView === 'purchase' && (
             <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
               <div className="w-14 h-14 rounded-2xl bg-[#ffa500]/10 text-[#ffa500] border border-[#ffa500]/20 flex items-center justify-center mx-auto shadow-lg">
@@ -288,7 +286,6 @@ export default function AdminApp() {
             </div>
           )}
 
-          {/* Expenses Placeholder View */}
           {currentView === 'expenses' && (
             <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
               <div className="w-14 h-14 rounded-2xl bg-[#ff6b6b]/10 text-[#ff6b6b] border border-[#ff6b6b]/20 flex items-center justify-center mx-auto shadow-lg">
@@ -301,7 +298,6 @@ export default function AdminApp() {
             </div>
           )}
 
-          {/* Reports Placeholder View */}
           {currentView === 'reports' && (
             <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
               <div className="w-14 h-14 rounded-2xl bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20 flex items-center justify-center mx-auto shadow-lg">
