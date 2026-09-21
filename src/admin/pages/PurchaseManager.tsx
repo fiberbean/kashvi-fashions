@@ -22,7 +22,8 @@ import {
   ChevronDown,
   ArrowRight,
   ReceiptText,
-  CheckCircle2
+  CheckCircle2,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import ProductMasterModal from '../components/modals/ProductMasterModal';
@@ -95,6 +96,7 @@ export default function PurchaseManager() {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isProductMasterOpen, setIsProductMasterOpen] = useState<boolean>(false);
   const [isColorMasterOpen, setIsColorMasterOpen] = useState<boolean>(false);
+  const [isShadePickerModalOpen, setIsShadePickerModalOpen] = useState<boolean>(false);
   const [viewingPurchase, setViewingPurchase] = useState<PurchaseRecord | null>(null);
   const [viewingItems, setViewingItems] = useState<any[]>([]);
   const [loadingItems, setLoadingItems] = useState<boolean>(false);
@@ -121,7 +123,7 @@ export default function PurchaseManager() {
   const [isProductDropdownOpen, setIsProductDropdownOpen] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Matrix Configuration with Base Color Filter
+  // Matrix Configuration
   const [unitCost, setUnitCost] = useState<number | string>(0);
   const [selectedBaseFilter, setSelectedBaseFilter] = useState<string>('green');
   const [activeMatrixColors, setActiveMatrixColors] = useState<string[]>([]);
@@ -422,10 +424,11 @@ export default function PurchaseManager() {
     setUnitCost(prod.cost_price || 0);
     setMatrixQtyMap({});
     setActiveMatrixColors([]);
+    // Automatically open Dedicated Shade Picker Modal on Product selection
+    setIsShadePickerModalOpen(true);
   };
 
-  // Toggle shade into matrix
-  const handleToggleShadeIntoMatrix = (shadeName: string) => {
+  const handleToggleShadeSelection = (shadeName: string) => {
     if (activeMatrixColors.includes(shadeName)) {
       setActiveMatrixColors((prev) => prev.filter((c) => c !== shadeName));
       setMatrixQtyMap((prev) => {
@@ -747,7 +750,7 @@ export default function PurchaseManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Left-Right Split Desk • Base Colour Shade Card Matrix • Realtime Inward Queue
+              Spacious Layout • Dedicated Shade Selection Popup • Balanced Inward Workspace
             </span>
           </div>
         </div>
@@ -865,13 +868,13 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 3. WIDE & ERGONOMIC LEFT-RIGHT PURCHASE INWARD MODAL */}
+      {/* 3. WIDE LEFT-RIGHT INWARD MODAL */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[99999] pt-10 pb-3 px-2 sm:px-4 flex items-start justify-center bg-black/90 backdrop-blur-xl overflow-y-auto select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[94vh]">
+        <div className="fixed inset-0 z-[99999] pt-8 pb-3 px-2 sm:px-4 flex items-start justify-center bg-black/90 backdrop-blur-xl overflow-y-auto select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[96vh]">
             
             {/* Header */}
-            <div className="px-4 py-2.5 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30 shrink-0">
+            <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#ffa500] to-[#ff6b6b] text-white flex items-center justify-center shadow-md shadow-[#ffa500]/30">
                   <PackageCheck className="w-4.5 h-4.5 text-white" />
@@ -880,14 +883,14 @@ export default function PurchaseManager() {
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                     <span>{editingPurchase ? `Edit Purchase Inward [${editingPurchase.id}]` : 'Purchase Inward Workspace'}</span>
                     <span className="px-2 py-0.5 rounded-full bg-[#ffa500]/20 text-[#ffa500] border border-[#ffa500]/40 text-[9px] font-mono">
-                      LEFT: ENTRY & MATRIX • RIGHT: INWARD QUEUE
+                      LEFT: PRODUCT & MATRIX • RIGHT: SAVED ITEMS & LIVE QUEUE
                     </span>
                   </h3>
                 </div>
               </div>
 
               <div className="flex items-center gap-2.5">
-                <div className="bg-[#101628] px-3 py-1 rounded-xl border border-white/15 text-right font-mono text-xs font-extrabold text-[#00ff9d]">
+                <div className="bg-[#101628] px-3.5 py-1 rounded-xl border border-white/15 text-right font-mono text-xs font-extrabold text-[#00ff9d]">
                   {purchaseCodeLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00d9ff] ml-auto" /> : purchaseNo}
                 </div>
                 <button
@@ -900,10 +903,10 @@ export default function PurchaseManager() {
               </div>
             </div>
 
-            <form onSubmit={handleSavePurchase} className="p-3 sm:p-4 overflow-y-auto space-y-2.5 custom-scrollbar text-xs">
+            <form onSubmit={handleSavePurchase} className="p-3 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar text-xs">
               
               {/* Master Header: Supplier, Bill No, Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 p-2.5 rounded-2xl bg-[#0a0e17]/90 border border-white/10">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10">
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
                     Supplier Name *
@@ -965,17 +968,17 @@ export default function PurchaseManager() {
               </div>
 
               {/* TWO-COLUMN SPLIT PANEL */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* === LEFT COLUMN: ENTRY, SHADE SELECTION & MATRIX DESK (Span 7) === */}
-                <div className="lg:col-span-7 space-y-2.5">
+                {/* === LEFT COLUMN: PRODUCT SELECTION & MATRIX (Span 6) === */}
+                <div className="lg:col-span-6 space-y-2.5">
                   
                   {/* Security PIN Lock if Editing */}
                   {editingPurchase && !isEditProductUnlocked ? (
-                    <div className="p-3 rounded-2xl bg-[#6d4aff]/10 border border-[#6d4aff]/30 flex items-center justify-between gap-2.5">
+                    <div className="p-4 rounded-2xl bg-[#6d4aff]/10 border border-[#6d4aff]/30 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-xl bg-[#6d4aff]/20 text-[#00d9ff] flex items-center justify-center">
-                          <Lock className="w-4 h-4" />
+                        <div className="w-9 h-9 rounded-xl bg-[#6d4aff]/20 text-[#00d9ff] flex items-center justify-center">
+                          <Lock className="w-4.5 h-4.5" />
                         </div>
                         <div>
                           <span className="font-bold text-white text-xs block">Add Products to Saved Purchase Bill</span>
@@ -986,14 +989,14 @@ export default function PurchaseManager() {
                       <button
                         type="button"
                         onClick={handleOpenPinVerification}
-                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-[#6d4aff]/30"
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-md shadow-[#6d4aff]/30"
                       >
                         <KeyRound className="w-3.5 h-3.5" />
                         <span>Enter PIN to Add</span>
                       </button>
                     </div>
                   ) : (
-                    <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
+                    <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-3">
                       
                       {/* Product Selector with Code Search */}
                       <div className="flex items-center justify-between">
@@ -1097,115 +1100,78 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* BASE COLOR SELECTOR & STRICT SHADE CARDS */}
+                      {/* POPUP TRIGGER BUTTON & ACTIVE SHADE SUMMARY (CLEAN & NON-CONGESTED) */}
                       {activeProduct ? (
-                        <div className="space-y-2 pt-1.5 border-t border-white/5">
+                        <div className="space-y-3 pt-2 border-t border-white/5">
                           
-                          <div className="flex flex-wrap items-center justify-between gap-1.5">
-                            <span className="text-xs font-mono font-bold text-white uppercase flex items-center gap-1">
-                              <Palette className="w-3.5 h-3.5 text-[#ff6b6b]" /> 2. Pick Base Color Family
-                            </span>
-                            <span className="text-[10px] text-[#8b9bb4]">
-                              Sub-Category: <strong className="text-white">{activeProduct.sub_category || 'General'}</strong>
-                            </span>
-                          </div>
-
-                          {/* Base Color Selection Pills */}
-                          <div className="flex flex-wrap gap-1">
-                            {availableBaseFamilies.map((fam) => {
-                              const isSelected = selectedBaseFilter.toLowerCase() === fam.toLowerCase();
-                              return (
-                                <button
-                                  key={fam}
-                                  type="button"
-                                  onClick={() => setSelectedBaseFilter(fam)}
-                                  className={`px-2.5 py-1 rounded-xl text-[10px] font-mono font-bold capitalize transition-all cursor-pointer ${
-                                    isSelected
-                                      ? 'bg-[#00d9ff] text-neutral-950 shadow-md scale-105'
-                                      : 'bg-[#101628] text-[#8b9bb4] hover:text-white border border-white/10'
-                                  }`}
-                                >
-                                  {fam}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* MINI SHADE CARDS: STRICTLY FILTERED FROM COLOUR MASTER SAVED SHADES */}
-                          <div className="space-y-1.5 pt-1">
-                            <div className="flex items-center justify-between text-[10.5px]">
-                              <span className="font-mono text-[#8b9bb4]">
-                                Picked Shades for <strong className="text-white uppercase">{selectedBaseFilter}</strong> ({selectableShadesForFamily.length} in Master):
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-mono font-bold text-white uppercase block">
+                                2. Pick Color Shades for [{activeProduct.id}]
                               </span>
-                              <span className="text-[9px] text-[#FF69B4] font-mono">
-                                Selected = Baby Pink Border
+                              <span className="text-[10.5px] text-[#8b9bb4]">
+                                Sub-Category: <strong className="text-white">{activeProduct.sub_category || 'General'}</strong>
                               </span>
                             </div>
 
-                            {selectableShadesForFamily.length === 0 ? (
-                              <div className="p-3 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-[10.5px]">
-                                No active shades found for &quot;{selectedBaseFilter}&quot;. Open Colour Master above and select/pick shades.
-                              </div>
-                            ) : (
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto custom-scrollbar p-1">
-                                {selectableShadesForFamily.map((shade) => {
-                                  const isSelectedInMatrix = activeMatrixColors.includes(shade.name);
-                                  const cardBg = shade.hex_code || '#006400';
-                                  const textColor = getContrastTextColor(cardBg);
+                            {/* Button to open Large Shade Picker Popup */}
+                            <button
+                              type="button"
+                              onClick={() => setIsShadePickerModalOpen(true)}
+                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-md shadow-[#6d4aff]/30 active:scale-95"
+                            >
+                              <Palette className="w-4 h-4" />
+                              <span>Select Shades in Popup ({activeMatrixColors.length} Selected)</span>
+                            </button>
+                          </div>
 
+                          {/* Chips of Currently Selected Shades */}
+                          {activeMatrixColors.length > 0 && (
+                            <div className="p-2.5 rounded-xl bg-[#101628] border border-white/10 space-y-1.5">
+                              <span className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block">
+                                Selected Shades ready for Matrix:
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {activeMatrixColors.map((clr) => {
+                                  const shadeObj = masterColours.find((c) => c.name === clr);
                                   return (
-                                    <div
-                                      key={shade.id}
-                                      onClick={() => handleToggleShadeIntoMatrix(shade.name)}
-                                      style={{ backgroundColor: cardBg }}
-                                      className={`p-2 rounded-xl cursor-pointer transition-all duration-150 flex flex-col justify-between min-h-[64px] ${
-                                        isSelectedInMatrix
-                                          ? 'border-3 border-[#FFB6C1] shadow-[0_0_15px_rgba(255,182,193,0.9)] ring-2 ring-[#FF69B4] scale-[1.02] z-10'
-                                          : 'border border-black/30 opacity-80 hover:opacity-100 hover:border-white/40'
-                                      }`}
+                                    <span
+                                      key={clr}
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#0a0e17] border border-[#FF69B4]/60 text-xs text-white"
                                     >
-                                      <div className="flex items-center justify-between">
-                                        <span
-                                          style={{
-                                            backgroundColor: isSelectedInMatrix ? '#FF69B4' : 'rgba(0,0,0,0.5)',
-                                            color: isSelectedInMatrix ? '#000000' : '#FFFFFF'
-                                          }}
-                                          className="px-1.5 py-0.2 rounded-full text-[8px] font-mono font-bold uppercase"
-                                        >
-                                          {isSelectedInMatrix ? 'PICKED' : 'ADD'}
-                                        </span>
-                                        <span style={{ color: textColor }} className="text-[8px] font-mono opacity-80 uppercase">
-                                          {shade.hex_code}
-                                        </span>
-                                      </div>
-
                                       <span
-                                        style={{ color: textColor }}
-                                        className="font-extrabold text-[11px] block truncate pt-1 drop-shadow-sm"
+                                        className="w-3 h-3 rounded-full border border-white/30 shrink-0"
+                                        style={{ backgroundColor: shadeObj?.hex_code || '#6d4aff' }}
+                                      />
+                                      <span className="font-bold">{clr}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleShadeSelection(clr)}
+                                        className="text-[#8b9bb4] hover:text-[#ff6b6b] ml-1 cursor-pointer"
                                       >
-                                        {shade.name}
-                                      </span>
-                                    </div>
+                                        ×
+                                      </button>
+                                    </span>
                                   );
                                 })}
                               </div>
-                            )}
-                          </div>
+                            </div>
+                          )}
 
-                          {/* 3. QUANTITY MATRIX TABLE FOR SELECTED SHADES */}
-                          {activeMatrixColors.length > 0 && (
-                            <div className="space-y-1.5 pt-2 border-t border-white/5">
-                              <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                                3. Enter Inward Quantities for Selected Shades
+                          {/* 3. QUANTITY MATRIX GRID FOR CHOSEN SHADES */}
+                          {activeMatrixColors.length > 0 ? (
+                            <div className="space-y-2 pt-1 border-t border-white/5">
+                              <span className="text-[10px] font-mono font-bold text-[#00ff9d] uppercase block">
+                                3. Enter Inward Quantities in Matrix
                               </span>
 
-                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-44">
+                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-48">
                                 <table className="w-full text-center border-collapse">
                                   <thead>
                                     <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
-                                      <th className="py-1.5 px-2 text-left min-w-[100px]">Colour \ Size</th>
+                                      <th className="py-2 px-2.5 text-left min-w-[110px]">Colour \ Size</th>
                                       {productSizes.map((sz) => (
-                                        <th key={sz} className="py-1.5 px-2 text-center text-[#00d9ff] min-w-[55px]">
+                                        <th key={sz} className="py-2 px-2 text-center text-[#00d9ff] min-w-[55px]">
                                           {sz}
                                         </th>
                                       ))}
@@ -1216,10 +1182,10 @@ export default function PurchaseManager() {
                                       const shadeObj = masterColours.find((c) => c.name === clr);
                                       return (
                                         <tr key={clr}>
-                                          <td className="py-1 px-2 text-left font-bold text-white text-xs whitespace-nowrap">
+                                          <td className="py-1.5 px-2.5 text-left font-bold text-white text-xs whitespace-nowrap">
                                             <span className="inline-flex items-center gap-1.5">
                                               <span
-                                                className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
+                                                className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
                                                 style={{ backgroundColor: shadeObj?.hex_code || '#6d4aff' }}
                                               />
                                               <span>{clr}</span>
@@ -1228,14 +1194,14 @@ export default function PurchaseManager() {
                                           {productSizes.map((sz) => {
                                             const key = `${clr}:::${sz}`;
                                             return (
-                                              <td key={sz} className="py-1 px-1 text-center">
+                                              <td key={sz} className="py-1.5 px-1 text-center">
                                                 <input
                                                   type="number"
                                                   min="0"
                                                   placeholder="0"
                                                   value={matrixQtyMap[key] || ''}
                                                   onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
-                                                  className="w-12 py-0.5 px-1 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/10 rounded-lg outline-none text-xs focus:border-[#00ff9d]"
+                                                  className="w-13 py-1 px-1 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/15 rounded-lg outline-none text-xs focus:border-[#00ff9d]"
                                                 />
                                               </td>
                                             );
@@ -1256,19 +1222,23 @@ export default function PurchaseManager() {
                                   type="button"
                                   disabled={currentConfiguredTotalQty === 0}
                                   onClick={handleAddMatrixToStaged}
-                                  className="px-4 py-1.5 bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] hover:opacity-95 text-neutral-950 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow active:scale-95"
+                                  className="px-5 py-2 bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] hover:opacity-95 text-neutral-950 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow active:scale-95"
                                 >
                                   <span>Add to Matrix Queue</span>
                                   <ArrowRight className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </div>
+                          ) : (
+                            <div className="p-4 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
+                              Click &quot;Select Shades in Popup&quot; above to pick dress colour shades and open the size matrix.
+                            </div>
                           )}
 
                         </div>
                       ) : (
-                        <div className="p-3.5 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
-                          Choose a product from the dropdown above to reveal its base colours & shades.
+                        <div className="p-4 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
+                          Choose a product from the dropdown above to start configuring inward stock.
                         </div>
                       )}
 
@@ -1276,49 +1246,49 @@ export default function PurchaseManager() {
                   )}
                 </div>
 
-                {/* === RIGHT COLUMN: LIVE INWARD QUEUE & BILL SUMMARY (Span 5) === */}
-                <div className="lg:col-span-5 space-y-2.5">
+                {/* === RIGHT COLUMN: BALANCED INWARD QUEUE & SAVED BILL ITEMS (Span 6) === */}
+                <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
-                    {/* Header */}
-                    <div className="px-3.5 py-2 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
+                    {/* Header: Live Inward Queue */}
+                    <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
-                        <ReceiptText className="w-3.5 h-3.5" /> Live Inward Queue ({stagedItems.length} lines)
+                        <ReceiptText className="w-4 h-4" /> Live Inward Queue ({stagedItems.length} lines)
                       </span>
                       <span className="text-white font-bold">{totalInwardQuantity} Units</span>
                     </div>
 
                     {/* Staged Items List */}
-                    <div className="max-h-60 min-h-[160px] overflow-y-auto custom-scrollbar p-1">
+                    <div className="max-h-48 min-h-[140px] overflow-y-auto custom-scrollbar p-1">
                       {stagedItems.length === 0 ? (
                         <div className="p-6 text-center text-[#8b9bb4] italic text-xs space-y-1">
                           <Layers className="w-5 h-5 mx-auto text-white/20" />
                           <p className="font-semibold text-white/60">Inward Queue is Empty.</p>
-                          <p className="text-[10.5px] text-white/40">Select shades & fill quantities on Left, then click &quot;Add to Matrix Queue ➔&quot;.</p>
+                          <p className="text-[10.5px] text-white/40">Select product & shades on Left, then click &quot;Add to Matrix Queue ➔&quot;.</p>
                         </div>
                       ) : (
                         <table className="w-full text-left text-xs">
                           <thead className="bg-[#101628]/80 text-[#8b9bb4] font-mono uppercase text-[8px] sticky top-0">
                             <tr>
-                              <th className="py-1 px-2">Product & Variant</th>
-                              <th className="py-1 px-1.5 text-center">Qty</th>
-                              <th className="py-1 px-2 text-right">Cost</th>
-                              <th className="py-1 px-2 text-right">Total</th>
-                              <th className="py-1 px-1.5 text-center"></th>
+                              <th className="py-1.5 px-2">Product & Variant</th>
+                              <th className="py-1.5 px-2 text-center">Qty</th>
+                              <th className="py-1.5 px-2 text-right">Cost</th>
+                              <th className="py-1.5 px-2 text-right">Total</th>
+                              <th className="py-1.5 px-1.5 text-center"></th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5">
                             {stagedItems.map((it, idx) => (
                               <tr key={idx} className="hover:bg-white/[0.02]">
                                 <td className="py-1.5 px-2">
-                                  <span className="font-bold text-white block truncate max-w-[140px]">
+                                  <span className="font-bold text-white block truncate max-w-[170px]">
                                     {it.product_name}
                                   </span>
-                                  <span className="text-[9.5px] text-[#00d9ff] font-mono">
+                                  <span className="text-[10px] text-[#00d9ff] font-mono">
                                     {it.color} • {it.size}
                                   </span>
                                 </td>
-                                <td className="py-1.5 px-1.5 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
+                                <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
                                 <td className="py-1.5 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
                                 <td className="py-1.5 px-2 text-right font-mono font-bold text-white">
                                   ₹{it.total_cost.toLocaleString('en-IN')}
@@ -1339,22 +1309,36 @@ export default function PurchaseManager() {
                       )}
                     </div>
 
-                    {/* Saved items if Editing */}
+                    {/* SAVED ITEMS ON BILL (SPACIOUS & EXPANDED FOR EDIT MODE) */}
                     {editingPurchase && existingItems.length > 0 && (
-                      <div className="p-2.5 bg-[#101628]/60 border-t border-white/10 space-y-1">
-                        <div className="flex items-center justify-between text-[9.5px] font-mono">
-                          <span className="font-bold text-white uppercase">Saved Items on Bill ({existingItems.length} lines)</span>
+                      <div className="p-3 bg-[#101628]/70 border-t border-white/10 space-y-1.5">
+                        <div className="flex items-center justify-between text-xs font-mono">
+                          <span className="font-bold text-white uppercase flex items-center gap-1.5">
+                            <PackageCheck className="w-3.5 h-3.5 text-[#00d9ff]" />
+                            Saved Items on Bill ({existingItems.length} lines)
+                          </span>
                           <span className="text-[#00ff9d] font-bold">Subtotal: ₹{existingItemsTotal.toLocaleString('en-IN')}</span>
                         </div>
-                        <div className="max-h-16 overflow-y-auto">
-                          <table className="w-full text-left text-[10px]">
+
+                        <div className="max-h-36 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#0a0e17]">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[8.5px] uppercase sticky top-0">
+                              <tr>
+                                <th className="p-1.5">Product</th>
+                                <th className="p-1.5">Variant</th>
+                                <th className="p-1.5 text-center">Qty</th>
+                                <th className="p-1.5 text-right">Cost</th>
+                                <th className="p-1.5 text-right">Total</th>
+                              </tr>
+                            </thead>
                             <tbody className="divide-y divide-white/5">
                               {existingItems.map((it, idx) => (
                                 <tr key={idx}>
-                                  <td className="p-1 font-semibold text-white">[{it.product_id}]</td>
-                                  <td className="p-1 text-[#00d9ff]">{it.variant_color} / {it.variant_size}</td>
-                                  <td className="p-1 text-center font-bold text-[#00ff9d]">{it.quantity} Qty</td>
-                                  <td className="p-1 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
+                                  <td className="p-1.5 font-bold text-white">[{it.product_id}]</td>
+                                  <td className="p-1.5 text-[#00d9ff] font-semibold">{it.variant_color} / {it.variant_size}</td>
+                                  <td className="p-1.5 text-center font-bold text-[#00ff9d]">{it.quantity} Qty</td>
+                                  <td className="p-1.5 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
+                                  <td className="p-1.5 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1364,7 +1348,7 @@ export default function PurchaseManager() {
                     )}
 
                     {/* Summary & Bill Total Card */}
-                    <div className="p-3 bg-[#101628] border-t border-white/10 space-y-2">
+                    <div className="p-3.5 bg-[#101628] border-t border-white/10 space-y-2">
                       <div className="space-y-1 font-mono text-xs">
                         {editingPurchase && (
                           <div className="flex justify-between text-[#8b9bb4]">
@@ -1376,9 +1360,9 @@ export default function PurchaseManager() {
                           <span>Newly Added ({stagedItems.length} lines):</span>
                           <span className="text-[#00d9ff]">₹{stagedNewlyAddedTotal.toLocaleString('en-IN')}</span>
                         </div>
-                        <div className="flex justify-between items-center text-xs font-bold pt-1 border-t border-white/5">
+                        <div className="flex justify-between items-center text-xs font-bold pt-1.5 border-t border-white/5">
                           <span className="text-white">GRAND TOTAL:</span>
-                          <span className="text-base font-extrabold text-[#00ff9d]">
+                          <span className="text-lg font-extrabold text-[#00ff9d]">
                             ₹{grandTotalBillAmount.toLocaleString('en-IN')}
                           </span>
                         </div>
@@ -1391,7 +1375,7 @@ export default function PurchaseManager() {
                           value={notes}
                           onChange={(e) => setNotes(e.target.value)}
                           placeholder="Remarks, transport notes..."
-                          className="w-full px-2.5 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white text-xs outline-none"
+                          className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white text-xs outline-none"
                         />
                       </div>
 
@@ -1400,17 +1384,17 @@ export default function PurchaseManager() {
                         <button
                           type="button"
                           onClick={() => setIsModalOpen(false)}
-                          className="px-3.5 py-1.5 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+                          className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
                         >
                           Cancel
                         </button>
                         <button
                           type="submit"
                           disabled={submitting}
-                          className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#ffa500] to-[#ff6b6b] hover:opacity-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-[#ffa500]/30 cursor-pointer active:scale-95 disabled:opacity-50"
+                          className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#ffa500] to-[#ff6b6b] hover:opacity-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-[#ffa500]/30 cursor-pointer active:scale-95 disabled:opacity-50"
                         >
                           {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          <span>{editingPurchase ? 'Update Bill' : 'Save Purchase'}</span>
+                          <span>{editingPurchase ? 'Update Purchase Bill' : 'Save Purchase Entry'}</span>
                         </button>
                       </div>
                     </div>
@@ -1425,7 +1409,150 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* Security PIN Prompt Modal */}
+      {/* 4. DEDICATED POPUP FOR SHADE SELECTION (LARGE SWATCH CARDS + ACCURATE DRESS COMPARISON) */}
+      {isShadePickerModalOpen && activeProduct && (
+        <div className="fixed inset-0 z-[100000] p-3 sm:p-6 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            
+            {/* Popup Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-[#00d9ff]" />
+                  <span>Select Color Shades for [{activeProduct.id}] {activeProduct.name}</span>
+                </h4>
+                <span className="text-xs text-[#8b9bb4]">
+                  Large swatch cards allow accurate dress color comparison • Selected shades show Baby Pink Border
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShadePickerModalOpen(false)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Base Color Selection Tabs */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                1. Pick Base Color Family:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {availableBaseFamilies.map((fam) => {
+                  const isSelected = selectedBaseFilter.toLowerCase() === fam.toLowerCase();
+                  return (
+                    <button
+                      key={fam}
+                      type="button"
+                      onClick={() => setSelectedBaseFilter(fam)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold capitalize transition-all cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#00d9ff] text-neutral-950 shadow-lg scale-105'
+                          : 'bg-[#0a0e17] text-[#8b9bb4] hover:text-white border border-white/10'
+                      }`}
+                    >
+                      {fam}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* LARGE SHADE CARDS GRID */}
+            <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar p-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-[#8b9bb4]">
+                  Active Shades for <strong className="text-white uppercase">{selectedBaseFilter}</strong> ({selectableShadesForFamily.length} available):
+                </span>
+                <span className="text-[10px] text-[#FF69B4] font-mono font-bold">
+                  {activeMatrixColors.length} Shades Picked
+                </span>
+              </div>
+
+              {selectableShadesForFamily.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-[#0a0e17] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
+                  No active shades found for &quot;{selectedBaseFilter}&quot;. Open Colour Master to activate shades.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {selectableShadesForFamily.map((shade) => {
+                    const isSelected = activeMatrixColors.includes(shade.name);
+                    const cardBg = shade.hex_code || '#006400';
+                    const textColor = getContrastTextColor(cardBg);
+
+                    return (
+                      <div
+                        key={shade.id}
+                        onClick={() => handleToggleShadeSelection(shade.name)}
+                        style={{ backgroundColor: cardBg }}
+                        className={`p-3.5 rounded-2xl cursor-pointer transition-all duration-150 flex flex-col justify-between min-h-[96px] shadow-lg ${
+                          isSelected
+                            ? 'border-4 border-[#FFB6C1] shadow-[0_0_22px_rgba(255,182,193,0.95)] ring-2 ring-[#FF69B4] scale-[1.03] z-10'
+                            : 'border-2 border-black/25 opacity-80 hover:opacity-100 hover:border-white/40'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            style={{
+                              backgroundColor: isSelected ? '#FF69B4' : 'rgba(0,0,0,0.55)',
+                              color: isSelected ? '#000000' : '#FFFFFF'
+                            }}
+                            className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider"
+                          >
+                            {isSelected ? 'PICKED' : '+ SELECT'}
+                          </span>
+                          <span style={{ color: textColor }} className="text-[10px] font-mono font-bold uppercase">
+                            {shade.hex_code}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span
+                            style={{ color: textColor }}
+                            className="font-extrabold text-xs block truncate pt-2 drop-shadow-md"
+                          >
+                            {shade.name}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Popup Bottom Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-white/10">
+              <span className="font-mono text-xs text-[#00ff9d] font-bold">
+                Selected: {activeMatrixColors.length} Shade(s)
+              </span>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsShadePickerModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsShadePickerModalOpen(false)}
+                  className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer active:scale-95"
+                >
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>Confirm Shades & Build Matrix (OK)</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 5. SECURITY PIN PROMPT MODAL */}
       {isPinModalOpen && (
         <div className="fixed inset-0 z-[100000] p-3 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-4 shadow-2xl space-y-3">
@@ -1488,7 +1615,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* View Purchase Detail Modal */}
+      {/* 6. VIEW PURCHASE DETAIL MODAL */}
       {viewingPurchase && (
         <div className="fixed inset-0 z-[99999] p-3 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-white/15 rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl p-4 space-y-3">
@@ -1555,7 +1682,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* Quick Add Product Master Modal */}
+      {/* 7. QUICK ADD PRODUCT MASTER MODAL */}
       {isProductMasterOpen && (
         <ProductMasterModal
           onClose={() => {
@@ -1575,7 +1702,7 @@ export default function PurchaseManager() {
         />
       )}
 
-      {/* Direct Colour Master Quick Modal */}
+      {/* 8. DIRECT COLOUR MASTER MODAL */}
       {isColorMasterOpen && (
         <ColorMasterModal
           onClose={() => {
