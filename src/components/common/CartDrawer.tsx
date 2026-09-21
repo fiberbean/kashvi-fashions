@@ -190,7 +190,7 @@ export default function CartDrawer() {
   // Weight units in 500g slabs
   const weightSlabs = Math.max(1, Math.ceil(totalWeightGrams / 500));
 
-  // Dynamic Total calculation: Bag view displays only subtotal; Address/Payment view includes weight-based shipping
+  // Dynamic Total: Bag view displays only subtotal; Address/Payment view includes weight-based shipping
   const finalPayableAmount = activeStep === 'cart' ? subtotal : subtotal + (shippingCharge || 0);
 
   // Fetch addresses directly from Supabase customer_addresses table
@@ -650,8 +650,9 @@ export default function CartDrawer() {
       orderId,
     });
 
+    // Valid email validation to prevent 500 server errors
     const resolvedEmail = address.email?.trim() || user?.email?.trim();
-    if (resolvedEmail) {
+    if (resolvedEmail && resolvedEmail.includes('@') && !resolvedEmail.endsWith('.local')) {
       supabase.functions
         .invoke('send-order-email', {
           body: {
@@ -666,7 +667,7 @@ export default function CartDrawer() {
             items: itemsSnapshot,
           },
         })
-        .catch((err) => console.error('Failed to trigger order confirmation email:', err));
+        .catch((err) => console.warn('Order confirmation email notice:', err));
     }
 
     clearCart();
