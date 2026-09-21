@@ -25,7 +25,8 @@ import {
   User,
   ShieldCheck,
   Check,
-  ChevronDown
+  ChevronDown,
+  ArrowLeft
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -127,7 +128,14 @@ export default function OrdersManager() {
 
   // Modal States
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
-  const [showDetailDrawer, setShowDetailDrawer] = useState<boolean>(false);
+  const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
+
+  // Pipeline Status Confirmation State
+  const [confirmStageChange, setConfirmStageChange] = useState<{
+    orderId: string;
+    targetStatus: string;
+    currentStatus: string;
+  } | null>(null);
 
   // Rollback PIN modal
   const [pendingRollback, setPendingRollback] = useState<{
@@ -186,6 +194,21 @@ export default function OrdersManager() {
     loadOrders();
   }, []);
 
+  // Close modals on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (confirmStageChange) setConfirmStageChange(null);
+        else if (pendingRollback) setPendingRollback(null);
+        else if (dispatchOrderId) setDispatchOrderId(null);
+        else if (refundOrderId) setRefundOrderId(null);
+        else if (showDetailModal) setShowDetailModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [confirmStageChange, pendingRollback, dispatchOrderId, refundOrderId, showDetailModal]);
+
   // Update Status in Supabase
   const updateOrderStatus = async (orderId: string, newStatus: string, additionalFields: any = {}) => {
     try {
@@ -209,9 +232,24 @@ export default function OrdersManager() {
     }
   };
 
-  // Stage Progression / Rollback Handler
-  const handleStageChange = async (orderId: string, targetStatus: string, currentStatus: string) => {
+  // Stage Progression Trigger with Confirmation
+  const handleStageSelectChange = (orderId: string, targetStatus: string, currentStatus: string) => {
     if (currentStatus === targetStatus) return;
+
+    // Prompt user confirmation before changing status
+    setConfirmStageChange({
+      orderId,
+      targetStatus,
+      currentStatus,
+    });
+  };
+
+  // Execute stage change after OK is clicked in confirmation
+  const handleProceedStageChange = async () => {
+    if (!confirmStageChange) return;
+
+    const { orderId, targetStatus, currentStatus } = confirmStageChange;
+    setConfirmStageChange(null);
 
     const currentRank = getStageRank(currentStatus);
     const targetRank = getStageRank(targetStatus);
@@ -845,11 +883,11 @@ export default function OrdersManager() {
                         )}
                       </td>
 
-                      {/* Pipeline Stage Selector */}
+                      {/* Pipeline Stage Selector with Confirmation trigger */}
                       <td className="p-3.5">
                         <select
                           value={currentStatus}
-                          onChange={(e) => handleStageChange(order.id, e.target.value, currentStatus)}
+                          onChange={(e) => handleStageSelectChange(order.id, e.target.value, currentStatus)}
                           className="px-2.5 py-1.5 bg-[#0a0e17] rounded-xl text-white font-mono text-[10.5px] font-bold outline-none border border-white/15 focus:border-[#00d9ff] cursor-pointer [&>option]:bg-[#101628] [&>option]:text-white"
                         >
                           {PIPELINE_STAGES.map((s) => (
@@ -868,7 +906,7 @@ export default function OrdersManager() {
                             type="button"
                             onClick={() => {
                               setSelectedOrder(order);
-                              setShowDetailDrawer(true);
+                              setShowDetailModal(true);
                             }}
                             className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer transition-colors"
                             title="View Full Order Details"
@@ -905,16 +943,29 @@ export default function OrdersManager() {
       </div>
 
       {/* ========================================================================= */}
-      {/* 5. ORDER DETAILS DRAWER (MODAL)                                           */}
+      {/* 5. CENTER POPUP MODAL: VIEW FULL ORDER DETAILS                            */}
       {/* ========================================================================= */}
-      {showDetailDrawer && selectedOrder && (
-        <div className="fixed inset-0 z-[1000] flex justify-end bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#101628] border-l border-white/10 w-full max-w-xl h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
-            
-            {/* Drawer Header */}
-            <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-[#0a0e17]/60">
+      {showDetailModal && selectedOrder && (
+        <div
+          onClick={() => setShowDetailModal(false)}
+          className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101628] border border-white/15 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] cursor-default animate-in zoom-in-95 duration-200"
+          >
+            {/* Modal Top Header */}
+            <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-[#0a0e17]/80 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#00d9ff]">
+                <button
+                  type="button"
+                  onClick={() => setShowDetailModal(false)}
+                  className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white transition-colors cursor-pointer mr-0.5"
+                  title="Go Back"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div className="w-9 h-9 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-[#00d9ff] shrink-0">
                   <Package className="w-4.5 h-4.5" />
                 </div>
                 <div>
@@ -932,14 +983,15 @@ export default function OrdersManager() {
 
               <button
                 type="button"
-                onClick={() => setShowDetailDrawer(false)}
+                onClick={() => setShowDetailModal(false)}
                 className="p-1.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#8b9bb4] hover:text-white cursor-pointer transition-colors"
+                title="Close"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4.5 h-4.5" />
               </button>
             </div>
 
-            {/* Scrollable Content */}
+            {/* Scrollable Center Body */}
             <div className="p-5 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
               
               {/* Visual 8-Stage Progress Tracker */}
@@ -1095,9 +1147,17 @@ export default function OrdersManager() {
 
             </div>
 
-            {/* Drawer Footer Actions */}
-            <div className="p-4 border-t border-white/10 bg-[#0a0e17]/80 flex flex-wrap items-center justify-between gap-2">
+            {/* Modal Bottom Action Footer */}
+            <div className="p-4 border-t border-white/10 bg-[#0a0e17]/90 flex flex-wrap items-center justify-between gap-2 shrink-0">
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDetailModal(false)}
+                  className="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-[#8b9bb4] hover:text-white rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Back to Orders</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => handlePrintTaxInvoice(selectedOrder)}
@@ -1131,11 +1191,70 @@ export default function OrdersManager() {
       )}
 
       {/* ========================================================================= */}
-      {/* 6. SECURITY PIN MODAL FOR STEP ROLLBACK                                    */}
+      {/* 6. PIPELINE STAGE CHANGE CONFIRMATION MODAL                               */}
+      {/* ========================================================================= */}
+      {confirmStageChange && (
+        <div 
+          onClick={() => setConfirmStageChange(null)}
+          className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101628] border border-[#00d9ff]/30 rounded-3xl p-6 max-w-sm w-full space-y-4 relative shadow-2xl cursor-default animate-in zoom-in-95 duration-200"
+          >
+            <div className="flex items-center gap-3 text-[#00d9ff]">
+              <div className="w-10 h-10 rounded-2xl bg-[#00d9ff]/10 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-[#00d9ff]" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-white">Confirm Pipeline Change</h3>
+                <span className="text-[10px] text-[#8b9bb4] font-mono">Order: {confirmStageChange.orderId}</span>
+              </div>
+            </div>
+
+            <p className="text-[11.5px] text-[#8b9bb4] leading-relaxed">
+              Are you sure you want to change status from{' '}
+              <strong className="text-white font-mono bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                {formatStatusName(confirmStageChange.currentStatus)}
+              </strong>{' '}
+              to{' '}
+              <strong className="text-[#00ff9d] font-mono bg-[#00ff9d]/10 px-2 py-0.5 rounded-md border border-[#00ff9d]/30">
+                {formatStatusName(confirmStageChange.targetStatus)}
+              </strong>?
+            </p>
+
+            <div className="flex gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setConfirmStageChange(null)}
+                className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 text-[#8b9bb4] hover:text-white rounded-xl font-bold cursor-pointer transition-colors text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleProceedStageChange}
+                className="flex-1 py-2.5 bg-[#00d9ff] hover:bg-[#00c0e0] text-neutral-950 font-extrabold rounded-xl cursor-pointer shadow-lg shadow-[#00d9ff]/25 transition-all text-xs"
+              >
+                Confirm Change
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. SECURITY PIN MODAL FOR STEP ROLLBACK                                    */}
       {/* ========================================================================= */}
       {pendingRollback && (
-        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#101628] border border-[#ff6b6b]/40 rounded-3xl p-5 max-w-sm w-full space-y-3.5 relative shadow-2xl">
+        <div 
+          onClick={() => setPendingRollback(null)}
+          className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101628] border border-[#ff6b6b]/40 rounded-3xl p-5 max-w-sm w-full space-y-3.5 relative shadow-2xl cursor-default animate-in zoom-in-95 duration-200"
+          >
             <div className="flex items-center gap-2.5 text-[#ff6b6b]">
               <Lock className="w-5 h-5" />
               <h3 className="font-extrabold text-sm text-white">Pipeline Rollback PIN</h3>
@@ -1185,11 +1304,17 @@ export default function OrdersManager() {
       )}
 
       {/* ========================================================================= */}
-      {/* 7. INDIA POST TRACKING NUMBER MODAL                                       */}
+      {/* 8. INDIA POST TRACKING NUMBER MODAL                                       */}
       {/* ========================================================================= */}
       {dispatchOrderId && (
-        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#101628] border border-[#38bdf8]/40 rounded-3xl p-5 max-w-sm w-full space-y-3.5 relative shadow-2xl">
+        <div 
+          onClick={() => setDispatchOrderId(null)}
+          className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101628] border border-[#38bdf8]/40 rounded-3xl p-5 max-w-sm w-full space-y-3.5 relative shadow-2xl cursor-default animate-in zoom-in-95 duration-200"
+          >
             <div className="flex items-center gap-2.5 text-[#38bdf8]">
               <Truck className="w-5 h-5" />
               <h3 className="font-extrabold text-sm text-white">India Post Dispatch</h3>
@@ -1231,11 +1356,17 @@ export default function OrdersManager() {
       )}
 
       {/* ========================================================================= */}
-      {/* 8. CANCEL & REFUND UTR MODAL                                              */}
+      {/* 9. CANCEL & REFUND UTR MODAL                                              */}
       {/* ========================================================================= */}
       {refundOrderId && (
-        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#101628] border border-[#ff6b6b]/40 rounded-3xl p-5 max-w-sm w-full space-y-3.5 relative shadow-2xl">
+        <div 
+          onClick={() => setRefundOrderId(null)}
+          className="fixed inset-0 z-[1050] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in cursor-pointer"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#101628] border border-[#ff6b6b]/40 rounded-3xl p-5 max-w-sm w-full space-y-3.5 relative shadow-2xl cursor-default animate-in zoom-in-95 duration-200"
+          >
             <div className="flex items-center gap-2.5 text-[#ff6b6b]">
               <RotateCcw className="w-5 h-5" />
               <h3 className="font-extrabold text-sm text-white">Cancel & Refund UTR</h3>
