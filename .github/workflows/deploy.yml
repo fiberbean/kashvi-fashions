@@ -15,10 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  # 1. బిల్డ్ జాబ్: కోడ్ కంపైల్ చేసి సింగిల్ ఆర్టిఫాక్ట్‌గా అప్‌లోడ్ చేస్తుంది
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -44,6 +42,14 @@ jobs:
         with:
           path: './dist'
 
+  # 2. డిప్లాయ్ జాబ్: పైన జనరేట్ అయిన ఒక్క ఆర్టిఫాక్ట్‌ను మాత్రమే గిట్‌హబ్ పేజెస్‌కు పంపుతుంది
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
