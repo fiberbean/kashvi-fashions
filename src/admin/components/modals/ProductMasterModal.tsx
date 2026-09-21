@@ -17,7 +17,10 @@ import {
   Search,
   ChevronDown,
   CheckSquare,
-  Square
+  Square,
+  Trash2,
+  Edit3,
+  Plus
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
@@ -120,6 +123,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
   const [fabrics, setFabrics] = useState<FabricRecord[]>([]);
   const [units, setUnits] = useState<UnitRecord[]>([]);
 
+  // Existing Products List for View/Edit/Delete
+  const [existingProducts, setExistingProducts] = useState<any[]>([]);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [isEditMode, setIsEditMode] = useState<boolean>(false);
+
   const [brand, setBrand] = useState<'fashions' | 'jewellery'>('fashions');
   const [productCode, setProductCode] = useState<string>('');
   const [codeLoading, setCodeLoading] = useState<boolean>(false);
@@ -139,6 +147,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
 
   const [isCompressingQuickUpload, setIsCompressingQuickUpload] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [isDeleting, setIsDeleting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
@@ -150,6 +159,19 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Fetch Existing Products and Masters
+  const fetchProductsList = async () => {
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (data) setExistingProducts(data);
+    } catch (err) {
+      console.error('Error loading products list:', err);
+    }
+  };
 
   useEffect(() => {
     const fetchMasters = async () => {
@@ -176,36 +198,116 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         console.error('Error loading masters:', err);
       }
     };
+
     fetchMasters();
+    fetchProductsList();
   }, []);
 
-  useEffect(() => {
-    const generateProductCode = async () => {
-      setCodeLoading(true);
-      const prefix = brand === 'fashions' ? 'KF' : 'KJ';
-      try {
-        const { data } = await supabase
-          .from('products')
-          .select('id')
-          .like('id', `${prefix}%`)
-          .order('id', { ascending: false })
-          .limit(1);
+  const generateProductCode = async (targetBrand: 'fashions' | 'jewellery') => {
+    setCodeLoading(true);
+    const prefix = targetBrand === 'fashions' ? 'KF' : 'KJ';
+    try {
+      const { data } = await supabase
+        .from('products')
+        .select('id')
+        .like('id', `${prefix}%`)
+        .order('id', { ascending: false })
+        .limit(1);
 
-        if (data && data.length > 0) {
-          const match = data[0].id.match(/\d+$/);
-          const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
-          setProductCode(`${prefix}${String(nextNum).padStart(4, '0')}`);
-        } else {
-          setProductCode(`${prefix}0001`);
-        }
-      } catch {
+      if (data && data.length > 0) {
+        const match = data[0].id.match(/\d+$/);
+        const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
+        setProductCode(`${prefix}${String(nextNum).padStart(4, '0')}`);
+      } else {
         setProductCode(`${prefix}0001`);
-      } finally {
-        setCodeLoading(false);
       }
-    };
-    generateProductCode();
-  }, [brand]);
+    } catch {
+      setProductCode(`${prefix}0001`);
+    } finally {
+      setCodeLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isEditMode) {
+      generateProductCode(brand);
+    }
+  }, [brand, isEditMode]);
+
+  // Handle Selecting an Existing Product to View/Edit
+  const handleSelectExistingProduct = (prodId: string) => {
+    if (!prodId) {
+      // Reset to Create Mode
+      setIsEditMode(false);
+      setSelectedProductId('');
+      setName('');
+      setDescription('');
+      setSelectedCategory('');
+      setSelectedSubCategory('');
+      setSelectedColors([]);
+      setSelectedSizes([]);
+      setSelectedFabrics([]);
+      setImages([]);
+      generateProductCode(brand);
+      return;
+    }
+
+    const prod = existingProducts.find((p) => p.id === prodId);
+    if (!prod) return;
+
+    setIsEditMode(true);
+    setSelectedProductId(prod.id);
+    setProductCode(prod.id);
+    setName(prod.name || '');
+    setDescription(prod.description || '');
+
+    const isJewel = (prod.brand || '').toLowerCase().includes('jewel') || prod.id.startsWith('KJ');
+    setBrand(isJewel ? 'jewellery' : 'fashions');
+
+    setSelectedCategory(prod.category_id || '');
+    setSelectedSubCategory(prod.sub_category_id || '');
+    setSelectedUnit(prod.unit || 'Piece');
+
+    const vars = prod.variants || {};
+    setSelectedColors(Array.isArray(vars.colors) ? vars.colors : (prod.colour ? [prod.colour] : []));
+    setSelectedSizes(Array.isArray(vars.sizes) ? vars.sizes : (prod.size ? [prod.size] : []));
+    setSelectedFabrics(
+      Array.isArray(vars.fabrics) 
+        ? vars.fabrics 
+        : (prod.fabric ? prod.fabric.split(',').map((s: string) => s.trim()) : [])
+    );
+
+    if (Array.isArray(prod.images)) {
+      setImages(prod.images);
+    } else {
+      setImages([]);
+    }
+  };
+
+  // Delete Product Handler
+  const handleDeleteProduct = async () => {
+    if (!selectedProductId) return;
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to permanently delete Product [${selectedProductId}] - "${name}"? This action cannot be undone.`
+    );
+    if (!confirmDelete) return;
+
+    setIsDeleting(true);
+    setErrorMsg(null);
+    try {
+      const { error } = await supabase.from('products').delete().eq('id', selectedProductId);
+      if (error) throw error;
+
+      alert(`Product ${selectedProductId} deleted successfully.`);
+      handleSelectExistingProduct('');
+      fetchProductsList();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to delete product.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const filteredCategories = useMemo(() => {
     if (brand === 'jewellery') return [];
@@ -408,14 +510,8 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         sub_brand: null,
         model_no: productCode.trim(),
         barcode: productCode.trim(),
-        selling_price: 0,
-        cost_price: 0,
-        gst: 0,
-        weight: 0,
-        weight_unit: 'grams',
         images: images,
         active: true,
-        created_at: new Date().toISOString(),
         variants: { 
           colors: selectedColors, 
           sizes: selectedSizes, 
@@ -424,16 +520,38 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         description: description.trim(),
         features: '',
         notes: '',
-        mrp: 0,
-        stock_quantity: 0,
-        low_stock_threshold: 3,
         fabric: selectedFabrics.join(', ') || null
       };
 
-      const { error } = await supabase.from('products').insert([payload]);
-      if (error) throw error;
+      if (isEditMode) {
+        // UPDATE existing product
+        const { error } = await supabase
+          .from('products')
+          .update(payload)
+          .eq('id', productCode.trim());
+        if (error) throw error;
+        alert(`Product ${productCode} updated successfully!`);
+      } else {
+        // INSERT new product
+        const { error } = await supabase.from('products').insert([
+          {
+            ...payload,
+            selling_price: 0,
+            cost_price: 0,
+            gst: 0,
+            weight: 0,
+            weight_unit: 'grams',
+            mrp: 0,
+            stock_quantity: 0,
+            low_stock_threshold: 3,
+            created_at: new Date().toISOString()
+          }
+        ]);
+        if (error) throw error;
+        alert(`Product ${productCode} saved successfully!`);
+      }
 
-      alert(`Product ${productCode} saved successfully!`);
+      fetchProductsList();
       onClose();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to save product.');
@@ -448,6 +566,7 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
         
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-[#6d4aff] via-[#00d9ff] to-[#ff6b6b] rounded-t-3xl" />
 
+        {/* Modal Top Header */}
         <div className="flex justify-between items-center border-b border-white/10 pb-3.5 sticky top-0 bg-[#101628]/90 backdrop-blur-md z-20">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] text-white flex items-center justify-center shadow-lg shadow-[#6d4aff]/30">
@@ -455,9 +574,11 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             </div>
             <div>
               <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
-                <span>Product Master Creator</span>
-                <span className="px-2 py-0.5 rounded-full bg-[#6d4aff]/20 text-[#00d9ff] border border-[#6d4aff]/40 text-[9px] font-mono uppercase">
-                  Catalog Setup
+                <span>{isEditMode ? 'Edit / View Product Master' : 'Product Master Creator'}</span>
+                <span className={`px-2 py-0.5 rounded-full border text-[9px] font-mono uppercase ${
+                  isEditMode ? 'bg-[#ff6b6b]/20 text-[#ff6b6b] border-[#ff6b6b]/40' : 'bg-[#6d4aff]/20 text-[#00d9ff] border-[#6d4aff]/40'
+                }`}>
+                  {isEditMode ? 'Edit Mode' : 'Catalog Setup'}
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
@@ -481,6 +602,36 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
               <X className="w-4 h-4" />
             </button>
           </div>
+        </div>
+
+        {/* Existing Products Search & Switcher Bar */}
+        <div className="p-3 bg-[#0a0e17] rounded-2xl border border-white/10 flex flex-wrap items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2 flex-1 min-w-[260px]">
+            <Search className="w-3.5 h-3.5 text-[#00d9ff] shrink-0" />
+            <select
+              value={selectedProductId}
+              onChange={(e) => handleSelectExistingProduct(e.target.value)}
+              className="w-full bg-transparent text-white font-medium outline-none text-xs cursor-pointer [&>option]:bg-[#101628] [&>option]:text-white"
+            >
+              <option value="">➕ Create New Product (Fresh Code)</option>
+              {existingProducts.map((p) => (
+                <option key={p.id} value={p.id}>
+                  [{p.id}] {p.name} • {p.category || 'General'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {isEditMode && (
+            <button
+              type="button"
+              onClick={() => handleSelectExistingProduct('')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/15 text-[#00d9ff] rounded-xl text-[10.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Switch to Add New</span>
+            </button>
+          )}
         </div>
 
         {errorMsg && (
@@ -903,26 +1054,50 @@ export default function ProductMasterModal({ onClose }: ProductMasterModalProps)
             )}
           </div>
 
-          <div className="flex justify-end gap-2.5 pt-3 border-t border-white/10">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-2xl font-bold text-[#8b9bb4] hover:text-white hover:bg-white/5 cursor-pointer transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || isCompressingQuickUpload}
-              className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold flex items-center gap-2 shadow-lg shadow-[#6d4aff]/30 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
-            >
-              {submitting ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-[#00d9ff]" />
-              ) : (
-                <Save className="w-3.5 h-3.5 text-[#00ff9d]" />
+          {/* Bottom Actions with Safe Delete Support */}
+          <div className="flex items-center justify-between pt-3 border-t border-white/10">
+            <div>
+              {isEditMode && (
+                <button
+                  type="button"
+                  disabled={isDeleting || submitting}
+                  onClick={handleDeleteProduct}
+                  className="px-4 py-2 rounded-2xl bg-[#ff6b6b]/15 hover:bg-[#ff6b6b]/25 border border-[#ff6b6b]/30 text-[#ff6b6b] font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Permanently delete this product master"
+                >
+                  {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                  <span>Delete Product</span>
+                </button>
               )}
-              <span>Save Product Master</span>
-            </button>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 rounded-2xl font-bold text-[#8b9bb4] hover:text-white hover:bg-white/5 cursor-pointer transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || isCompressingQuickUpload || isDeleting}
+                className={`px-6 py-2.5 rounded-2xl font-bold flex items-center gap-2 shadow-lg transition-all cursor-pointer disabled:opacity-50 active:scale-95 text-white ${
+                  isEditMode
+                    ? 'bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] shadow-[#00d9ff]/30 text-neutral-950 font-extrabold'
+                    : 'bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] shadow-[#6d4aff]/30'
+                }`}
+              >
+                {submitting ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : isEditMode ? (
+                  <Edit3 className="w-3.5 h-3.5 text-neutral-950 stroke-[2.5]" />
+                ) : (
+                  <Save className="w-3.5 h-3.5 text-[#00ff9d]" />
+                )}
+                <span>{isEditMode ? 'Update Product Master' : 'Save Product Master'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
