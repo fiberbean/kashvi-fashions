@@ -18,7 +18,8 @@ import {
   Receipt,
   BarChart3,
   Boxes,
-  Building2
+  Building2,
+  Users
 } from 'lucide-react';
 import { AdminStaffUser } from '../types';
 import { AdminViewType } from '../../AdminApp';
@@ -47,6 +48,8 @@ export default function AdminNavbar({
 }: AdminNavbarProps) {
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const navRef = useRef<HTMLDivElement>(null);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -90,7 +93,7 @@ export default function AdminNavbar({
   return (
     <nav
       ref={navRef}
-      className="sticky top-0 z-30 bg-[#0a0e17]/95 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] select-none font-sans"
+      className="sticky top-0 z-40 bg-[#0a0e17]/95 backdrop-blur-2xl border-b border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] select-none font-sans"
     >
       <div className="h-[1.5px] w-full bg-gradient-to-r from-transparent via-[#6d4aff] to-[#00d9ff]" />
 
@@ -213,7 +216,24 @@ export default function AdminNavbar({
               <span>Reports</span>
             </button>
 
-            <div className="relative shrink-0 z-[100]">
+            {/* Admin Staff Tab */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => handleSelectView('staff' as AdminViewType)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
+                  currentView === ('staff' as AdminViewType)
+                    ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.4)] font-bold'
+                    : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5 text-[#00d9ff]" />
+                <span>Staff & PINs</span>
+              </button>
+            )}
+
+            {/* Masters Dropdown */}
+            <div className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => toggleDropdown('masters')}
@@ -229,7 +249,7 @@ export default function AdminNavbar({
               </button>
 
               {openDropdown === 'masters' && (
-                <div className="absolute top-full left-0 mt-2 w-56 bg-[#101628]/98 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_20px_rgba(109,74,255,0.25)] border border-white/15 py-2 z-[9999] animate-in fade-in zoom-in-95 duration-150">
+                <div className="absolute top-full left-0 mt-2 w-56 bg-[#101628]/98 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_20px_rgba(109,74,255,0.25)] border border-white/15 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                   <button
                     type="button"
                     onClick={() => handleMasterClick('product')}
