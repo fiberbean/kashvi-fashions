@@ -28,7 +28,8 @@ import {
   Share2,
   BookOpen,
   CheckCircle2,
-  Clock
+  Clock,
+  Globe
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -39,6 +40,7 @@ interface CustomerRecord {
   mobile?: string | null;
   city?: string | null;
   address?: string | null;
+  customer_type?: 'offline' | 'online' | string;
   created_at?: string;
 }
 
@@ -86,7 +88,7 @@ interface OrderRecord {
   customer_id?: string | null;
   customer_name: string;
   customer_phone?: string;
-  order_type: 'offline';
+  order_type: 'offline' | 'online' | string;
   total_amount: number;
   discount_amount: number;
   final_amount: number;
@@ -126,6 +128,9 @@ export default function SalesManager() {
   const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState<boolean>(false);
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
+
+  // Customer Separation Filter (All, Offline, Online)
+  const [customerFilterTab, setCustomerFilterTab] = useState<'all' | 'offline' | 'online'>('offline');
 
   // New Customer Form State
   const [newCustId, setNewCustId] = useState<string>('CUST0001');
@@ -168,6 +173,7 @@ export default function SalesManager() {
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
+  // Generate Customer ID strictly for Offline Store (CUST0001 format)
   const generateCustomerId = async () => {
     try {
       const { data } = await supabase
@@ -262,9 +268,11 @@ export default function SalesManager() {
   const handleChooseExistingCustomer = () => {
     setIsCustomerPromptOpen(false);
     setCustSearchTerm('');
+    setCustomerFilterTab('all');
     setIsExistingCustomerPickerOpen(true);
   };
 
+  // Register Offline Customer with customer_type = 'offline'
   const handleRegisterCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = newCustName.trim().toUpperCase();
@@ -280,7 +288,8 @@ export default function SalesManager() {
     try {
       const insertPayload = {
         id: newCustId.trim().toUpperCase(),
-        name: cleanName
+        name: cleanName,
+        customer_type: 'offline'
       };
 
       let errorOccurred: any = null;
@@ -300,7 +309,8 @@ export default function SalesManager() {
 
         if (res2.error) {
           const res3 = await supabase.from('customers').insert([{
-            ...insertPayload
+            id: newCustId.trim().toUpperCase(),
+            name: cleanName
           }]).select();
 
           if (res3.error) {
@@ -316,7 +326,8 @@ export default function SalesManager() {
         name: cleanName,
         phone: cleanPhone,
         mobile: cleanPhone,
-        city: cleanCity || null
+        city: cleanCity || null,
+        customer_type: 'offline'
       };
 
       setCustomersList((prev) => [createdCust, ...prev]);
@@ -360,7 +371,6 @@ export default function SalesManager() {
     setIsVariantModalOpen(true);
   };
 
-  // ROBUST INVENTORY FILTER WITH CASE-INSENSITIVE & WHITESPACE TRIM MATCHING
   const modalProductInventory = useMemo(() => {
     if (!selectedProductForModal) return [];
     const targetId = String(selectedProductForModal.id).trim().toUpperCase();
@@ -371,12 +381,10 @@ export default function SalesManager() {
     });
   }, [selectedProductForModal, inventoryList]);
 
-  // ALL COLOURS & SHADES LIST WITH REAL-TIME STOCK OR ZERO/NEGATIVE STOCK
   const modalAvailableColors = useMemo(() => {
     if (!selectedProductForModal) return [];
     const map = new Map<string, { stock: number; hex?: string }>();
 
-    // 1. Inventory lo unna stock map cheyatam
     modalProductInventory.forEach((r) => {
       const clr = String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase();
       const current = map.get(clr) || { stock: 0 };
@@ -388,7 +396,6 @@ export default function SalesManager() {
       });
     });
 
-    // 2. Product master lo unna specific colours add cheyatam
     const prod = selectedProductForModal;
     if (prod.colour) {
       const rawColors = typeof prod.colour === 'string'
@@ -412,7 +419,6 @@ export default function SalesManager() {
       });
     }
 
-    // 3. Incase stock lekapothe, master colours list mottham display cheyatam
     if (map.size === 0) {
       coloursList.forEach((c) => {
         map.set(c.name.trim().toUpperCase(), {
@@ -429,13 +435,11 @@ export default function SalesManager() {
     }));
   }, [modalProductInventory, selectedProductForModal, coloursList]);
 
-  // ASSIGNED SIZES LIST (INVENTORY SIZES + SUBCATEGORY SIZES + MASTER SIZES)
   const modalAvailableSizes = useMemo(() => {
     if (!selectedProductForModal || !modalColor) return [];
     const chosenColor = modalColor.trim().toUpperCase();
     const map = new Map<string, number>();
 
-    // 1. Inventory lo aa colour ki unna sizes
     modalProductInventory
       .filter((r) => String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase() === chosenColor)
       .forEach((r) => {
@@ -445,7 +449,6 @@ export default function SalesManager() {
         map.set(sz, prev + qty);
       });
 
-    // 2. Product master direct sizes
     const prod = selectedProductForModal;
     if (prod.size) {
       const rawSizes = typeof prod.size === 'string'
@@ -463,7 +466,6 @@ export default function SalesManager() {
       });
     }
 
-    // 3. Sub-category ki link ayina assigned sizes
     const subCatObj = subCategoriesList.find(
       (sc) => sc.id === prod.sub_category_id || sc.name?.toUpperCase() === prod.sub_category?.toUpperCase()
     );
@@ -488,7 +490,6 @@ export default function SalesManager() {
       }
     }
 
-    // 4. Incase edhi lekapothe, all master sizes chupinchi fallback ivvadam
     if (map.size === 0 && allSizesList.length > 0) {
       allSizesList.slice(0, 8).forEach((s) => {
         map.set(String(s.name).trim().toUpperCase(), 0);
@@ -505,7 +506,6 @@ export default function SalesManager() {
     }));
   }, [modalProductInventory, selectedProductForModal, modalColor, subCategoriesList, allSizesList]);
 
-  // REALTIME STOCK CALCULATION
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
     const targetColor = modalColor.trim().toUpperCase();
@@ -520,7 +520,6 @@ export default function SalesManager() {
     return matchingRows.reduce((sum, r) => sum + Number(r.stock_quantity ?? r.quantity ?? 0), 0);
   }, [modalProductInventory, modalColor, modalSize]);
 
-  // ALLOW ADDING TO CART EVEN IF STOCK IS 0 OR NEGATIVE
   const handleConfirmVariantToCart = () => {
     if (!selectedProductForModal) return;
     if (!modalColor) {
@@ -584,7 +583,6 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // COMPLETE SALE - DIRECT NEGATIVE STOCK UPDATE
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -617,11 +615,9 @@ export default function SalesManager() {
         created_at: new Date().toISOString()
       };
 
-      // 1. Insert Order
       const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
       if (orderErr) throw orderErr;
 
-      // 2. Insert Line Items
       const orderItemsPayload = cartItems.map((item, idx) => ({
         id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
         order_id: invoiceNo.trim().toUpperCase(),
@@ -636,7 +632,6 @@ export default function SalesManager() {
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsPayload);
       if (itemsErr) throw itemsErr;
 
-      // 3. Deduct Stock in inventory table (Allows Negative Stock e.g. 0 - 1 = -1)
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
@@ -648,13 +643,12 @@ export default function SalesManager() {
 
         if (invRow) {
           const currentQty = Number(invRow.stock_quantity || 0);
-          const newStock = currentQty - item.quantity; // Negative allow chestundhi
+          const newStock = currentQty - item.quantity;
           await supabase
             .from('inventory')
             .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
             .eq('id', invRow.id);
         } else {
-          // Record lekapothe negative stock tho kothaga record insert chestam
           await supabase.from('inventory').insert([
             {
               id: `inv_${item.product_id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`.toUpperCase(),
@@ -721,16 +715,27 @@ export default function SalesManager() {
     }
   };
 
+  // Customer Ledger Query with Channel Tracking
   const customerPastOrders = useMemo(() => {
     if (!selectedCustomer) return [];
     const custPhone = selectedCustomer.phone || selectedCustomer.mobile;
     return orders.filter((o) => o.customer_id === selectedCustomer.id || (custPhone && o.customer_phone === custPhone));
   }, [orders, selectedCustomer]);
 
+  // Separate Existing Customers based on Online or Offline Type
   const filteredExistingCustomers = useMemo(() => {
-    if (!custSearchTerm.trim()) return customersList;
+    let list = customersList;
+
+    // Filter by Online vs Offline Tab
+    if (customerFilterTab === 'offline') {
+      list = list.filter((c) => !c.customer_type || c.customer_type.toLowerCase() === 'offline');
+    } else if (customerFilterTab === 'online') {
+      list = list.filter((c) => c.customer_type && c.customer_type.toLowerCase() === 'online');
+    }
+
+    if (!custSearchTerm.trim()) return list;
     const q = custSearchTerm.toUpperCase().trim();
-    return customersList.filter((c) => {
+    return list.filter((c) => {
       const cPhone = c.phone || c.mobile || '';
       return (
         c.name.toUpperCase().includes(q) ||
@@ -738,7 +743,7 @@ export default function SalesManager() {
         (c.city && c.city.toUpperCase().includes(q))
       );
     });
-  }, [customersList, custSearchTerm]);
+  }, [customersList, customerFilterTab, custSearchTerm]);
 
   const filteredDeskProducts = useMemo(() => {
     if (!billingProductSearch.trim()) return productsList;
@@ -779,7 +784,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • NEGATIVE STOCK ALLOWED • ZERO-STOCK BILLING SUPPORT
+              SERIES: KFINV0001 • ONLINE & OFFLINE CUSTOMER PROFILES • SEPARATE DATA ARCHITECTURE
             </span>
           </div>
         </div>
@@ -939,7 +944,7 @@ export default function SalesManager() {
                 <div className="w-8 h-8 rounded-xl bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center group-hover:scale-110 transition-transform">
                   <UserPlus className="w-4 h-4" />
                 </div>
-                <span>NEW REGISTER</span>
+                <span>NEW OFFLINE</span>
               </button>
 
               <button
@@ -967,14 +972,14 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION */}
+      {/* DIALOG 2A: NEW OFFLINE CUSTOMER REGISTRATION */}
       {isNewCustomerModalOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white uppercase">CUSTOMER REGISTRATION</h3>
+                <h3 className="text-sm font-bold text-white uppercase">OFFLINE CUSTOMER REGISTRATION</h3>
               </div>
               <button
                 type="button"
@@ -988,7 +993,7 @@ export default function SalesManager() {
             <form onSubmit={handleRegisterCustomer} className="space-y-3">
               <div>
                 <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  CUSTOMER ID (AUTO-GENERATED)
+                  CUSTOMER ID (CUST0001 SERIES - AUTO)
                 </label>
                 <input
                   type="text"
@@ -1054,7 +1059,7 @@ export default function SalesManager() {
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50 uppercase"
                 >
                   {registeringCust ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>SAVE & OPEN BILL</span>
+                  <span>SAVE TO REGISTER & BILL</span>
                 </button>
               </div>
             </form>
@@ -1062,14 +1067,14 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2B: EXISTING CUSTOMER PICKER */}
+      {/* DIALOG 2B: EXISTING CUSTOMER PICKER WITH ONLINE & OFFLINE TABS */}
       {isExistingCustomerPickerOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white uppercase">SELECT REGISTERED CUSTOMER</h3>
+                <h3 className="text-sm font-bold text-white uppercase">CUSTOMER DIRECTORY</h3>
               </div>
               <button
                 type="button"
@@ -1077,6 +1082,45 @@ export default function SalesManager() {
                 className="text-[#8b9bb4] hover:text-white p-1"
               >
                 <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Offline vs Online Customer Tab Filter */}
+            <div className="grid grid-cols-3 gap-1 p-1 bg-[#0a0e17] rounded-xl border border-white/10 text-[11px] font-bold font-mono">
+              <button
+                type="button"
+                onClick={() => setCustomerFilterTab('offline')}
+                className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  customerFilterTab === 'offline'
+                    ? 'bg-[#ffa500] text-neutral-950 shadow-md font-extrabold'
+                    : 'text-[#8b9bb4] hover:text-white'
+                }`}
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>OFFLINE (WALK-IN)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomerFilterTab('online')}
+                className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  customerFilterTab === 'online'
+                    ? 'bg-[#00d9ff] text-neutral-950 shadow-md font-extrabold'
+                    : 'text-[#8b9bb4] hover:text-white'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>ONLINE (STORE)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomerFilterTab('all')}
+                className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  customerFilterTab === 'all'
+                    ? 'bg-white/20 text-white shadow-md font-extrabold'
+                    : 'text-[#8b9bb4] hover:text-white'
+                }`}
+              >
+                <span>ALL ({customersList.length})</span>
               </button>
             </div>
 
@@ -1095,11 +1139,13 @@ export default function SalesManager() {
             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
               {filteredExistingCustomers.length === 0 ? (
                 <div className="p-6 text-center text-[#8b9bb4] italic text-xs uppercase">
-                  NO MATCHING REGISTERED CUSTOMERS FOUND.
+                  NO MATCHING {customerFilterTab !== 'all' ? `${customerFilterTab.toUpperCase()} ` : ''}CUSTOMERS FOUND.
                 </div>
               ) : (
                 filteredExistingCustomers.map((c) => {
                   const phoneNum = c.phone || c.mobile || '—';
+                  const isOnline = c.customer_type && c.customer_type.toLowerCase() === 'online';
+
                   return (
                     <div
                       key={c.id}
@@ -1110,6 +1156,15 @@ export default function SalesManager() {
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-[#00ff9d] font-bold text-xs">[{c.id}]</span>
                           <span className="font-bold text-white text-xs">{c.name}</span>
+                          {isOnline ? (
+                            <span className="px-1.5 py-0.2 rounded bg-[#00d9ff]/15 text-[#00d9ff] text-[9px] font-mono font-bold flex items-center gap-0.5">
+                              <Globe className="w-2.5 h-2.5" /> ONLINE
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded bg-[#ffa500]/15 text-[#ffa500] text-[9px] font-mono font-bold flex items-center gap-0.5">
+                              <Store className="w-2.5 h-2.5" /> OFFLINE
+                            </span>
+                          )}
                         </div>
                         <span className="text-[10px] font-mono text-[#8b9bb4] block mt-0.5">
                           PHONE: {phoneNum} {c.city ? `• ${c.city}` : ''}
@@ -1144,7 +1199,9 @@ export default function SalesManager() {
                 <BookOpen className="w-4 h-4 text-[#00d9ff]" />
                 <div>
                   <h4 className="text-sm font-bold text-white uppercase">CUSTOMER LEDGER: {selectedCustomer.name}</h4>
-                  <span className="text-[10px] font-mono text-[#8b9bb4]">ID: {selectedCustomer.id} • MOBILE: {selectedCustomer.phone || selectedCustomer.mobile}</span>
+                  <span className="text-[10px] font-mono text-[#8b9bb4]">
+                    ID: {selectedCustomer.id} • TYPE: {(selectedCustomer.customer_type || 'OFFLINE').toUpperCase()} • MOBILE: {selectedCustomer.phone || selectedCustomer.mobile}
+                  </span>
                 </div>
               </div>
               <button
@@ -1167,6 +1224,7 @@ export default function SalesManager() {
                     <tr>
                       <th className="py-2 px-2.5">BILL NO</th>
                       <th className="py-2 px-2.5">DATE</th>
+                      <th className="py-2 px-2.5">CHANNEL</th>
                       <th className="py-2 px-2.5">MODE</th>
                       <th className="py-2 px-2.5 text-right">AMOUNT (₹)</th>
                     </tr>
@@ -1176,6 +1234,13 @@ export default function SalesManager() {
                       <tr key={ord.id}>
                         <td className="py-2 px-2.5 text-[#00ff9d] font-bold">{ord.id}</td>
                         <td className="py-2 px-2.5 text-[#8b9bb4]">{new Date(ord.created_at).toLocaleDateString('en-IN')}</td>
+                        <td className="py-2 px-2.5 uppercase">
+                          {ord.order_type === 'online' ? (
+                            <span className="text-[#00d9ff] font-bold">ONLINE</span>
+                          ) : (
+                            <span className="text-[#ffa500] font-bold">WALK-IN</span>
+                          )}
+                        </td>
                         <td className="py-2 px-2.5 uppercase">{ord.payment_mode}</td>
                         <td className="py-2 px-2.5 text-right font-bold text-white">₹{ord.final_amount.toLocaleString('en-IN')}</td>
                       </tr>
@@ -1243,7 +1308,12 @@ export default function SalesManager() {
                       {selectedCustomer.id.slice(-2)}
                     </div>
                     <div>
-                      <span className="font-bold text-white text-xs block uppercase">{selectedCustomer.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white text-xs block uppercase">{selectedCustomer.name}</span>
+                        <span className="text-[9px] font-mono px-1 rounded bg-white/10 text-[#8b9bb4]">
+                          {(selectedCustomer.customer_type || 'OFFLINE').toUpperCase()}
+                        </span>
+                      </div>
                       <span className="text-[10px] font-mono text-[#8b9bb4]">{selectedCustomer.phone || selectedCustomer.mobile} {selectedCustomer.city ? `• ${selectedCustomer.city}` : ''}</span>
                     </div>
                   </div>
@@ -1290,13 +1360,11 @@ export default function SalesManager() {
                 {/* Left Products Deck with Dedicated Search Bar & Compact Cards */}
                 <div className="lg:col-span-6 space-y-2.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                   
-                  {/* Search Bar & Product Count Header */}
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-b border-white/5 pb-2">
                     <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5 shrink-0">
                       <Layers className="w-3.5 h-3.5" /> SELECT PRODUCT ({filteredDeskProducts.length})
                     </span>
 
-                    {/* Compact In-Desk Search Bar */}
                     <div className="relative flex-1 max-w-xs sm:ml-auto">
                       <input
                         type="text"
@@ -1309,7 +1377,6 @@ export default function SalesManager() {
                     </div>
                   </div>
 
-                  {/* Compact Product Grid Cards (Space Optimized) */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[360px] overflow-y-auto custom-scrollbar p-0.5">
                     {filteredDeskProducts.length === 0 ? (
                       <div className="col-span-full p-8 text-center text-[#8b9bb4] italic text-xs uppercase">
@@ -1542,7 +1609,6 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* Colours Swatches List */}
             <div className="space-y-1.5">
               <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
                 1. SELECT COLOUR SHADE ({modalAvailableColors.length} AVAILABLE):
@@ -1580,7 +1646,6 @@ export default function SalesManager() {
               </div>
             </div>
 
-            {/* Sizes List (All Assigned Sizes Enabled for Billing) */}
             {modalColor && (
               <div className="space-y-1.5">
                 <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
@@ -1611,7 +1676,6 @@ export default function SalesManager() {
               </div>
             )}
 
-            {/* Rate & Qty */}
             {modalColor && modalSize && (
               <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                 <div>
@@ -1738,7 +1802,7 @@ export default function SalesManager() {
                           <tr key={idx}>
                             <td className="py-2 px-2.5">
                               <span className="font-bold text-white block uppercase">{(it.product_name || it.product_id).toUpperCase()}</span>
-                              <span className="text-[10px] text-[#00d9ff] font-mono uppercase">
+                              <span className="text-[10px] text-[#00d9ff] font-mono">
                                 {(it.color || it.variant_color).toUpperCase()} • {(it.size || it.variant_size).toUpperCase()}
                               </span>
                             </td>
