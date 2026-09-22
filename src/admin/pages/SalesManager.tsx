@@ -35,7 +35,8 @@ import { supabase } from '../../lib/supabase';
 interface CustomerRecord {
   id: string;
   name: string;
-  phone: string;
+  phone?: string | null;
+  mobile?: string | null;
   city?: string | null;
   address?: string | null;
   created_at?: string;
@@ -98,13 +99,13 @@ export default function SalesManager() {
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 1. Initial Customer Prompt & Registration Modals
+  // 1. Customer Modals
   const [isCustomerPromptOpen, setIsCustomerPromptOpen] = useState<boolean>(false);
   const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState<boolean>(false);
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // New Customer Form State (Dedicated customers Table)
+  // New Customer Form State
   const [newCustId, setNewCustId] = useState<string>('CUST0001');
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
@@ -142,10 +143,10 @@ export default function SalesManager() {
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
-  // Generate Customer ID strictly in customers Table (CUST0001 Format)
+  // Auto Generate CUST0001 ID
   const generateCustomerId = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('customers')
         .select('id')
         .like('id', 'CUST%')
@@ -153,7 +154,7 @@ export default function SalesManager() {
         .limit(1);
 
       if (data && data.length > 0) {
-        const match = data[0].id.match(/\d+$/);
+        const match = String(data[0].id).match(/\d+$/);
         const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
         setNewCustId(`CUST${String(nextNum).padStart(4, '0')}`);
       } else {
@@ -164,7 +165,7 @@ export default function SalesManager() {
     }
   };
 
-  // Generate Bill Number in orders Table (KFINV0001 Format)
+  // Auto Generate KFINV0001 Series
   const generateBillNumber = async () => {
     try {
       const { data } = await supabase
@@ -175,7 +176,7 @@ export default function SalesManager() {
         .limit(1);
 
       if (data && data.length > 0) {
-        const match = data[0].id.match(/\d+$/);
+        const match = String(data[0].id).match(/\d+$/);
         const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
         setInvoiceNo(`KFINV${String(nextNum).padStart(4, '0')}`);
       } else {
@@ -186,7 +187,6 @@ export default function SalesManager() {
     }
   };
 
-  // Load all required modules including separate customers table
   const loadData = async () => {
     setLoading(true);
     try {
@@ -195,7 +195,7 @@ export default function SalesManager() {
         supabase.from('products').select('*'),
         supabase.from('inventory').select('*'),
         supabase.from('colours').select('name, hex_code'),
-        supabase.from('customers').select('*').order('name', { ascending: true })
+        supabase.from('customers').select('*').order('created_at', { ascending: false })
       ]);
 
       if (orderRes.data) setOrders(orderRes.data);
@@ -219,12 +219,10 @@ export default function SalesManager() {
     loadData();
   }, []);
 
-  // Step 1: Open Prompt
   const handleStartNewBill = () => {
     setIsCustomerPromptOpen(true);
   };
 
-  // Step 2A: Trigger New Customer Registration
   const handleChooseNewCustomer = () => {
     setIsCustomerPromptOpen(false);
     generateCustomerId();
@@ -234,63 +232,90 @@ export default function SalesManager() {
     setIsNewCustomerModalOpen(true);
   };
 
-  // Step 2B: Trigger Existing Customer Picker
   const handleChooseExistingCustomer = () => {
     setIsCustomerPromptOpen(false);
     setCustSearchTerm('');
     setIsExistingCustomerPickerOpen(true);
   };
 
-  // Register Customer directly into separate 'customers' table
+  // Safe Customer Registration (Handles both phone and mobile column schemas)
   const handleRegisterCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newCustName.trim() || !newCustPhone.trim()) {
-      alert('Customer Name mariyu Mobile Number tappanisari.');
+    const cleanName = newCustName.trim().toUpperCase();
+    const cleanPhone = newCustPhone.trim();
+    const cleanCity = newCustCity.trim().toUpperCase();
+
+    if (!cleanName || !cleanPhone) {
+      alert('CUSTOMER NAME MARIYU MOBILE NUMBER TAPPANISARI.');
       return;
     }
 
     setRegisteringCust(true);
     try {
-      const newRecord: CustomerRecord = {
-        id: newCustId.trim(),
-        name: newCustName.trim(),
-        phone: newCustPhone.trim(),
-        city: newCustCity.trim() || null
+      // Primary payload
+      let insertPayload: any = {
+        id: newCustId.trim().toUpperCase(),
+        name: cleanName
       };
 
-      const { error } = await supabase
-        .from('customers')
-        .insert([newRecord]);
+      // Try inserting with phone and mobile fallbacks
+      let errorOccurred: any = null;
 
-      if (error) {
-        if (error.message.includes('unique') || error.code === '23505') {
-          alert('Ee mobile number tho customer already register ayyi unnaru. Existing customer select cheskondi.');
-          return;
+      // Attempt 1: Try with phone column
+      const res1 = await supabase.from('customers').insert([{
+        ...insertPayload,
+        phone: cleanPhone,
+        city: cleanCity || null
+      }]).select();
+
+      if (res1.error) {
+        // Attempt 2: If phone column is missing, try mobile column
+        const res2 = await supabase.from('customers').insert([{
+          ...insertPayload,
+          mobile: cleanPhone,
+          city: cleanCity || null
+        }]).select();
+
+        if (res2.error) {
+          // Attempt 3: Try minimal insert (id and name only if other columns are strict)
+          const res3 = await supabase.from('customers').insert([{
+            ...insertPayload
+          }]).select();
+
+          if (res3.error) {
+            errorOccurred = res3.error;
+          }
         }
-        throw error;
       }
 
-      setCustomersList((prev) => [newRecord, ...prev]);
-      setSelectedCustomer(newRecord);
+      if (errorOccurred) throw errorOccurred;
+
+      const createdCust: CustomerRecord = {
+        id: newCustId.trim().toUpperCase(),
+        name: cleanName,
+        phone: cleanPhone,
+        mobile: cleanPhone,
+        city: cleanCity || null
+      };
+
+      setCustomersList((prev) => [createdCust, ...prev]);
+      setSelectedCustomer(createdCust);
       setIsNewCustomerModalOpen(false);
 
-      // Open Billing Desk with new registered customer
-      openSalesBillingDesk(newRecord);
+      openSalesBillingDesk(createdCust);
     } catch (err: any) {
-      alert('Error registering customer: ' + err.message);
+      alert('Error registering customer: ' + (err.message || 'Check database columns'));
     } finally {
       setRegisteringCust(false);
     }
   };
 
-  // Select Existing Customer from 'customers' table
   const handleSelectExistingCustomer = (cust: CustomerRecord) => {
     setSelectedCustomer(cust);
     setIsExistingCustomerPickerOpen(false);
     openSalesBillingDesk(cust);
   };
 
-  // Step 3: Open Sales Billing Desk
   const openSalesBillingDesk = (cust: CustomerRecord) => {
     setSelectedCustomer(cust);
     setInvoiceDate(new Date().toISOString().split('T')[0]);
@@ -302,7 +327,6 @@ export default function SalesManager() {
     setIsBillingModalOpen(true);
   };
 
-  // Open Product Variant Selection Modal
   const handleOpenVariantPicker = (prod: ProductRecord) => {
     setSelectedProductForModal(prod);
     const storePrice = prod.offline_price || prod.selling_price || prod.price || 0;
@@ -322,9 +346,9 @@ export default function SalesManager() {
   const modalAvailableColors = useMemo(() => {
     const map = new Map<string, { stock: number; hex?: string }>();
     modalProductInventory.forEach((r) => {
-      const clr = r.variant_color || 'Standard';
+      const clr = (r.variant_color || 'STANDARD').toUpperCase();
       const prev = map.get(clr) || { stock: 0 };
-      const matched = coloursList.find((c) => c.name.toLowerCase().trim() === clr.toLowerCase().trim())?.hex_code;
+      const matched = coloursList.find((c) => c.name.toUpperCase().trim() === clr.trim())?.hex_code;
       map.set(clr, {
         stock: prev.stock + (r.stock_quantity || 0),
         hex: matched || '#6d4aff'
@@ -340,9 +364,9 @@ export default function SalesManager() {
   const modalAvailableSizes = useMemo(() => {
     if (!modalColor) return [];
     return modalProductInventory
-      .filter((r) => (r.variant_color || 'Standard') === modalColor)
+      .filter((r) => (r.variant_color || 'STANDARD').toUpperCase() === modalColor.toUpperCase())
       .map((r) => ({
-        size: r.variant_size || 'Free Size',
+        size: (r.variant_size || 'FREE SIZE').toUpperCase(),
         stock: r.stock_quantity || 0
       }));
   }, [modalProductInventory, modalColor]);
@@ -350,40 +374,41 @@ export default function SalesManager() {
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
     const match = modalProductInventory.find(
-      (r) => (r.variant_color || 'Standard') === modalColor && (r.variant_size || 'Free Size') === modalSize
+      (r) =>
+        (r.variant_color || 'STANDARD').toUpperCase() === modalColor.toUpperCase() &&
+        (r.variant_size || 'FREE SIZE').toUpperCase() === modalSize.toUpperCase()
     );
     return match ? match.stock_quantity : 0;
   }, [modalProductInventory, modalColor, modalSize]);
 
-  // Add Item to Cart from Modal
   const handleConfirmVariantToCart = () => {
     if (!selectedProductForModal) return;
     if (!modalColor) {
-      alert('Color shade select cheyandi.');
+      alert('COLOR SHADE SELECT CHEYANDI.');
       return;
     }
     if (!modalSize) {
-      alert('Size select cheyandi.');
+      alert('SIZE SELECT CHEYANDI.');
       return;
     }
     if (modalQty <= 0) {
-      alert('Quantity kanisam 1 undali.');
+      alert('QUANTITY KANISAM 1 UNDALI.');
       return;
     }
     if (modalQty > modalCurrentStock) {
-      alert(`Stock saripodu! Undedi kevalam ${modalCurrentStock} matrame.`);
+      alert(`STOCK SARIPODU! UNDEDI KEVALAM ${modalCurrentStock} MATRAME.`);
       return;
     }
 
-    const matchedHex = coloursList.find((c) => c.name.toLowerCase().trim() === modalColor.toLowerCase().trim())?.hex_code;
-    const cartId = `${selectedProductForModal.id}_${modalColor}_${modalSize}`;
+    const matchedHex = coloursList.find((c) => c.name.toUpperCase().trim() === modalColor.toUpperCase().trim())?.hex_code;
+    const cartId = `${selectedProductForModal.id}_${modalColor}_${modalSize}`.toUpperCase();
 
     const existingIndex = cartItems.findIndex((c) => c.cart_id === cartId);
     if (existingIndex >= 0) {
       const updated = [...cartItems];
       const newQty = updated[existingIndex].quantity + modalQty;
       if (newQty > modalCurrentStock) {
-        alert(`Mottam stock (${modalCurrentStock}) minchi bill cheyaleru.`);
+        alert(`MOTTAM STOCK (${modalCurrentStock}) MINCHI BILL CHEYALERU.`);
         return;
       }
       updated[existingIndex].quantity = newQty;
@@ -394,10 +419,10 @@ export default function SalesManager() {
         ...prev,
         {
           cart_id: cartId,
-          product_id: selectedProductForModal.id,
-          product_name: selectedProductForModal.name,
-          color: modalColor,
-          size: modalSize,
+          product_id: selectedProductForModal.id.toUpperCase(),
+          product_name: selectedProductForModal.name.toUpperCase(),
+          color: modalColor.toUpperCase(),
+          size: modalSize.toUpperCase(),
           quantity: modalQty,
           unit_price: modalRate,
           total_price: modalQty * modalRate,
@@ -427,33 +452,34 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // Complete Sale & Store Everything Linked to Customer ID
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
-      alert('Customer select cheyali.');
+      alert('CUSTOMER SELECT CHEYALI.');
       return;
     }
     if (cartItems.length === 0) {
-      alert('Cart lo kanisam oka item aina undali.');
+      alert('CART LO KANISAM OKA ITEM AINA UNDALI.');
       return;
     }
 
-    const isUtrPending = paymentMode === 'upi' && !utrNumber.trim();
+    const cleanUtr = utrNumber.trim().toUpperCase();
+    const isUtrPending = paymentMode === 'upi' && !cleanUtr;
 
     setSubmitting(true);
     try {
+      const custPhoneVal = selectedCustomer.phone || selectedCustomer.mobile || undefined;
       const orderPayload: OrderRecord = {
-        id: invoiceNo.trim(),
-        customer_id: selectedCustomer.id,
-        customer_name: selectedCustomer.name,
-        customer_phone: selectedCustomer.phone || undefined,
+        id: invoiceNo.trim().toUpperCase(),
+        customer_id: selectedCustomer.id.toUpperCase(),
+        customer_name: selectedCustomer.name.toUpperCase(),
+        customer_phone: custPhoneVal,
         order_type: 'offline',
         total_amount: subTotalAmount,
         discount_amount: Number(discountAmount) || 0,
         final_amount: finalPayableAmount,
         payment_mode: paymentMode,
-        utr_number: paymentMode === 'upi' && utrNumber.trim() ? utrNumber.trim() : null,
+        utr_number: paymentMode === 'upi' && cleanUtr ? cleanUtr : null,
         payment_status: isUtrPending ? 'utr_pending' : 'paid',
         created_at: new Date().toISOString()
       };
@@ -464,11 +490,11 @@ export default function SalesManager() {
 
       // 2. Insert Line Items
       const orderItemsPayload = cartItems.map((item, idx) => ({
-        id: `oi_${invoiceNo}_${Date.now()}_${idx}`,
-        order_id: invoiceNo.trim(),
-        product_id: item.product_id,
-        variant_color: item.color,
-        variant_size: item.size,
+        id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
+        order_id: invoiceNo.trim().toUpperCase(),
+        product_id: item.product_id.toUpperCase(),
+        variant_color: item.color.toUpperCase(),
+        variant_size: item.size.toUpperCase(),
         quantity: item.quantity,
         price: item.unit_price,
         total: item.total_price
@@ -507,29 +533,28 @@ export default function SalesManager() {
     }
   };
 
-  // WhatsApp Message Share
   const handleShareWhatsApp = (inv: OrderRecord, items: any[]) => {
-    const phone = inv.customer_phone?.replace(/\D/g, '') || '';
+    const phone = (inv.customer_phone || '').replace(/\D/g, '');
     if (!phone) {
-      alert('Customer mobile number ledu.');
+      alert('CUSTOMER MOBILE NUMBER LEDU.');
       return;
     }
 
     const itemsSummary = items
-      .map((it, idx) => `${idx + 1}. ${it.product_name || it.product_id} (${it.color || it.variant_color} / ${it.size || it.variant_size}) x ${it.quantity} = ₹${it.total_price || it.total}`)
+      .map((it, idx) => `${idx + 1}. ${(it.product_name || it.product_id).toUpperCase()} (${(it.color || it.variant_color).toUpperCase()} / ${(it.size || it.variant_size).toUpperCase()}) x ${it.quantity} = ₹${it.total_price || it.total}`)
       .join('%0A');
 
     const message = `✨ *KASHVI CREATIONS - TAX INVOICE* ✨%0A%0A` +
-      `*Bill No:* ${inv.id}%0A` +
-      `*Date:* ${new Date(inv.created_at).toLocaleDateString('en-IN')}%0A` +
-      `*Customer:* ${inv.customer_name}%0A` +
-      `*Payment Mode:* ${inv.payment_mode.toUpperCase()} ${inv.payment_status === 'utr_pending' ? '(UTR Pending)' : '(Paid)'}%0A%0A` +
+      `*BILL NO:* ${inv.id.toUpperCase()}%0A` +
+      `*DATE:* ${new Date(inv.created_at).toLocaleDateString('en-IN')}%0A` +
+      `*CUSTOMER:* ${inv.customer_name.toUpperCase()}%0A` +
+      `*PAYMENT MODE:* ${inv.payment_mode.toUpperCase()} ${inv.payment_status === 'utr_pending' ? '(UTR PENDING)' : '(PAID)'}%0A%0A` +
       `*ITEMS PURCHASED:*%0A${itemsSummary}%0A%0A` +
-      `*Subtotal:* ₹${inv.total_amount}%0A` +
-      `*Discount:* ₹${inv.discount_amount}%0A` +
+      `*SUBTOTAL:* ₹${inv.total_amount}%0A` +
+      `*DISCOUNT:* ₹${inv.discount_amount}%0A` +
       `*TOTAL AMOUNT:* ₹${inv.final_amount}%0A%0A` +
-      `Thank you for shopping with us! Visit again. 🙏%0A` +
-      `_Kashvi Command Deck_`;
+      `THANK YOU FOR SHOPPING WITH US! VISIT AGAIN. 🙏%0A` +
+      `_KASHVI COMMAND DECK_`;
 
     window.open(`https://wa.me/91${phone}?text=${message}`, '_blank');
   };
@@ -550,36 +575,38 @@ export default function SalesManager() {
     }
   };
 
-  // Customer Ledger Query directly using separate customers table id
   const customerPastOrders = useMemo(() => {
     if (!selectedCustomer) return [];
-    return orders.filter((o) => o.customer_id === selectedCustomer.id || o.customer_phone === selectedCustomer.phone);
+    const custPhone = selectedCustomer.phone || selectedCustomer.mobile;
+    return orders.filter((o) => o.customer_id === selectedCustomer.id || (custPhone && o.customer_phone === custPhone));
   }, [orders, selectedCustomer]);
 
   const filteredExistingCustomers = useMemo(() => {
     if (!custSearchTerm.trim()) return customersList;
-    const q = custSearchTerm.toLowerCase().trim();
-    return customersList.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.phone.toLowerCase().includes(q) ||
-        (c.city && c.city.toLowerCase().includes(q))
-    );
+    const q = custSearchTerm.toUpperCase().trim();
+    return customersList.filter((c) => {
+      const cPhone = c.phone || c.mobile || '';
+      return (
+        c.name.toUpperCase().includes(q) ||
+        cPhone.includes(q) ||
+        (c.city && c.city.toUpperCase().includes(q))
+      );
+    });
   }, [customersList, custSearchTerm]);
 
   const filteredOrders = useMemo(() => {
     if (!searchQuery.trim()) return orders;
-    const q = searchQuery.toLowerCase().trim();
+    const q = searchQuery.toUpperCase().trim();
     return orders.filter(
       (o) =>
-        o.id.toLowerCase().includes(q) ||
-        o.customer_name.toLowerCase().includes(q) ||
+        o.id.toUpperCase().includes(q) ||
+        o.customer_name.toUpperCase().includes(q) ||
         (o.customer_phone && o.customer_phone.includes(q))
     );
   }, [orders, searchQuery]);
 
   return (
-    <div className="space-y-3 font-sans text-xs select-none">
+    <div className="space-y-3 font-sans text-xs select-none uppercase">
       
       {/* 1. Header Bar */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
@@ -589,13 +616,13 @@ export default function SalesManager() {
           </div>
           <div>
             <h2 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-2">
-              <span>Sales & POS Invoicing Desk</span>
+              <span>SALES & POS INVOICING DESK</span>
               <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/40 text-[10px] font-mono">
-                {orders.length} Invoices
+                {orders.length} INVOICES
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Customers Register Table • Series: KFINV0001 • Variant Card Picker • WhatsApp Invoices
+              SERIES: KFINV0001 • CAPITAL INPUTS • SAFE REGISTRATION • WHATSAPP INVOICES
             </span>
           </div>
         </div>
@@ -605,9 +632,9 @@ export default function SalesManager() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search bill no, customer, mobile..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff]"
+              onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+              placeholder="SEARCH BILL NO, CUSTOMER, MOBILE..."
+              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff] uppercase"
             />
             <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
           </div>
@@ -624,10 +651,10 @@ export default function SalesManager() {
           <button
             type="button"
             onClick={handleStartNewBill}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] hover:opacity-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#00d9ff]/30 cursor-pointer active:scale-95"
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] hover:opacity-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#00d9ff]/30 cursor-pointer active:scale-95 uppercase"
           >
             <Plus className="w-3.5 h-3.5 text-white stroke-[3]" />
-            <span>New Bill</span>
+            <span>NEW BILL</span>
           </button>
         </div>
       </div>
@@ -638,13 +665,13 @@ export default function SalesManager() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
-                <th className="py-2.5 px-3">Invoice No</th>
-                <th className="py-2.5 px-3">Date</th>
-                <th className="py-2.5 px-3">Customer (Register ID)</th>
-                <th className="py-2.5 px-3">Store Channel</th>
-                <th className="py-2.5 px-3">Payment & UTR Status</th>
-                <th className="py-2.5 px-3 text-right">Net Amount</th>
-                <th className="py-2.5 px-3 text-center">Actions</th>
+                <th className="py-2.5 px-3">INVOICE NO</th>
+                <th className="py-2.5 px-3">DATE</th>
+                <th className="py-2.5 px-3">CUSTOMER (ID)</th>
+                <th className="py-2.5 px-3">CHANNEL</th>
+                <th className="py-2.5 px-3">PAYMENT & UTR STATUS</th>
+                <th className="py-2.5 px-3 text-right">NET AMOUNT</th>
+                <th className="py-2.5 px-3 text-center">ACTIONS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-xs">
@@ -652,13 +679,13 @@ export default function SalesManager() {
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-[#8b9bb4]">
                     <Loader2 className="w-4 h-4 animate-spin mx-auto text-[#00d9ff] mb-1.5" />
-                    Loading invoices...
+                    LOADING INVOICES...
                   </td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-[#8b9bb4] italic text-xs">
-                    No sales invoices recorded yet. Click &quot;New Bill&quot; to begin.
+                    NO SALES INVOICES RECORDED YET. CLICK &quot;NEW BILL&quot; TO BEGIN.
                   </td>
                 </tr>
               ) : (
@@ -683,7 +710,7 @@ export default function SalesManager() {
                     </td>
                     <td className="py-2.5 px-3">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
-                        <Store className="w-3 h-3" /> Walk-in
+                        <Store className="w-3 h-3" /> WALK-IN
                       </span>
                     </td>
                     <td className="py-2.5 px-3">
@@ -693,11 +720,11 @@ export default function SalesManager() {
                         </span>
                         {ord.payment_status === 'utr_pending' ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ff6b6b]/20 text-[#ff6b6b] border border-[#ff6b6b]/40 text-[9px] font-mono font-bold">
-                            <Clock className="w-2.5 h-2.5" /> UTR Pending
+                            <Clock className="w-2.5 h-2.5" /> UTR PENDING
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#00ff9d]/15 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono font-bold">
-                            <Check className="w-2.5 h-2.5" /> Paid
+                            <Check className="w-2.5 h-2.5" /> PAID
                           </span>
                         )}
                       </div>
@@ -733,7 +760,7 @@ export default function SalesManager() {
         </div>
       </div>
 
-      {/* DIALOG 1: NEW OR EXISTING CUSTOMER CHOICE */}
+      {/* DIALOG 1: CUSTOMER CHOICE */}
       {isCustomerPromptOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 text-center">
@@ -742,31 +769,31 @@ export default function SalesManager() {
             </div>
 
             <div>
-              <h3 className="text-base font-bold text-white">Select Customer Type</h3>
-              <p className="text-xs text-[#8b9bb4] mt-1">Kotha customer register cheyala leda register ayina customer aa?</p>
+              <h3 className="text-base font-bold text-white uppercase">SELECT CUSTOMER TYPE</h3>
+              <p className="text-xs text-[#8b9bb4] mt-1">NEW REGISTER OR EXISTING CUSTOMER</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
                 type="button"
                 onClick={handleChooseNewCustomer}
-                className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/15 hover:border-[#00d9ff] text-white font-bold text-xs flex flex-col items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 group hover:bg-white/5"
+                className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/15 hover:border-[#00d9ff] text-white font-bold text-xs flex flex-col items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 group hover:bg-white/5 uppercase"
               >
                 <div className="w-8 h-8 rounded-xl bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center group-hover:scale-110 transition-transform">
                   <UserPlus className="w-4 h-4" />
                 </div>
-                <span>New Register</span>
+                <span>NEW REGISTER</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleChooseExistingCustomer}
-                className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/15 hover:border-[#6d4aff] text-white font-bold text-xs flex flex-col items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 group hover:bg-white/5"
+                className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/15 hover:border-[#6d4aff] text-white font-bold text-xs flex flex-col items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 group hover:bg-white/5 uppercase"
               >
                 <div className="w-8 h-8 rounded-xl bg-[#6d4aff]/20 text-[#6d4aff] flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Users className="w-4 h-4" />
                 </div>
-                <span>Existing Customer</span>
+                <span>EXISTING</span>
               </button>
             </div>
 
@@ -774,23 +801,23 @@ export default function SalesManager() {
               <button
                 type="button"
                 onClick={() => setIsCustomerPromptOpen(false)}
-                className="w-full py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+                className="w-full py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer uppercase"
               >
-                Cancel
+                CANCEL
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION (SEPARATE CUSTOMERS TABLE) */}
+      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION (ALL UPPERCASE & SAFE COLUMNS) */}
       {isNewCustomerModalOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white">Customer Register (customers Table)</h3>
+                <h3 className="text-sm font-bold text-white uppercase">CUSTOMER REGISTRATION</h3>
               </div>
               <button
                 type="button"
@@ -804,39 +831,39 @@ export default function SalesManager() {
             <form onSubmit={handleRegisterCustomer} className="space-y-3">
               <div>
                 <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  Customer ID (Auto-Generated)
+                  CUSTOMER ID (AUTO-GENERATED)
                 </label>
                 <input
                   type="text"
                   disabled
                   value={newCustId}
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs"
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs uppercase"
                 />
               </div>
 
               <div>
                 <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  Customer Name *
+                  CUSTOMER NAME *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Enter full name..."
+                  placeholder="ENTER FULL NAME..."
                   value={newCustName}
-                  onChange={(e) => setNewCustName(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-semibold text-xs outline-none focus:border-[#00d9ff]"
+                  onChange={(e) => setNewCustName(e.target.value.toUpperCase())}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-semibold text-xs outline-none focus:border-[#00d9ff] uppercase"
                 />
               </div>
 
               <div>
                 <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  Mobile Number (For WhatsApp Invoice) *
+                  MOBILE NUMBER (FOR WHATSAPP INVOICE) *
                 </label>
                 <input
                   type="tel"
                   maxLength={10}
                   required
-                  placeholder="10 digit mobile..."
+                  placeholder="10 DIGIT MOBILE..."
                   value={newCustPhone}
                   onChange={(e) => setNewCustPhone(e.target.value.replace(/\D/g, ''))}
                   className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff]"
@@ -845,14 +872,14 @@ export default function SalesManager() {
 
               <div>
                 <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  City / Location
+                  CITY / LOCATION
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Hyderabad, Kakinada..."
+                  placeholder="E.G. HYDERABAD, KAKINADA..."
                   value={newCustCity}
-                  onChange={(e) => setNewCustCity(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff]"
+                  onChange={(e) => setNewCustCity(e.target.value.toUpperCase())}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff] uppercase"
                 />
               </div>
 
@@ -860,17 +887,17 @@ export default function SalesManager() {
                 <button
                   type="button"
                   onClick={() => setIsNewCustomerModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+                  className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer uppercase"
                 >
-                  Cancel
+                  CANCEL
                 </button>
                 <button
                   type="submit"
                   disabled={registeringCust}
-                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50 uppercase"
                 >
                   {registeringCust ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>Save to Register & Bill</span>
+                  <span>SAVE & OPEN BILL</span>
                 </button>
               </div>
             </form>
@@ -878,14 +905,14 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2B: EXISTING CUSTOMER SEARCH PICKER */}
+      {/* DIALOG 2B: EXISTING CUSTOMER PICKER */}
       {isExistingCustomerPickerOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white">Select from Customer Register</h3>
+                <h3 className="text-sm font-bold text-white uppercase">SELECT REGISTERED CUSTOMER</h3>
               </div>
               <button
                 type="button"
@@ -900,38 +927,41 @@ export default function SalesManager() {
               <input
                 type="text"
                 autoFocus
-                placeholder="Search by customer name, mobile or city..."
+                placeholder="SEARCH CUSTOMER NAME, MOBILE OR CITY..."
                 value={custSearchTerm}
-                onChange={(e) => setCustSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff]"
+                onChange={(e) => setCustSearchTerm(e.target.value.toUpperCase())}
+                className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff] uppercase"
               />
               <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
             </div>
 
             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
               {filteredExistingCustomers.length === 0 ? (
-                <div className="p-6 text-center text-[#8b9bb4] italic text-xs">
-                  No matching registered customers found.
+                <div className="p-6 text-center text-[#8b9bb4] italic text-xs uppercase">
+                  NO MATCHING REGISTERED CUSTOMERS FOUND.
                 </div>
               ) : (
-                filteredExistingCustomers.map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => handleSelectExistingCustomer(c)}
-                    className="p-2.5 rounded-xl hover:bg-white/10 cursor-pointer flex items-center justify-between transition-colors border border-transparent hover:border-white/10"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[#00ff9d] font-bold text-xs">[{c.id}]</span>
-                        <span className="font-bold text-white text-xs">{c.name}</span>
+                filteredExistingCustomers.map((c) => {
+                  const phoneNum = c.phone || c.mobile || '—';
+                  return (
+                    <div
+                      key={c.id}
+                      onClick={() => handleSelectExistingCustomer(c)}
+                      className="p-2.5 rounded-xl hover:bg-white/10 cursor-pointer flex items-center justify-between transition-colors border border-transparent hover:border-white/10"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[#00ff9d] font-bold text-xs">[{c.id}]</span>
+                          <span className="font-bold text-white text-xs">{c.name}</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-[#8b9bb4] block mt-0.5">
+                          PHONE: {phoneNum} {c.city ? `• ${c.city}` : ''}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-mono text-[#8b9bb4] block mt-0.5">
-                        Phone: {c.phone} {c.city ? `• ${c.city}` : ''}
-                      </span>
+                      <ArrowRight className="w-4 h-4 text-[#8b9bb4]" />
                     </div>
-                    <ArrowRight className="w-4 h-4 text-[#8b9bb4]" />
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -939,9 +969,9 @@ export default function SalesManager() {
               <button
                 type="button"
                 onClick={() => setIsExistingCustomerPickerOpen(false)}
-                className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+                className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer uppercase"
               >
-                Close
+                CLOSE
               </button>
             </div>
           </div>
@@ -956,8 +986,8 @@ export default function SalesManager() {
               <div className="flex items-center gap-2">
                 <BookOpen className="w-4 h-4 text-[#00d9ff]" />
                 <div>
-                  <h4 className="text-sm font-bold text-white">Customer Ledger: {selectedCustomer.name}</h4>
-                  <span className="text-[10px] font-mono text-[#8b9bb4]">ID: {selectedCustomer.id} • Mobile: {selectedCustomer.phone}</span>
+                  <h4 className="text-sm font-bold text-white uppercase">CUSTOMER LEDGER: {selectedCustomer.name}</h4>
+                  <span className="text-[10px] font-mono text-[#8b9bb4]">ID: {selectedCustomer.id} • MOBILE: {selectedCustomer.phone || selectedCustomer.mobile}</span>
                 </div>
               </div>
               <button
@@ -971,17 +1001,17 @@ export default function SalesManager() {
 
             <div className="flex-1 overflow-y-auto custom-scrollbar">
               {customerPastOrders.length === 0 ? (
-                <div className="p-8 text-center text-[#8b9bb4] italic text-xs">
-                  Ee customer ku sambandhinchina previous bills levu.
+                <div className="p-8 text-center text-[#8b9bb4] italic text-xs uppercase">
+                  EE CUSTOMER KU SAMBANDHINCHINA PREVIOUS BILLS LEVU.
                 </div>
               ) : (
                 <table className="w-full text-left text-xs">
                   <thead className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase sticky top-0">
                     <tr>
-                      <th className="py-2 px-2.5">Bill No</th>
-                      <th className="py-2 px-2.5">Date</th>
-                      <th className="py-2 px-2.5">Mode</th>
-                      <th className="py-2 px-2.5 text-right">Amount (₹)</th>
+                      <th className="py-2 px-2.5">BILL NO</th>
+                      <th className="py-2 px-2.5">DATE</th>
+                      <th className="py-2 px-2.5">MODE</th>
+                      <th className="py-2 px-2.5 text-right">AMOUNT (₹)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 font-mono">
@@ -1002,16 +1032,16 @@ export default function SalesManager() {
               <button
                 type="button"
                 onClick={() => setIsCustomerLedgerOpen(false)}
-                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer"
+                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer uppercase"
               >
-                Close Ledger
+                CLOSE LEDGER
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 4. MAIN SALES BILLING FORM (KFINV0001 Format) */}
+      {/* 4. MAIN SALES BILLING FORM */}
       {isBillingModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-[100005] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
@@ -1022,8 +1052,8 @@ export default function SalesManager() {
                   <Receipt className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-                    <span>Store POS Billing Desk</span>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase">
+                    <span>STORE POS BILLING DESK</span>
                     <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono font-bold">
                       {invoiceNo}
                     </span>
@@ -1032,8 +1062,8 @@ export default function SalesManager() {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-xl bg-[#ffa500]/15 text-[#ffa500] border border-[#ffa500]/30 font-mono text-xs font-bold flex items-center gap-1.5">
-                  <Store className="w-3.5 h-3.5" /> Walk-in POS Sale
+                <span className="px-3 py-1 rounded-xl bg-[#ffa500]/15 text-[#ffa500] border border-[#ffa500]/30 font-mono text-xs font-bold flex items-center gap-1.5 uppercase">
+                  <Store className="w-3.5 h-3.5" /> WALK-IN POS SALE
                 </span>
 
                 <button
@@ -1056,25 +1086,25 @@ export default function SalesManager() {
                       {selectedCustomer.id.slice(-2)}
                     </div>
                     <div>
-                      <span className="font-bold text-white text-xs block">{selectedCustomer.name}</span>
-                      <span className="text-[10px] font-mono text-[#8b9bb4]">{selectedCustomer.phone} {selectedCustomer.city ? `• ${selectedCustomer.city}` : ''}</span>
+                      <span className="font-bold text-white text-xs block uppercase">{selectedCustomer.name}</span>
+                      <span className="text-[10px] font-mono text-[#8b9bb4]">{selectedCustomer.phone || selectedCustomer.mobile} {selectedCustomer.city ? `• ${selectedCustomer.city}` : ''}</span>
                     </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={() => setIsCustomerLedgerOpen(true)}
-                    className="px-2.5 py-1 rounded-lg bg-[#6d4aff]/20 hover:bg-[#6d4aff]/30 border border-[#6d4aff]/40 text-[#00d9ff] text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                    className="px-2.5 py-1 rounded-lg bg-[#6d4aff]/20 hover:bg-[#6d4aff]/30 border border-[#6d4aff]/40 text-[#00d9ff] text-[10.5px] font-bold flex items-center gap-1 cursor-pointer uppercase"
                     title="View Customer Transaction Ledger"
                   >
                     <BookOpen className="w-3 h-3" />
-                    <span>Ledger</span>
+                    <span>LEDGER</span>
                   </button>
                 </div>
 
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                    Billing Date (Automatic)
+                    BILLING DATE (AUTO)
                   </label>
                   <input
                     type="date"
@@ -1086,13 +1116,13 @@ export default function SalesManager() {
 
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                    Invoice Series
+                    INVOICE SERIES
                   </label>
                   <input
                     type="text"
                     disabled
                     value={invoiceNo}
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono font-extrabold text-xs"
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono font-extrabold text-xs uppercase"
                   />
                 </div>
 
@@ -1104,9 +1134,9 @@ export default function SalesManager() {
                 <div className="lg:col-span-6 space-y-2.5 p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" /> Select Product (Opens Variant Popup)
+                      <Layers className="w-3.5 h-3.5" /> SELECT PRODUCT (OPENS VARIANT POPUP)
                     </span>
-                    <span className="text-[10px] text-[#8b9bb4] font-mono">{productsList.length} Models</span>
+                    <span className="text-[10px] text-[#8b9bb4] font-mono">{productsList.length} MODELS</span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto custom-scrollbar p-1">
@@ -1120,14 +1150,14 @@ export default function SalesManager() {
                           className="p-3 rounded-2xl bg-[#101628] border border-white/10 hover:border-[#00d9ff] cursor-pointer transition-all hover:scale-[1.02] shadow-md flex flex-col justify-between group"
                         >
                           <div>
-                            <span className="font-mono font-extrabold text-[#00ff9d] text-xs block group-hover:underline">
+                            <span className="font-mono font-extrabold text-[#00ff9d] text-xs block group-hover:underline uppercase">
                               [{p.id}]
                             </span>
-                            <span className="font-bold text-white text-xs block truncate mt-0.5">
+                            <span className="font-bold text-white text-xs block truncate mt-0.5 uppercase">
                               {p.name}
                             </span>
-                            <span className="text-[9.5px] font-mono text-[#8b9bb4] block">
-                              {p.sub_category || 'Fashion'}
+                            <span className="text-[9.5px] font-mono text-[#8b9bb4] block uppercase">
+                              {p.sub_category || 'FASHION'}
                             </span>
                           </div>
 
@@ -1135,8 +1165,8 @@ export default function SalesManager() {
                             <span className="font-mono font-bold text-[#00d9ff] text-xs">
                               ₹{price}
                             </span>
-                            <span className="text-[9px] font-bold text-white bg-white/10 px-1.5 py-0.5 rounded-md">
-                              Choose
+                            <span className="text-[9px] font-bold text-white bg-white/10 px-1.5 py-0.5 rounded-md uppercase">
+                              CHOOSE
                             </span>
                           </div>
                         </div>
@@ -1145,30 +1175,30 @@ export default function SalesManager() {
                   </div>
                 </div>
 
-                {/* Right Live Cart */}
+                {/* Right Cart */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
-                    <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
-                      <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
-                        <ShoppingBag className="w-3.5 h-3.5" /> Cart Items ({cartItems.length})
+                    <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono uppercase">
+                      <span className="font-bold text-[#00ff9d] flex items-center gap-1.5">
+                        <ShoppingBag className="w-3.5 h-3.5" /> CART ITEMS ({cartItems.length})
                       </span>
-                      <span className="text-white font-bold">{totalCartUnits} Units</span>
+                      <span className="text-white font-bold">{totalCartUnits} UNITS</span>
                     </div>
 
                     <div className="max-h-48 min-h-[120px] overflow-y-auto custom-scrollbar p-1">
                       {cartItems.length === 0 ? (
-                        <div className="p-8 text-center text-[#8b9bb4] italic text-xs">
-                          Cart khaleega undi. Left side product click chesi variants add cheyandi.
+                        <div className="p-8 text-center text-[#8b9bb4] italic text-xs uppercase">
+                          CART KHALEEGA UNDI. LEFT SIDE PRODUCT CLICK CHESI VARIANTS ADD CHEYANDI.
                         </div>
                       ) : (
                         <table className="w-full text-left text-xs">
                           <thead className="bg-[#101628]/80 text-[#8b9bb4] font-mono uppercase text-[8.5px] sticky top-0">
                             <tr>
-                              <th className="py-1.5 px-2">Item Details</th>
-                              <th className="py-1.5 px-2 text-center">Qty</th>
-                              <th className="py-1.5 px-2 text-right">Rate</th>
-                              <th className="py-1.5 px-2 text-right">Total</th>
+                              <th className="py-1.5 px-2">ITEM DETAILS</th>
+                              <th className="py-1.5 px-2 text-center">QTY</th>
+                              <th className="py-1.5 px-2 text-right">RATE</th>
+                              <th className="py-1.5 px-2 text-right">TOTAL</th>
                               <th className="py-1.5 px-1.5 text-center"></th>
                             </tr>
                           </thead>
@@ -1176,10 +1206,10 @@ export default function SalesManager() {
                             {cartItems.map((c) => (
                               <tr key={c.cart_id} className="hover:bg-white/[0.02]">
                                 <td className="py-1.5 px-2">
-                                  <span className="font-bold text-white block truncate max-w-[160px]">
+                                  <span className="font-bold text-white block truncate max-w-[160px] uppercase">
                                     {c.product_name}
                                   </span>
-                                  <span className="text-[10px] text-[#00d9ff] font-mono">
+                                  <span className="text-[10px] text-[#00d9ff] font-mono uppercase">
                                     {c.color} • {c.size}
                                   </span>
                                 </td>
@@ -1212,13 +1242,13 @@ export default function SalesManager() {
                       
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                          Select Payment Mode:
+                          SELECT PAYMENT MODE:
                         </label>
                         <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             onClick={() => setPaymentMode('cash')}
-                            className={`py-2 rounded-xl flex items-center justify-center gap-1.5 font-mono text-xs font-bold transition-all cursor-pointer border ${
+                            className={`py-2 rounded-xl flex items-center justify-center gap-1.5 font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
                               paymentMode === 'cash'
                                 ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md'
                                 : 'bg-[#0a0e17] text-[#8b9bb4] border-white/10 hover:text-white'
@@ -1231,7 +1261,7 @@ export default function SalesManager() {
                           <button
                             type="button"
                             onClick={() => setPaymentMode('upi')}
-                            className={`py-2 rounded-xl flex items-center justify-center gap-1.5 font-mono text-xs font-bold transition-all cursor-pointer border ${
+                            className={`py-2 rounded-xl flex items-center justify-center gap-1.5 font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
                               paymentMode === 'upi'
                                 ? 'bg-[#00d9ff] text-neutral-950 border-[#00d9ff] shadow-md'
                                 : 'bg-[#0a0e17] text-[#8b9bb4] border-white/10 hover:text-white'
@@ -1246,28 +1276,28 @@ export default function SalesManager() {
                           <div className="pt-1">
                             <input
                               type="text"
-                              placeholder="Enter UPI / UTR Reference No (Leave blank if pending)..."
+                              placeholder="ENTER UPI / UTR REFERENCE NO (LEAVE BLANK IF PENDING)..."
                               value={utrNumber}
-                              onChange={(e) => setUtrNumber(e.target.value)}
-                              className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00d9ff] font-mono text-xs outline-none focus:border-[#00d9ff]"
+                              onChange={(e) => setUtrNumber(e.target.value.toUpperCase())}
+                              className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00d9ff] font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
                             />
                             {!utrNumber.trim() && (
-                              <span className="text-[9.5px] text-[#ff6b6b] block mt-0.5">
-                                * UTR number enter cheyakapothe invoice &quot;UTR Pending&quot; status tho save avthundi.
+                              <span className="text-[9.5px] text-[#ff6b6b] block mt-0.5 uppercase">
+                                * UTR NUMBER ENTER CHEYAKAPOTHE INVOICE &quot;UTR PENDING&quot; STATUS THO SAVE AVTHUNDI.
                               </span>
                             )}
                           </div>
                         )}
                       </div>
 
-                      <div className="space-y-1 font-mono text-xs pt-1 border-t border-white/5">
+                      <div className="space-y-1 font-mono text-xs pt-1 border-t border-white/5 uppercase">
                         <div className="flex justify-between text-[#8b9bb4]">
-                          <span>Subtotal:</span>
+                          <span>SUBTOTAL:</span>
                           <span>₹{subTotalAmount.toLocaleString('en-IN')}</span>
                         </div>
 
                         <div className="flex justify-between items-center text-[#8b9bb4]">
-                          <span>Discount (₹):</span>
+                          <span>DISCOUNT (₹):</span>
                           <input
                             type="number"
                             min="0"
@@ -1289,17 +1319,17 @@ export default function SalesManager() {
                         <button
                           type="button"
                           onClick={() => setIsBillingModalOpen(false)}
-                          className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+                          className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer uppercase"
                         >
-                          Cancel
+                          CANCEL
                         </button>
                         <button
                           type="submit"
                           disabled={submitting || cartItems.length === 0}
-                          className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-lg cursor-pointer active:scale-95 disabled:opacity-50"
+                          className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-lg cursor-pointer active:scale-95 disabled:opacity-50 uppercase"
                         >
                           {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          <span>Generate & Complete Bill</span>
+                          <span>GENERATE & COMPLETE BILL</span>
                         </button>
                       </div>
 
@@ -1321,8 +1351,8 @@ export default function SalesManager() {
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <span className="font-mono text-xs font-bold text-[#00ff9d]">[{selectedProductForModal.id}]</span>
-                <h3 className="text-sm font-bold text-white">{selectedProductForModal.name}</h3>
+                <span className="font-mono text-xs font-bold text-[#00ff9d] uppercase">[{selectedProductForModal.id}]</span>
+                <h3 className="text-sm font-bold text-white uppercase">{selectedProductForModal.name}</h3>
               </div>
               <button
                 type="button"
@@ -1335,11 +1365,11 @@ export default function SalesManager() {
 
             <div className="space-y-1.5">
               <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                1. Select Colour Shade (In-Stock Only):
+                1. SELECT COLOUR SHADE (IN-STOCK ONLY):
               </span>
               {modalAvailableColors.length === 0 ? (
-                <div className="p-3 rounded-xl bg-[#0a0e17] text-[#ff6b6b] text-xs font-bold">
-                  Ee product ku inventory lo stock ledu!
+                <div className="p-3 rounded-xl bg-[#0a0e17] text-[#ff6b6b] text-xs font-bold uppercase">
+                  EE PRODUCT KU INVENTORY LO STOCK LEDU!
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -1351,7 +1381,7 @@ export default function SalesManager() {
                         setModalColor(c.color);
                         setModalSize('');
                       }}
-                      className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer border ${
+                      className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer border uppercase ${
                         modalColor === c.color
                           ? 'border-2 border-[#FFB6C1] shadow-[0_0_15px_rgba(255,182,193,0.85)] scale-105 bg-[#0a0e17] text-white'
                           : 'border-white/10 bg-[#0a0e17] text-[#8b9bb4] hover:text-white'
@@ -1372,7 +1402,7 @@ export default function SalesManager() {
             {modalColor && (
               <div className="space-y-1.5">
                 <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                  2. Select Size:
+                  2. SELECT SIZE:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {modalAvailableSizes.map((s) => (
@@ -1381,7 +1411,7 @@ export default function SalesManager() {
                       type="button"
                       disabled={s.stock <= 0}
                       onClick={() => setModalSize(s.size)}
-                      className={`px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border ${
+                      className={`px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
                         modalSize === s.size
                           ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
                           : s.stock <= 0
@@ -1401,7 +1431,7 @@ export default function SalesManager() {
               <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1">
-                    Selling Price (₹)
+                    SELLING PRICE (₹)
                   </label>
                   <input
                     type="number"
@@ -1413,8 +1443,8 @@ export default function SalesManager() {
 
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">Quantity</label>
-                    <span className="text-[9px] font-mono text-[#00ff9d]">Available: {modalCurrentStock}</span>
+                    <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">QUANTITY</label>
+                    <span className="text-[9px] font-mono text-[#00ff9d]">AVAILABLE: {modalCurrentStock}</span>
                   </div>
                   <input
                     type="number"
@@ -1432,25 +1462,25 @@ export default function SalesManager() {
               <button
                 type="button"
                 onClick={() => setIsVariantModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+                className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer uppercase"
               >
-                Cancel
+                CANCEL
               </button>
               <button
                 type="button"
                 disabled={!modalColor || !modalSize}
                 onClick={handleConfirmVariantToCart}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 uppercase"
               >
                 <Check className="w-3.5 h-3.5" />
-                <span>Add to Bill</span>
+                <span>ADD TO BILL</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* 6. COLORFUL INVOICE MODAL WITH WHATSAPP SHARE BUTTON */}
+      {/* 6. COLORFUL INVOICE MODAL */}
       {(completedInvoice || viewingOrder) && (
         <div className="fixed inset-0 z-[100020] p-4 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in select-none overflow-y-auto">
           <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-lg w-full p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 my-auto">
@@ -1463,8 +1493,8 @@ export default function SalesManager() {
                   </div>
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-white tracking-wider">KASHVI CREATIONS</h3>
-                  <span className="text-[9px] font-mono text-[#00ff9d] uppercase">Authorized Tax Invoice</span>
+                  <h3 className="text-sm font-extrabold text-white tracking-wider uppercase">KASHVI CREATIONS</h3>
+                  <span className="text-[9px] font-mono text-[#00ff9d] uppercase">AUTHORIZED TAX INVOICE</span>
                 </div>
               </div>
 
@@ -1486,21 +1516,21 @@ export default function SalesManager() {
 
               return (
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-[#0a0e17] border border-white/10 font-mono text-[11px]">
+                  <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-[#0a0e17] border border-white/10 font-mono text-[11px] uppercase">
                     <div>
-                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Invoice No:</span>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">INVOICE NO:</span>
                       <strong className="text-[#00ff9d] text-xs">{activeBill.id}</strong>
                     </div>
                     <div>
-                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Date:</span>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">DATE:</span>
                       <strong className="text-white">{new Date(activeBill.created_at).toLocaleDateString('en-IN')}</strong>
                     </div>
                     <div>
-                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Customer:</span>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">CUSTOMER:</span>
                       <strong className="text-white">{activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}</strong>
                     </div>
                     <div>
-                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Payment / Status:</span>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">PAYMENT / STATUS:</span>
                       <strong className={activeBill.payment_status === 'utr_pending' ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}>
                         {activeBill.payment_mode.toUpperCase()} ({activeBill.payment_status === 'utr_pending' ? 'UTR PENDING' : 'PAID'})
                       </strong>
@@ -1511,19 +1541,19 @@ export default function SalesManager() {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
                         <tr>
-                          <th className="py-2 px-2.5">Item & Variant</th>
-                          <th className="py-2 px-2 text-center">Qty</th>
-                          <th className="py-2 px-2 text-right">Price</th>
-                          <th className="py-2 px-2.5 text-right">Total</th>
+                          <th className="py-2 px-2.5">ITEM & VARIANT</th>
+                          <th className="py-2 px-2 text-center">QTY</th>
+                          <th className="py-2 px-2 text-right">PRICE</th>
+                          <th className="py-2 px-2.5 text-right">TOTAL</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5">
+                      <tbody className="divide-y divide-white/5 uppercase">
                         {activeLineItems.map((it: any, idx: number) => (
                           <tr key={idx}>
                             <td className="py-2 px-2.5">
-                              <span className="font-bold text-white block">{it.product_name || it.product_id}</span>
+                              <span className="font-bold text-white block">{(it.product_name || it.product_id).toUpperCase()}</span>
                               <span className="text-[10px] text-[#00d9ff] font-mono">
-                                {it.color || it.variant_color} • {it.size || it.variant_size}
+                                {(it.color || it.variant_color).toUpperCase()} • {(it.size || it.variant_size).toUpperCase()}
                               </span>
                             </td>
                             <td className="py-2 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
@@ -1535,7 +1565,7 @@ export default function SalesManager() {
                     </table>
                   </div>
 
-                  <div className="p-3 rounded-2xl bg-gradient-to-r from-[#6d4aff]/20 to-[#00d9ff]/20 border border-white/15 flex items-center justify-between font-mono">
+                  <div className="p-3 rounded-2xl bg-gradient-to-r from-[#6d4aff]/20 to-[#00d9ff]/20 border border-white/15 flex items-center justify-between font-mono uppercase">
                     <div>
                       <span className="text-[10px] text-[#8b9bb4] block">NET PAYABLE AMOUNT</span>
                       <span className="text-xl font-extrabold text-[#00ff9d]">
@@ -1544,7 +1574,7 @@ export default function SalesManager() {
                     </div>
 
                     <div className="text-right text-[10px] text-[#8b9bb4]">
-                      <span>Discount: ₹{activeBill.discount_amount || 0}</span>
+                      <span>DISCOUNT: ₹{activeBill.discount_amount || 0}</span>
                     </div>
                   </div>
 
@@ -1552,19 +1582,19 @@ export default function SalesManager() {
                     <button
                       type="button"
                       onClick={() => handleShareWhatsApp(activeBill, activeLineItems)}
-                      className="py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-lg shadow-[#25D366]/30"
+                      className="py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-lg shadow-[#25D366]/30 uppercase"
                     >
                       <Share2 className="w-4 h-4" />
-                      <span>Share on WhatsApp</span>
+                      <span>SHARE ON WHATSAPP</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => window.print()}
-                      className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer uppercase"
                     >
                       <Printer className="w-4 h-4" />
-                      <span>Print Receipt</span>
+                      <span>PRINT RECEIPT</span>
                     </button>
                   </div>
                 </div>
