@@ -124,27 +124,21 @@ const BASE_FAMILY_PALETTE: { [key: string]: string } = {
   grey: '#757575'
 };
 
-// PRICING AUTOMATION ENGINE ACCORDING TO REQUIREMENTS
 function calculateSmartPricing(baseUnitCost: number, transportPercentage: number) {
   const baseCost = Number(baseUnitCost) || 0;
   const tPercent = Number(transportPercentage) || 0;
 
-  // 1. Landed Cost
   const landedCost = baseCost + (baseCost * (tPercent / 100));
 
-  // 2. Sticker Tag Selling Price (Offline Selling Price on Label)
   const rawOfflineTag = (landedCost * 2) + ((landedCost * 2) * 0.10);
   const stickerSellingPrice = Math.ceil(rawOfflineTag / 5) * 5;
 
-  // 3. Max Discount Price (Store Bottom Rate)
   const rawOfflineFinal = stickerSellingPrice - (stickerSellingPrice * 0.10);
   const maxDiscountPrice = Math.round(rawOfflineFinal);
 
-  // 4. Online Selling Price (Landed * 2 + 20%, rounded up to next 10)
   const rawOnline = (landedCost * 2) + ((landedCost * 2) * 0.20);
   const onlineSellingPrice = Math.ceil(rawOnline / 10) * 10;
 
-  // 5. MRP Price (Calculated based on Online Price to show ~30% discount strike-through)
   const mrpPrice = Math.ceil((onlineSellingPrice / 0.70) / 10) * 10;
 
   return {
@@ -195,7 +189,7 @@ export default function PurchaseManager() {
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
 
-  // Editing existing saved line item
+  // Editing line item
   const [editingItemModal, setEditingItemModal] = useState<any | null>(null);
   const [editItemQty, setEditItemQty] = useState<number>(1);
   const [editItemCost, setEditItemCost] = useState<number>(0);
@@ -208,7 +202,6 @@ export default function PurchaseManager() {
   const [supplierBillNo, setSupplierBillNo] = useState<string>('');
   const [supplierBillDate, setSupplierBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   
-  // Bill Transportation Mode
   const [billTransportMode, setBillTransportMode] = useState<'amount' | 'percent'>('amount');
   const [transportInputVal, setTransportInputVal] = useState<number | string>(0);
   const [notes, setNotes] = useState<string>('');
@@ -731,7 +724,6 @@ export default function PurchaseManager() {
     return (totalBillBaseAmount * val) / 100;
   }, [billTransportMode, transportInputVal, totalBillBaseAmount]);
 
-  // LIVE PRICING ENGINE RUN
   const liveMatrixPricing = useMemo(() => {
     const cost = Number(unitCost) || 0;
     return calculateSmartPricing(cost, currentTransportPercent);
@@ -1178,81 +1170,126 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 2. Invoices History Table */}
+      {/* 2. Invoices History Table: ENHANCED VIEW ACCORDING TO YOUR SPECIFICATIONS */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
-                <th className="py-2.5 px-3">Purchase No</th>
-                <th className="py-2.5 px-3">Entry Date</th>
-                <th className="py-2.5 px-3">Supplier Details</th>
-                <th className="py-2.5 px-3">Supplier Bill No & Date</th>
-                <th className="py-2.5 px-3 text-right">Total Bill (₹)</th>
-                <th className="py-2.5 px-3 text-center">Actions</th>
+                <th className="py-2.5 px-3">PURCHASE NO & DATE</th>
+                <th className="py-2.5 px-3">SUPPLIER BILL NO & DATE</th>
+                <th className="py-2.5 px-3">FIRM NAME & PERSON</th>
+                <th className="py-2.5 px-3 text-right">BILL VALUE</th>
+                <th className="py-2.5 px-3 text-right">TRANSPORT</th>
+                <th className="py-2.5 px-3 text-right">TOTAL VALUE</th>
+                <th className="py-2.5 px-3 text-center">ACTIONS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-[#8b9bb4]">
+                  <td colSpan={7} className="p-6 text-center text-[#8b9bb4]">
                     <Loader2 className="w-4 h-4 animate-spin mx-auto text-[#ffa500] mb-1.5" />
                     Loading purchase records...
                   </td>
                 </tr>
               ) : filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-[#8b9bb4] italic text-xs">
+                  <td colSpan={7} className="p-6 text-center text-[#8b9bb4] italic text-xs">
                     No purchase inward entries recorded yet. Click &quot;New Purchase&quot; to begin.
                   </td>
                 </tr>
               ) : (
-                filteredPurchases.map((p) => (
-                  <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-2.5 px-3 font-mono font-extrabold text-[#00ff9d] text-xs">
-                      {p.id}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[#8b9bb4] text-[11px]">{p.purchase_date}</td>
-                    <td className="py-2.5 px-3 font-semibold text-white">
-                      <span className="block">{p.supplier_name}</span>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span className="font-mono font-bold text-[#00d9ff] block text-xs">{p.supplier_bill_no || '—'}</span>
-                      <span className="text-[10px] font-mono text-[#8b9bb4]">{p.supplier_bill_date || ''}</span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-extrabold text-white text-xs">
-                      ₹{Number(p.total_amount || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenView(p)}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff]"
-                          title="View Inward Breakdown"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openEditPurchaseModal(p)}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00ff9d]/20 text-[#8b9bb4] hover:text-[#00ff9d]"
-                          title="Edit Purchase & Manage Line Items"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeletePurchase(p)}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b]"
-                          title="Delete Bill & Rollback Stock"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                filteredPurchases.map((p) => {
+                  const suppObj = suppliers.find((s) => s.id === p.supplier_id || s.name === p.supplier_name);
+                  const firmName = suppObj?.shop_name || p.supplier_name;
+                  const personName = suppObj?.shop_name ? suppObj.name : null;
+
+                  const totalVal = Number(p.total_amount || 0);
+                  const transportVal = Number(p.transport_charges || 0);
+                  const baseBillVal = Math.max(0, totalVal - transportVal);
+
+                  return (
+                    <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
+                      {/* 1. PURCHASE NO & DATE */}
+                      <td className="py-2.5 px-3">
+                        <span className="font-mono font-extrabold text-[#00ff9d] text-xs block">
+                          {p.id}
+                        </span>
+                        <span className="font-mono text-[#8b9bb4] text-[10.5px] block mt-0.5">
+                          {p.purchase_date}
+                        </span>
+                      </td>
+
+                      {/* 2. SUPPLIER BILL NO & BILL DATE */}
+                      <td className="py-2.5 px-3">
+                        <span className="font-mono font-bold text-[#00d9ff] block text-xs">
+                          {p.supplier_bill_no || '—'}
+                        </span>
+                        <span className="text-[10px] font-mono text-[#8b9bb4] block mt-0.5">
+                          {p.supplier_bill_date || '—'}
+                        </span>
+                      </td>
+
+                      {/* 3. FIRM NAME (HIGHLIGHTED) & PERSON NAME */}
+                      <td className="py-2.5 px-3">
+                        <span className="font-extrabold text-white text-xs block tracking-wide text-shadow">
+                          {firmName}
+                        </span>
+                        {personName && (
+                          <span className="text-[10.5px] text-[#00d9ff] font-semibold block mt-0.5">
+                            {personName}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* 4. BILL VALUE (BASE ITEMS COST) */}
+                      <td className="py-2.5 px-3 text-right font-mono text-white text-xs">
+                        ₹{baseBillVal.toLocaleString('en-IN')}
+                      </td>
+
+                      {/* 5. TRANSPORT VALUE */}
+                      <td className="py-2.5 px-3 text-right font-mono text-[#ffa500] font-bold text-xs">
+                        {transportVal > 0 ? `+₹${transportVal.toLocaleString('en-IN')}` : '₹0'}
+                      </td>
+
+                      {/* 6. TOTAL VALUE (NET INVOICE AMOUNT) */}
+                      <td className="py-2.5 px-3 text-right font-mono font-extrabold text-[#00ff9d] text-xs">
+                        ₹{totalVal.toLocaleString('en-IN')}
+                      </td>
+
+                      {/* 7. ACTIONS */}
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenView(p)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff]"
+                            title="View Inward Breakdown"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openEditPurchaseModal(p)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00ff9d]/20 text-[#8b9bb4] hover:text-[#00ff9d]"
+                            title="Edit Purchase & Manage Line Items"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeletePurchase(p)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b]"
+                            title="Delete Bill & Rollback Stock"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -1546,7 +1583,7 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* DISCRETE CAPSULES: STICKER TAG PRICE, MAX DISCOUNT PRICE, ONLINE SELLING, MRP PRICE */}
+                      {/* DISCRETE CAPSULES */}
                       {Number(unitCost) > 0 && (
                         <div className="flex flex-wrap gap-2 pt-1 animate-in fade-in">
                           <div className="px-3 py-1.5 rounded-full bg-[#ffa500]/15 border border-[#ffa500]/40 flex items-center gap-1.5 font-mono shadow-sm">
@@ -2148,7 +2185,6 @@ export default function PurchaseManager() {
                     </span>
                   </div>
 
-                  {/* Price Tag Displays to write manually on sticker */}
                   <div className="flex items-center gap-3 font-mono">
                     <div className="px-3 py-1.5 rounded-xl bg-[#ffa500]/10 border border-[#ffa500]/30 text-center">
                       <span className="text-[8.5px] text-[#ffa500] block uppercase font-bold">STICKER TAG PRICE</span>
@@ -2170,7 +2206,6 @@ export default function PurchaseManager() {
                       <strong className="text-xs font-bold text-[#e056fd]">₹{item.mrp_price}</strong>
                     </div>
 
-                    {/* Toggle Button */}
                     <button
                       type="button"
                       onClick={() => handleToggleChecklistDone(item.id)}
@@ -2188,7 +2223,6 @@ export default function PurchaseManager() {
               ))}
             </div>
 
-            {/* Footer */}
             <div className="pt-2 border-t border-white/10 flex justify-end shrink-0">
               <button
                 type="button"
@@ -2237,7 +2271,6 @@ export default function PurchaseManager() {
                 <div className="flex justify-between items-center mb-1">
                   <label className="text-[10px] text-[#8b9bb4] uppercase font-bold">Transport Overhead</label>
                   
-                  {/* Mode Switcher: ₹ or % */}
                   <div className="inline-flex rounded-lg bg-[#0a0e17] border border-white/10 p-0.5">
                     <button
                       type="button"
@@ -2281,7 +2314,6 @@ export default function PurchaseManager() {
                 </div>
               </div>
 
-              {/* CUSTOMER-SAFE DISCRETE CAPSULES */}
               <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
                 <span className="text-[9.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
                   Applicable Price Brackets
