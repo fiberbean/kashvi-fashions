@@ -104,7 +104,7 @@ export default function SalesManager() {
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // New Customer Form State
+  // New Customer Form State (Dedicated customers Table)
   const [newCustId, setNewCustId] = useState<string>('CUST0001');
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
@@ -142,10 +142,10 @@ export default function SalesManager() {
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
-  // Generate Customer ID (CUST0001 format)
+  // Generate Customer ID strictly in customers Table (CUST0001 Format)
   const generateCustomerId = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('customers')
         .select('id')
         .like('id', 'CUST%')
@@ -160,11 +160,11 @@ export default function SalesManager() {
         setNewCustId('CUST0001');
       }
     } catch {
-      setNewCustId(`CUST${Math.floor(1000 + Math.random() * 9000)}`);
+      setNewCustId('CUST0001');
     }
   };
 
-  // Generate Bill Number Strictly in KFINV0001 series
+  // Generate Bill Number in orders Table (KFINV0001 Format)
   const generateBillNumber = async () => {
     try {
       const { data } = await supabase
@@ -186,6 +186,7 @@ export default function SalesManager() {
     }
   };
 
+  // Load all required modules including separate customers table
   const loadData = async () => {
     setLoading(true);
     try {
@@ -208,7 +209,7 @@ export default function SalesManager() {
       if (clrRes.data) setColoursList(clrRes.data);
       if (custRes.data) setCustomersList(custRes.data);
     } catch (err) {
-      console.error('Failed to load data:', err);
+      console.error('Failed to load sales data:', err);
     } finally {
       setLoading(false);
     }
@@ -218,12 +219,12 @@ export default function SalesManager() {
     loadData();
   }, []);
 
-  // Step 1: Start New Bill
+  // Step 1: Open Prompt
   const handleStartNewBill = () => {
     setIsCustomerPromptOpen(true);
   };
 
-  // Step 2A: New Customer Selected
+  // Step 2A: Trigger New Customer Registration
   const handleChooseNewCustomer = () => {
     setIsCustomerPromptOpen(false);
     generateCustomerId();
@@ -233,14 +234,14 @@ export default function SalesManager() {
     setIsNewCustomerModalOpen(true);
   };
 
-  // Step 2B: Existing Customer Selected
+  // Step 2B: Trigger Existing Customer Picker
   const handleChooseExistingCustomer = () => {
     setIsCustomerPromptOpen(false);
     setCustSearchTerm('');
     setIsExistingCustomerPickerOpen(true);
   };
 
-  // Save New Customer to DB
+  // Register Customer directly into separate 'customers' table
   const handleRegisterCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCustName.trim() || !newCustPhone.trim()) {
@@ -257,13 +258,23 @@ export default function SalesManager() {
         city: newCustCity.trim() || null
       };
 
-      const { error } = await supabase.from('customers').insert([newRecord]);
-      if (error) throw error;
+      const { error } = await supabase
+        .from('customers')
+        .insert([newRecord]);
+
+      if (error) {
+        if (error.message.includes('unique') || error.code === '23505') {
+          alert('Ee mobile number tho customer already register ayyi unnaru. Existing customer select cheskondi.');
+          return;
+        }
+        throw error;
+      }
 
       setCustomersList((prev) => [newRecord, ...prev]);
       setSelectedCustomer(newRecord);
       setIsNewCustomerModalOpen(false);
 
+      // Open Billing Desk with new registered customer
       openSalesBillingDesk(newRecord);
     } catch (err: any) {
       alert('Error registering customer: ' + err.message);
@@ -272,7 +283,7 @@ export default function SalesManager() {
     }
   };
 
-  // Select Existing Customer
+  // Select Existing Customer from 'customers' table
   const handleSelectExistingCustomer = (cust: CustomerRecord) => {
     setSelectedCustomer(cust);
     setIsExistingCustomerPickerOpen(false);
@@ -303,7 +314,6 @@ export default function SalesManager() {
     setIsVariantModalOpen(true);
   };
 
-  // Variant stock list for product
   const modalProductInventory = useMemo(() => {
     if (!selectedProductForModal) return [];
     return inventoryList.filter((inv) => String(inv.product_id) === String(selectedProductForModal.id));
@@ -417,7 +427,7 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // Complete Sale & Store Everything in Proper Architecture
+  // Complete Sale & Store Everything Linked to Customer ID
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -448,11 +458,11 @@ export default function SalesManager() {
         created_at: new Date().toISOString()
       };
 
-      // 1. Insert Order into orders table
+      // 1. Insert Order
       const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
       if (orderErr) throw orderErr;
 
-      // 2. Insert Line Items into order_items table
+      // 2. Insert Line Items
       const orderItemsPayload = cartItems.map((item, idx) => ({
         id: `oi_${invoiceNo}_${Date.now()}_${idx}`,
         order_id: invoiceNo.trim(),
@@ -486,7 +496,6 @@ export default function SalesManager() {
         }
       }
 
-      // 4. Launch Colorful Invoice View
       setCompletedInvoice(orderPayload);
       setCompletedItems([...cartItems]);
       setIsBillingModalOpen(false);
@@ -541,6 +550,7 @@ export default function SalesManager() {
     }
   };
 
+  // Customer Ledger Query directly using separate customers table id
   const customerPastOrders = useMemo(() => {
     if (!selectedCustomer) return [];
     return orders.filter((o) => o.customer_id === selectedCustomer.id || o.customer_phone === selectedCustomer.phone);
@@ -585,7 +595,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Series: KFINV0001 • Variant Card Picker • Customer Ledger • WhatsApp Invoices
+              Customers Register Table • Series: KFINV0001 • Variant Card Picker • WhatsApp Invoices
             </span>
           </div>
         </div>
@@ -611,7 +621,6 @@ export default function SalesManager() {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
 
-          {/* New Bill Button */}
           <button
             type="button"
             onClick={handleStartNewBill}
@@ -631,7 +640,7 @@ export default function SalesManager() {
               <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
                 <th className="py-2.5 px-3">Invoice No</th>
                 <th className="py-2.5 px-3">Date</th>
-                <th className="py-2.5 px-3">Customer Details</th>
+                <th className="py-2.5 px-3">Customer (Register ID)</th>
                 <th className="py-2.5 px-3">Store Channel</th>
                 <th className="py-2.5 px-3">Payment & UTR Status</th>
                 <th className="py-2.5 px-3 text-right">Net Amount</th>
@@ -662,7 +671,12 @@ export default function SalesManager() {
                       {new Date(ord.created_at).toLocaleDateString('en-IN')}
                     </td>
                     <td className="py-2.5 px-3">
-                      <span className="font-bold text-white block">{ord.customer_name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-white block">{ord.customer_name}</span>
+                        {ord.customer_id && (
+                          <span className="text-[9.5px] font-mono text-[#00d9ff] bg-[#00d9ff]/10 px-1 rounded">[{ord.customer_id}]</span>
+                        )}
+                      </div>
                       {ord.customer_phone && (
                         <span className="text-[10px] font-mono text-[#8b9bb4]">{ord.customer_phone}</span>
                       )}
@@ -729,7 +743,7 @@ export default function SalesManager() {
 
             <div>
               <h3 className="text-base font-bold text-white">Select Customer Type</h3>
-              <p className="text-xs text-[#8b9bb4] mt-1">Kotha customer leda existing customer ni select cheyandi</p>
+              <p className="text-xs text-[#8b9bb4] mt-1">Kotha customer register cheyala leda register ayina customer aa?</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -741,7 +755,7 @@ export default function SalesManager() {
                 <div className="w-8 h-8 rounded-xl bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center group-hover:scale-110 transition-transform">
                   <UserPlus className="w-4 h-4" />
                 </div>
-                <span>New Customer</span>
+                <span>New Register</span>
               </button>
 
               <button
@@ -769,14 +783,14 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION (CUST0001 Format) */}
+      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION (SEPARATE CUSTOMERS TABLE) */}
       {isNewCustomerModalOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white">New Customer Registration</h3>
+                <h3 className="text-sm font-bold text-white">Customer Register (customers Table)</h3>
               </div>
               <button
                 type="button"
@@ -856,7 +870,7 @@ export default function SalesManager() {
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
                 >
                   {registeringCust ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>Save & Open Sales Desk</span>
+                  <span>Save to Register & Bill</span>
                 </button>
               </div>
             </form>
@@ -871,7 +885,7 @@ export default function SalesManager() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white">Select Existing Customer</h3>
+                <h3 className="text-sm font-bold text-white">Select from Customer Register</h3>
               </div>
               <button
                 type="button"
@@ -897,7 +911,7 @@ export default function SalesManager() {
             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
               {filteredExistingCustomers.length === 0 ? (
                 <div className="p-6 text-center text-[#8b9bb4] italic text-xs">
-                  No matching customers found.
+                  No matching registered customers found.
                 </div>
               ) : (
                 filteredExistingCustomers.map((c) => (
@@ -1002,7 +1016,6 @@ export default function SalesManager() {
         <div className="fixed inset-0 z-[100005] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
             
-            {/* Header */}
             <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00d9ff] to-[#6d4aff] text-white flex items-center justify-center shadow">
@@ -1035,10 +1048,8 @@ export default function SalesManager() {
 
             <form onSubmit={handleCompleteSale} className="p-3 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar text-xs">
               
-              {/* Selected Customer & Bill Header */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10 items-center">
                 
-                {/* Customer Identity with Ledger Trigger */}
                 <div className="sm:col-span-2 flex items-center justify-between p-2 rounded-xl bg-[#101628] border border-white/15">
                   <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded-lg bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center font-bold font-mono text-xs">
@@ -1061,7 +1072,6 @@ export default function SalesManager() {
                   </button>
                 </div>
 
-                {/* Auto Date */}
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
                     Billing Date (Automatic)
@@ -1074,7 +1084,6 @@ export default function SalesManager() {
                   />
                 </div>
 
-                {/* Bill No Series Display */}
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
                     Invoice Series
@@ -1089,10 +1098,9 @@ export default function SalesManager() {
 
               </div>
 
-              {/* Two Column POS Workspace: Left Product Selection & Right Cart */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* === LEFT: PRODUCT LIST (CLICK TO OPEN VARIANT POPUP) === */}
+                {/* Left Products Deck */}
                 <div className="lg:col-span-6 space-y-2.5 p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
@@ -1101,7 +1109,6 @@ export default function SalesManager() {
                     <span className="text-[10px] text-[#8b9bb4] font-mono">{productsList.length} Models</span>
                   </div>
 
-                  {/* Grid of Product Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto custom-scrollbar p-1">
                     {productsList.map((p) => {
                       const price = p.offline_price || p.selling_price || p.price || 0;
@@ -1138,11 +1145,10 @@ export default function SalesManager() {
                   </div>
                 </div>
 
-                {/* === RIGHT: LIVE CART & FINAL CHECKOUT WITH PAYMENT SELECTION === */}
+                {/* Right Live Cart */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
-                    {/* Cart Header */}
                     <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
                         <ShoppingBag className="w-3.5 h-3.5" /> Cart Items ({cartItems.length})
@@ -1150,7 +1156,6 @@ export default function SalesManager() {
                       <span className="text-white font-bold">{totalCartUnits} Units</span>
                     </div>
 
-                    {/* Cart Items Table */}
                     <div className="max-h-48 min-h-[120px] overflow-y-auto custom-scrollbar p-1">
                       {cartItems.length === 0 ? (
                         <div className="p-8 text-center text-[#8b9bb4] italic text-xs">
@@ -1203,10 +1208,8 @@ export default function SalesManager() {
                       )}
                     </div>
 
-                    {/* Payment Mode Selection (Cash or UPI) & Calculation Card */}
                     <div className="p-3 bg-[#101628] border-t border-white/10 space-y-2.5">
                       
-                      {/* Payment Mode Toggle */}
                       <div className="space-y-1.5">
                         <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
                           Select Payment Mode:
@@ -1239,7 +1242,6 @@ export default function SalesManager() {
                           </button>
                         </div>
 
-                        {/* UPI UTR Field */}
                         {paymentMode === 'upi' && (
                           <div className="pt-1">
                             <input
@@ -1258,7 +1260,6 @@ export default function SalesManager() {
                         )}
                       </div>
 
-                      {/* Calculations */}
                       <div className="space-y-1 font-mono text-xs pt-1 border-t border-white/5">
                         <div className="flex justify-between text-[#8b9bb4]">
                           <span>Subtotal:</span>
@@ -1284,7 +1285,6 @@ export default function SalesManager() {
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
                       <div className="flex items-center justify-end gap-2 pt-1">
                         <button
                           type="button"
@@ -1315,7 +1315,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. DEDICATED PRODUCT VARIANT SELECTION MODAL */}
+      {/* 5. VARIANT SELECTION MODAL */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4">
@@ -1333,7 +1333,6 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* Colors in Stock */}
             <div className="space-y-1.5">
               <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
                 1. Select Colour Shade (In-Stock Only):
@@ -1370,7 +1369,6 @@ export default function SalesManager() {
               )}
             </div>
 
-            {/* Sizes */}
             {modalColor && (
               <div className="space-y-1.5">
                 <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
@@ -1399,7 +1397,6 @@ export default function SalesManager() {
               </div>
             )}
 
-            {/* Rate & Qty */}
             {modalColor && modalSize && (
               <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                 <div>
@@ -1458,7 +1455,6 @@ export default function SalesManager() {
         <div className="fixed inset-0 z-[100020] p-4 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in select-none overflow-y-auto">
           <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-lg w-full p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 my-auto">
             
-            {/* Invoice Top Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] p-[1px] shadow-lg">
@@ -1484,7 +1480,6 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* Bill Details Banner */}
             {(() => {
               const activeBill = completedInvoice || viewingOrder!;
               const activeLineItems = completedInvoice ? completedItems : viewingOrderItems;
@@ -1502,7 +1497,7 @@ export default function SalesManager() {
                     </div>
                     <div>
                       <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Customer:</span>
-                      <strong className="text-white">{activeBill.customer_name}</strong>
+                      <strong className="text-white">{activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}</strong>
                     </div>
                     <div>
                       <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Payment / Status:</span>
@@ -1512,7 +1507,6 @@ export default function SalesManager() {
                     </div>
                   </div>
 
-                  {/* Line Items Table */}
                   <div className="max-h-52 overflow-y-auto custom-scrollbar border border-white/10 rounded-2xl bg-[#0a0e17]">
                     <table className="w-full text-left text-xs">
                       <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
@@ -1541,7 +1535,6 @@ export default function SalesManager() {
                     </table>
                   </div>
 
-                  {/* Total Summary */}
                   <div className="p-3 rounded-2xl bg-gradient-to-r from-[#6d4aff]/20 to-[#00d9ff]/20 border border-white/15 flex items-center justify-between font-mono">
                     <div>
                       <span className="text-[10px] text-[#8b9bb4] block">NET PAYABLE AMOUNT</span>
@@ -1555,7 +1548,6 @@ export default function SalesManager() {
                     </div>
                   </div>
 
-                  {/* Action Buttons: WhatsApp Share & Print */}
                   <div className="grid grid-cols-2 gap-2 pt-2">
                     <button
                       type="button"
