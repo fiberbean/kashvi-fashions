@@ -22,7 +22,7 @@ import { OrderRecord, AdminStaffUser } from './admin/types';
 export type AdminViewType = 
   | 'dashboard' 
   | 'orders' 
-  | 'inventory'
+  | 'inventory' 
   | 'sales' 
   | 'purchase' 
   | 'expenses' 
@@ -161,6 +161,8 @@ export default function AdminApp() {
     return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
+  const normalizedRole = (currentUser.role || '').toLowerCase().trim();
+
   const normalizedSection = selectedMasterSection ? String(selectedMasterSection).toLowerCase().trim() : '';
   const isCategorySection = normalizedSection === 'category' || normalizedSection === 'categories';
   const isSubCategorySection = 
@@ -178,24 +180,35 @@ export default function AdminApp() {
 
   return (
     <div
-      data-user-role={currentUser.role}
+      data-user-role={normalizedRole}
       className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden"
     >
       {/* Global CSS Role Permission Engine */}
       <style>{`
+        /* Super Admin Role: Guarantee full visibility of Edit & Delete */
+        [data-user-role="admin"] button[title*="Edit" i],
+        [data-user-role="admin"] button[title*="Delete" i],
+        [data-user-role="admin"] button[aria-label*="Edit" i],
+        [data-user-role="admin"] button[aria-label*="Delete" i],
+        [data-user-role="admin"] .btn-edit,
+        [data-user-role="admin"] .btn-delete,
+        [data-user-role="admin"] svg.lucide-trash,
+        [data-user-role="admin"] svg.lucide-trash-2,
+        [data-user-role="admin"] svg.lucide-edit,
+        [data-user-role="admin"] svg.lucide-edit-2,
+        [data-user-role="admin"] svg.lucide-edit-3,
+        [data-user-role="admin"] svg.lucide-pencil {
+          display: inline-flex !important;
+          pointer-events: auto !important;
+        }
+
         /* Operations Role: Create & View Only (Hide Edit and Delete) */
         [data-user-role="operations"] button[title*="Edit" i],
         [data-user-role="operations"] button[title*="Delete" i],
         [data-user-role="operations"] button[aria-label*="Edit" i],
         [data-user-role="operations"] button[aria-label*="Delete" i],
         [data-user-role="operations"] .btn-edit,
-        [data-user-role="operations"] .btn-delete,
-        [data-user-role="operations"] svg.lucide-trash,
-        [data-user-role="operations"] svg.lucide-trash-2,
-        [data-user-role="operations"] svg.lucide-edit,
-        [data-user-role="operations"] svg.lucide-edit-2,
-        [data-user-role="operations"] svg.lucide-edit-3,
-        [data-user-role="operations"] svg.lucide-pencil {
+        [data-user-role="operations"] .btn-delete {
           display: none !important;
           pointer-events: none !important;
         }
@@ -203,9 +216,7 @@ export default function AdminApp() {
         /* Manager Role: Create, Edit & View (Hide Delete Only) */
         [data-user-role="manager"] button[title*="Delete" i],
         [data-user-role="manager"] button[aria-label*="Delete" i],
-        [data-user-role="manager"] .btn-delete,
-        [data-user-role="manager"] svg.lucide-trash,
-        [data-user-role="manager"] svg.lucide-trash-2 {
+        [data-user-role="manager"] .btn-delete {
           display: none !important;
           pointer-events: none !important;
         }
