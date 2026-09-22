@@ -67,7 +67,7 @@ export default function InventoryManager() {
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
-  // Load Inventory Data (Robust combination of products + inventory entries)
+  // Load Inventory Data and Sort strictly by Product Code
   const loadInventory = async () => {
     setLoading(true);
     try {
@@ -89,7 +89,6 @@ export default function InventoryManager() {
       const processedItems: InventoryItem[] = [];
 
       if (inventoryRecords.length > 0) {
-        // Build items directly from inventory records linked to product info
         inventoryRecords.forEach((inv) => {
           const prod = products.find((p) => String(p.id) === String(inv.product_id));
           const colorName = inv.variant_color || inv.color || 'Standard';
@@ -109,7 +108,6 @@ export default function InventoryManager() {
           });
         });
       } else {
-        // Fallback: If inventory table has not been populated yet, display products with 0 stock
         products.forEach((prod) => {
           let sizes: string[] = ['Free Size'];
           if (prod.size) {
@@ -138,9 +136,17 @@ export default function InventoryManager() {
               });
             });
           });
-        }
-      );
+        });
       }
+
+      // Natural Sort by Product Code (KF0001, KF0002, KF0003...)
+      processedItems.sort((a, b) => {
+        const codeA = String(a.product_code || '');
+        const codeB = String(b.product_code || '');
+        const compareResult = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+        if (compareResult !== 0) return compareResult;
+        return a.color.localeCompare(b.color);
+      });
 
       setInventoryList(processedItems);
     } catch (err) {
@@ -228,7 +234,6 @@ export default function InventoryManager() {
     }
   };
 
-  // Counters for Low Stock and Out of Stock
   const lowStockCount = useMemo(() => {
     return inventoryList.filter((it) => it.available_stock > 0 && it.available_stock <= 3).length;
   }, [inventoryList]);
@@ -237,23 +242,17 @@ export default function InventoryManager() {
     return inventoryList.filter((it) => it.available_stock <= 0).length;
   }, [inventoryList]);
 
-  // Dynamic filter for category & search
   const filteredInventory = useMemo(() => {
-    return inventoryList.filter((item) => {
-      // Category filter
+    const list = inventoryList.filter((item) => {
       if (categoryFilter !== 'all' && item.category.toLowerCase() !== categoryFilter.toLowerCase()) {
         return false;
       }
-
-      // Stock Level Filter
       if (stockLevelFilter === 'low' && !(item.available_stock > 0 && item.available_stock <= 3)) {
         return false;
       }
       if (stockLevelFilter === 'out' && item.available_stock > 0) {
         return false;
       }
-
-      // Search Query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchCode = item.product_code.toLowerCase().includes(q);
@@ -263,8 +262,15 @@ export default function InventoryManager() {
         const matchSize = item.size.toLowerCase().includes(q);
         return matchCode || matchName || matchSubCat || matchColor || matchSize;
       }
-
       return true;
+    });
+
+    // Maintain Product Code Order after filtering
+    return list.sort((a, b) => {
+      return String(a.product_code || '').localeCompare(String(b.product_code || ''), undefined, {
+        numeric: true,
+        sensitivity: 'base'
+      });
     });
   }, [inventoryList, categoryFilter, stockLevelFilter, searchQuery]);
 
@@ -362,7 +368,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE */}
+      {/* 2. INVENTORY TABLE (SORTED BY PRODUCT CODE) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -381,7 +387,7 @@ export default function InventoryManager() {
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-[#8b9bb4]">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-2" />
-                    Loading real-time inventory...
+                    Loading real-time inventory sorted by Product Code...
                   </td>
                 </tr>
               ) : filteredInventory.length === 0 ? (
@@ -470,7 +476,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. PRODUCT LIFECYCLE HISTORY MODAL / DRAWER (WHERE BOUGHT & WHO SOLD TO) */}
+      {/* 3. PRODUCT LIFECYCLE HISTORY MODAL (WHERE BOUGHT & WHO SOLD TO) */}
       {selectedItemForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-3xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -497,7 +503,7 @@ export default function InventoryManager() {
               <button
                 type="button"
                 onClick={() => setSelectedItemForHistory(null)}
-                className="p-1 rounded-xl bg-white/5 hover:bg-white/10 text-[#8b9bb4] hover:text-white"
+                className="p-1 rounded-xl bg-white/5 hover:bg-white/10 text-[#8b9bb4] hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -519,7 +525,7 @@ export default function InventoryManager() {
               </div>
             </div>
 
-            {/* Content: Inward vs Outward */}
+            {/* Content: Inward vs Outward Logs */}
             <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar p-1">
               
               {loadingHistory ? (
