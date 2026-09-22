@@ -111,6 +111,11 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
 }
 
+function isOfflineCustomer(id: string | null | undefined): boolean {
+  if (!id) return false;
+  return id.trim().toUpperCase().startsWith('CUST');
+}
+
 export default function SalesManager() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
@@ -129,10 +134,10 @@ export default function SalesManager() {
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // Customer Separation Filter (All, Offline, Online)
-  const [customerFilterTab, setCustomerFilterTab] = useState<'all' | 'offline' | 'online'>('offline');
+  // Customer Type Switcher in Picker (By-default 'offline')
+  const [customerPickerType, setCustomerPickerType] = useState<'offline' | 'online'>('offline');
 
-  // New Customer Form State
+  // New Customer Form State (CUST0001 Series)
   const [newCustId, setNewCustId] = useState<string>('CUST0001');
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
@@ -173,7 +178,6 @@ export default function SalesManager() {
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
-  // Generate Customer ID strictly for Offline Store (CUST0001 format)
   const generateCustomerId = async () => {
     try {
       const { data } = await supabase
@@ -265,14 +269,14 @@ export default function SalesManager() {
     setIsNewCustomerModalOpen(true);
   };
 
+  // Open picker strictly defaulting to OFFLINE customers
   const handleChooseExistingCustomer = () => {
     setIsCustomerPromptOpen(false);
     setCustSearchTerm('');
-    setCustomerFilterTab('all');
+    setCustomerPickerType('offline'); // By default offline matrame kanipisthundi
     setIsExistingCustomerPickerOpen(true);
   };
 
-  // Register Offline Customer with customer_type = 'offline'
   const handleRegisterCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = newCustName.trim().toUpperCase();
@@ -715,22 +719,20 @@ export default function SalesManager() {
     }
   };
 
-  // Customer Ledger Query with Channel Tracking
   const customerPastOrders = useMemo(() => {
     if (!selectedCustomer) return [];
     const custPhone = selectedCustomer.phone || selectedCustomer.mobile;
     return orders.filter((o) => o.customer_id === selectedCustomer.id || (custPhone && o.customer_phone === custPhone));
   }, [orders, selectedCustomer]);
 
-  // Separate Existing Customers based on Online or Offline Type
+  // STRICT BY-DEFAULT FILTER: Offline (CUST) only by default, or Online when switched
   const filteredExistingCustomers = useMemo(() => {
     let list = customersList;
 
-    // Filter by Online vs Offline Tab
-    if (customerFilterTab === 'offline') {
-      list = list.filter((c) => !c.customer_type || c.customer_type.toLowerCase() === 'offline');
-    } else if (customerFilterTab === 'online') {
-      list = list.filter((c) => c.customer_type && c.customer_type.toLowerCase() === 'online');
+    if (customerPickerType === 'offline') {
+      list = list.filter((c) => isOfflineCustomer(c.id));
+    } else {
+      list = list.filter((c) => !isOfflineCustomer(c.id));
     }
 
     if (!custSearchTerm.trim()) return list;
@@ -739,11 +741,12 @@ export default function SalesManager() {
       const cPhone = c.phone || c.mobile || '';
       return (
         c.name.toUpperCase().includes(q) ||
+        c.id.toUpperCase().includes(q) ||
         cPhone.includes(q) ||
         (c.city && c.city.toUpperCase().includes(q))
       );
     });
-  }, [customersList, customerFilterTab, custSearchTerm]);
+  }, [customersList, customerPickerType, custSearchTerm]);
 
   const filteredDeskProducts = useMemo(() => {
     if (!billingProductSearch.trim()) return productsList;
@@ -784,7 +787,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • ONLINE & OFFLINE CUSTOMER PROFILES • SEPARATE DATA ARCHITECTURE
+              SERIES: KFINV0001 • DEFAULT OFFLINE CUSTOMERS • TOP ONLINE TOGGLE SUPPORT
             </span>
           </div>
         </div>
@@ -851,71 +854,77 @@ export default function SalesManager() {
                   </td>
                 </tr>
               ) : (
-                filteredOrders.map((ord) => (
-                  <tr key={ord.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="py-2.5 px-3 font-mono font-extrabold text-[#00ff9d] text-xs">
-                      {ord.id}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[#8b9bb4] text-[11px]">
-                      {new Date(ord.created_at).toLocaleDateString('en-IN')}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-white block">{ord.customer_name}</span>
-                        {ord.customer_id && (
-                          <span className="text-[9.5px] font-mono text-[#00d9ff] bg-[#00d9ff]/10 px-1 rounded">[{ord.customer_id}]</span>
+                filteredOrders.map((ord) => {
+                  const isOffline = isOfflineCustomer(ord.customer_id);
+
+                  return (
+                    <tr key={ord.id} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="py-2.5 px-3 font-mono font-extrabold text-[#00ff9d] text-xs">
+                        {ord.id}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-[#8b9bb4] text-[11px]">
+                        {new Date(ord.created_at).toLocaleDateString('en-IN')}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-white block">{ord.customer_name}</span>
+                          {ord.customer_id && (
+                            <span className={`text-[9.5px] font-mono px-1 rounded ${isOffline ? 'bg-[#ffa500]/15 text-[#ffa500]' : 'bg-[#00d9ff]/15 text-[#00d9ff]'}`}>
+                              [{ord.customer_id}]
+                            </span>
+                          )}
+                        </div>
+                        {ord.customer_phone && (
+                          <span className="text-[10px] font-mono text-[#8b9bb4]">{ord.customer_phone}</span>
                         )}
-                      </div>
-                      {ord.customer_phone && (
-                        <span className="text-[10px] font-mono text-[#8b9bb4]">{ord.customer_phone}</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
-                        <Store className="w-3 h-3" /> WALK-IN
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="uppercase font-mono font-bold text-[#8b9bb4] text-[10px]">
-                          {ord.payment_mode}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
+                          <Store className="w-3 h-3" /> WALK-IN
                         </span>
-                        {ord.payment_status === 'utr_pending' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ff6b6b]/20 text-[#ff6b6b] border border-[#ff6b6b]/40 text-[9px] font-mono font-bold">
-                            <Clock className="w-2.5 h-2.5" /> UTR PENDING
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="uppercase font-mono font-bold text-[#8b9bb4] text-[10px]">
+                            {ord.payment_mode}
                           </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#00ff9d]/15 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono font-bold">
-                            <Check className="w-2.5 h-2.5" /> PAID
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-extrabold text-white text-xs">
-                      ₹{Number(ord.final_amount || ord.total_amount || 0).toLocaleString('en-IN')}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <div className="inline-flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenViewOrder(ord)}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer"
-                          title="View Invoice"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleShareWhatsApp(ord, [])}
-                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#25D366]/20 text-[#8b9bb4] hover:text-[#25D366] cursor-pointer"
-                          title="Share to WhatsApp"
-                        >
-                          <Share2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          {ord.payment_status === 'utr_pending' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ff6b6b]/20 text-[#ff6b6b] border border-[#ff6b6b]/40 text-[9px] font-mono font-bold">
+                              <Clock className="w-2.5 h-2.5" /> UTR PENDING
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#00ff9d]/15 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono font-bold">
+                              <Check className="w-2.5 h-2.5" /> PAID
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-extrabold text-white text-xs">
+                        ₹{Number(ord.final_amount || ord.total_amount || 0).toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenViewOrder(ord)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer"
+                            title="View Invoice"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleShareWhatsApp(ord, [])}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#25D366]/20 text-[#8b9bb4] hover:text-[#25D366] cursor-pointer"
+                            title="Share to WhatsApp"
+                          >
+                            <Share2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -932,7 +941,7 @@ export default function SalesManager() {
 
             <div>
               <h3 className="text-base font-bold text-white uppercase">SELECT CUSTOMER TYPE</h3>
-              <p className="text-xs text-[#8b9bb4] mt-1">NEW REGISTER OR EXISTING CUSTOMER</p>
+              <p className="text-xs text-[#8b9bb4] mt-1">NEW REGISTER (CUST SERIES) OR EXISTING DIRECTORY</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -944,7 +953,7 @@ export default function SalesManager() {
                 <div className="w-8 h-8 rounded-xl bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center group-hover:scale-110 transition-transform">
                   <UserPlus className="w-4 h-4" />
                 </div>
-                <span>NEW OFFLINE</span>
+                <span>NEW REGISTER</span>
               </button>
 
               <button
@@ -972,7 +981,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2A: NEW OFFLINE CUSTOMER REGISTRATION */}
+      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION */}
       {isNewCustomerModalOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
@@ -993,7 +1002,7 @@ export default function SalesManager() {
             <form onSubmit={handleRegisterCustomer} className="space-y-3">
               <div>
                 <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  CUSTOMER ID (CUST0001 SERIES - AUTO)
+                  CUSTOMER ID (CUST0001 SERIES - OFFLINE)
                 </label>
                 <input
                   type="text"
@@ -1067,7 +1076,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2B: EXISTING CUSTOMER PICKER WITH ONLINE & OFFLINE TABS */}
+      {/* DIALOG 2B: EXISTING CUSTOMER PICKER (BY-DEFAULT OFFLINE ONLY, TOP SWITCHER FOR ONLINE) */}
       {isExistingCustomerPickerOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
@@ -1085,66 +1094,64 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* Offline vs Online Customer Tab Filter */}
-            <div className="grid grid-cols-3 gap-1 p-1 bg-[#0a0e17] rounded-xl border border-white/10 text-[11px] font-bold font-mono">
-              <button
-                type="button"
-                onClick={() => setCustomerFilterTab('offline')}
-                className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  customerFilterTab === 'offline'
-                    ? 'bg-[#ffa500] text-neutral-950 shadow-md font-extrabold'
-                    : 'text-[#8b9bb4] hover:text-white'
-                }`}
-              >
-                <Store className="w-3.5 h-3.5" />
-                <span>OFFLINE (WALK-IN)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCustomerFilterTab('online')}
-                className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                  customerFilterTab === 'online'
-                    ? 'bg-[#00d9ff] text-neutral-950 shadow-md font-extrabold'
-                    : 'text-[#8b9bb4] hover:text-white'
-                }`}
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>ONLINE (STORE)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCustomerFilterTab('all')}
-                className={`py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  customerFilterTab === 'all'
-                    ? 'bg-white/20 text-white shadow-md font-extrabold'
-                    : 'text-[#8b9bb4] hover:text-white'
-                }`}
-              >
-                <span>ALL ({customersList.length})</span>
-              </button>
+            {/* TOP OPTION SWITCHER: BY DEFAULT OFFLINE, SELECT ONLINE ONLY IF NEEDED */}
+            <div className="p-2 rounded-2xl bg-[#0a0e17] border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10.5px] font-mono text-[#8b9bb4] uppercase font-bold">DIRECTORY FILTER:</span>
+              </div>
+
+              <div className="inline-flex p-0.5 rounded-xl bg-[#101628] border border-white/15 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setCustomerPickerType('offline')}
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    customerPickerType === 'offline'
+                      ? 'bg-[#ffa500] text-neutral-950 shadow-md font-extrabold'
+                      : 'text-[#8b9bb4] hover:text-white'
+                  }`}
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  <span>OFFLINE CUSTOMERS (DEFAULT)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCustomerPickerType('online')}
+                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    customerPickerType === 'online'
+                      ? 'bg-[#00d9ff] text-neutral-950 shadow-md font-extrabold'
+                      : 'text-[#8b9bb4] hover:text-white'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>ONLINE CUSTOMERS</span>
+                </button>
+              </div>
             </div>
 
+            {/* Search Bar */}
             <div className="relative shrink-0">
               <input
                 type="text"
                 autoFocus
-                placeholder="SEARCH CUSTOMER NAME, MOBILE OR CITY..."
+                placeholder={`SEARCH ${customerPickerType.toUpperCase()} CUSTOMER NAME, ID OR MOBILE...`}
                 value={custSearchTerm}
                 onChange={(e) => setCustSearchTerm(e.target.value.toUpperCase())}
-                className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff] uppercase"
+                className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff] uppercase font-mono"
               />
               <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
             </div>
 
+            {/* Customers List Render */}
             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
               {filteredExistingCustomers.length === 0 ? (
                 <div className="p-6 text-center text-[#8b9bb4] italic text-xs uppercase">
-                  NO MATCHING {customerFilterTab !== 'all' ? `${customerFilterTab.toUpperCase()} ` : ''}CUSTOMERS FOUND.
+                  NO {customerPickerType.toUpperCase()} CUSTOMERS FOUND.
                 </div>
               ) : (
                 filteredExistingCustomers.map((c) => {
                   const phoneNum = c.phone || c.mobile || '—';
-                  const isOnline = c.customer_type && c.customer_type.toLowerCase() === 'online';
+                  const isOffline = isOfflineCustomer(c.id);
 
                   return (
                     <div
@@ -1154,15 +1161,17 @@ export default function SalesManager() {
                     >
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[#00ff9d] font-bold text-xs">[{c.id}]</span>
+                          <span className={`font-mono font-bold text-xs ${isOffline ? 'text-[#00ff9d]' : 'text-[#00d9ff]'}`}>
+                            [{c.id}]
+                          </span>
                           <span className="font-bold text-white text-xs">{c.name}</span>
-                          {isOnline ? (
-                            <span className="px-1.5 py-0.2 rounded bg-[#00d9ff]/15 text-[#00d9ff] text-[9px] font-mono font-bold flex items-center gap-0.5">
-                              <Globe className="w-2.5 h-2.5" /> ONLINE
-                            </span>
-                          ) : (
+                          {isOffline ? (
                             <span className="px-1.5 py-0.2 rounded bg-[#ffa500]/15 text-[#ffa500] text-[9px] font-mono font-bold flex items-center gap-0.5">
                               <Store className="w-2.5 h-2.5" /> OFFLINE
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded bg-[#00d9ff]/15 text-[#00d9ff] text-[9px] font-mono font-bold flex items-center gap-0.5">
+                              <Globe className="w-2.5 h-2.5" /> ONLINE
                             </span>
                           )}
                         </div>
@@ -1200,7 +1209,7 @@ export default function SalesManager() {
                 <div>
                   <h4 className="text-sm font-bold text-white uppercase">CUSTOMER LEDGER: {selectedCustomer.name}</h4>
                   <span className="text-[10px] font-mono text-[#8b9bb4]">
-                    ID: {selectedCustomer.id} • TYPE: {(selectedCustomer.customer_type || 'OFFLINE').toUpperCase()} • MOBILE: {selectedCustomer.phone || selectedCustomer.mobile}
+                    ID: {selectedCustomer.id} • TYPE: {isOfflineCustomer(selectedCustomer.id) ? 'OFFLINE (CUST)' : 'ONLINE'} • MOBILE: {selectedCustomer.phone || selectedCustomer.mobile}
                   </span>
                 </div>
               </div>
@@ -1304,14 +1313,14 @@ export default function SalesManager() {
                 
                 <div className="sm:col-span-2 flex items-center justify-between p-2 rounded-xl bg-[#101628] border border-white/15">
                   <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center font-bold font-mono text-xs">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold font-mono text-xs ${isOfflineCustomer(selectedCustomer.id) ? 'bg-[#ffa500]/20 text-[#ffa500]' : 'bg-[#00d9ff]/20 text-[#00d9ff]'}`}>
                       {selectedCustomer.id.slice(-2)}
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="font-bold text-white text-xs block uppercase">{selectedCustomer.name}</span>
-                        <span className="text-[9px] font-mono px-1 rounded bg-white/10 text-[#8b9bb4]">
-                          {(selectedCustomer.customer_type || 'OFFLINE').toUpperCase()}
+                        <span className={`text-[9px] font-mono px-1 rounded ${isOfflineCustomer(selectedCustomer.id) ? 'bg-[#ffa500]/15 text-[#ffa500]' : 'bg-[#00d9ff]/15 text-[#00d9ff]'}`}>
+                          {isOfflineCustomer(selectedCustomer.id) ? 'OFFLINE (CUST)' : 'ONLINE'}
                         </span>
                       </div>
                       <span className="text-[10px] font-mono text-[#8b9bb4]">{selectedCustomer.phone || selectedCustomer.mobile} {selectedCustomer.city ? `• ${selectedCustomer.city}` : ''}</span>
@@ -1357,7 +1366,7 @@ export default function SalesManager() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* Left Products Deck with Dedicated Search Bar & Compact Cards */}
+                {/* Left Products Deck with Search & Compact Cards */}
                 <div className="lg:col-span-6 space-y-2.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                   
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-b border-white/5 pb-2">
@@ -1373,7 +1382,7 @@ export default function SalesManager() {
                         placeholder="SEARCH CODE (KF...) OR NAME..."
                         className="w-full pl-7 pr-2.5 py-1 bg-[#101628] rounded-xl text-white text-[11px] outline-none border border-white/15 focus:border-[#00d9ff] uppercase font-mono"
                       />
-                      <Search className="w-3 h-3 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
                     </div>
                   </div>
 
@@ -1591,7 +1600,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. VARIANT SELECTION MODAL (SUPPORTS ZERO/NEGATIVE STOCK WITH ALL SIZES & COLOURS) */}
+      {/* 5. VARIANT SELECTION MODAL */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4">
@@ -1609,6 +1618,7 @@ export default function SalesManager() {
               </button>
             </div>
 
+            {/* Colours Swatches */}
             <div className="space-y-1.5">
               <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
                 1. SELECT COLOUR SHADE ({modalAvailableColors.length} AVAILABLE):
@@ -1646,6 +1656,7 @@ export default function SalesManager() {
               </div>
             </div>
 
+            {/* Sizes List */}
             {modalColor && (
               <div className="space-y-1.5">
                 <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
@@ -1676,6 +1687,7 @@ export default function SalesManager() {
               </div>
             )}
 
+            {/* Rate & Qty */}
             {modalColor && modalSize && (
               <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                 <div>
@@ -1763,6 +1775,7 @@ export default function SalesManager() {
             {(() => {
               const activeBill = completedInvoice || viewingOrder!;
               const activeLineItems = completedInvoice ? completedItems : viewingOrderItems;
+              const isCustOffline = isOfflineCustomer(activeBill.customer_id);
 
               return (
                 <div className="space-y-3">
@@ -1802,7 +1815,7 @@ export default function SalesManager() {
                           <tr key={idx}>
                             <td className="py-2 px-2.5">
                               <span className="font-bold text-white block uppercase">{(it.product_name || it.product_id).toUpperCase()}</span>
-                              <span className="text-[10px] text-[#00d9ff] font-mono">
+                              <span className="text-[10px] text-[#00d9ff] font-mono uppercase">
                                 {(it.color || it.variant_color).toUpperCase()} • {(it.size || it.variant_size).toUpperCase()}
                               </span>
                             </td>
