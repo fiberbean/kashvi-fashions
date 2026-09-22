@@ -161,7 +161,7 @@ export default function AdminApp() {
     return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
 
-  const normalizedRole = (currentUser.role || '').toLowerCase().trim();
+  const normalizedRole = (currentUser.role || 'operations').toLowerCase().trim();
 
   const normalizedSection = selectedMasterSection ? String(selectedMasterSection).toLowerCase().trim() : '';
   const isCategorySection = normalizedSection === 'category' || normalizedSection === 'categories';
@@ -183,40 +183,45 @@ export default function AdminApp() {
       data-user-role={normalizedRole}
       className="min-h-screen bg-[#0a0e17] text-white flex flex-col selection:bg-[#6d4aff] selection:text-white font-sans relative overflow-x-hidden"
     >
-      {/* Global CSS Role Permission Engine */}
+      {/* Universal RBAC Rule Enforcement Engine */}
       <style>{`
-        /* Super Admin Role: Guarantee full visibility of Edit & Delete */
+        /* 1. ADMIN (Full Access everywhere across all components & future modals) */
+        [data-user-role="admin"] .btn-edit,
+        [data-user-role="admin"] .btn-delete,
+        [data-user-role="admin"] .admin-only,
+        [data-user-role="admin"] .manager-restricted,
         [data-user-role="admin"] button[title*="Edit" i],
         [data-user-role="admin"] button[title*="Delete" i],
         [data-user-role="admin"] button[aria-label*="Edit" i],
-        [data-user-role="admin"] button[aria-label*="Delete" i],
-        [data-user-role="admin"] .btn-edit,
-        [data-user-role="admin"] .btn-delete,
-        [data-user-role="admin"] svg.lucide-trash,
-        [data-user-role="admin"] svg.lucide-trash-2,
-        [data-user-role="admin"] svg.lucide-edit,
-        [data-user-role="admin"] svg.lucide-edit-2,
-        [data-user-role="admin"] svg.lucide-edit-3,
-        [data-user-role="admin"] svg.lucide-pencil {
+        [data-user-role="admin"] button[aria-label*="Delete" i] {
           display: inline-flex !important;
           pointer-events: auto !important;
         }
 
-        /* Operations Role: Create & View Only (Hide Edit and Delete) */
-        [data-user-role="operations"] button[title*="Edit" i],
-        [data-user-role="operations"] button[title*="Delete" i],
-        [data-user-role="operations"] button[aria-label*="Edit" i],
-        [data-user-role="operations"] button[aria-label*="Delete" i],
-        [data-user-role="operations"] .btn-edit,
-        [data-user-role="operations"] .btn-delete {
+        /* 2. MANAGER (Create, Edit & View — Hide Delete & Admin-Only modals) */
+        [data-user-role="manager"] .btn-delete,
+        [data-user-role="manager"] .admin-only,
+        [data-user-role="manager"] button[title*="Delete" i],
+        [data-user-role="manager"] button[aria-label*="Delete" i] {
           display: none !important;
           pointer-events: none !important;
         }
+        [data-user-role="manager"] .btn-edit,
+        [data-user-role="manager"] button[title*="Edit" i],
+        [data-user-role="manager"] button[aria-label*="Edit" i] {
+          display: inline-flex !important;
+          pointer-events: auto !important;
+        }
 
-        /* Manager Role: Create, Edit & View (Hide Delete Only) */
-        [data-user-role="manager"] button[title*="Delete" i],
-        [data-user-role="manager"] button[aria-label*="Delete" i],
-        [data-user-role="manager"] .btn-delete {
+        /* 3. OPERATIONS (Create & View Only — Hide Edit, Delete & Restricted Modals) */
+        [data-user-role="operations"] .btn-edit,
+        [data-user-role="operations"] .btn-delete,
+        [data-user-role="operations"] .admin-only,
+        [data-user-role="operations"] .manager-restricted,
+        [data-user-role="operations"] button[title*="Edit" i],
+        [data-user-role="operations"] button[title*="Delete" i],
+        [data-user-role="operations"] button[aria-label*="Edit" i],
+        [data-user-role="operations"] button[aria-label*="Delete" i] {
           display: none !important;
           pointer-events: none !important;
         }
