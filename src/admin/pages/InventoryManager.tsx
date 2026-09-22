@@ -80,18 +80,20 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
 }
 
 function getDynamicColorHex(colorName: string): string {
-  const c = (colorName || '').toLowerCase().trim();
-  if (c.includes('red') || c.includes('rani') || c.includes('rose') || c.includes('crimson') || c.includes('maroon')) return '#E30B5C';
-  if (c.includes('green') || c.includes('pista') || c.includes('mint') || c.includes('olive')) return '#00843D';
-  if (c.includes('blue') || c.includes('navy') || c.includes('teal') || c.includes('aqua') || c.includes('sky')) return '#0052CC';
-  if (c.includes('yellow') || c.includes('gold') || c.includes('mustard')) return '#FFB800';
-  if (c.includes('purple') || c.includes('violet') || c.includes('lavender') || c.includes('lilac')) return '#7E57C2';
+  const raw = (colorName || '').toLowerCase().trim();
+  const c = raw.split('/')[0].trim(); // Take first part if slash exists like 'TURQUOISE / FIROZI'
+
+  if (c.includes('red') || c.includes('rani') || c.includes('rose') || c.includes('crimson') || c.includes('maroon') || c.includes('coral') || c.includes('ruby')) return '#E30B5C';
+  if (c.includes('green') || c.includes('pista') || c.includes('mint') || c.includes('olive') || c.includes('bottle') || c.includes('forest')) return '#00843D';
+  if (c.includes('blue') || c.includes('navy') || c.includes('teal') || c.includes('aqua') || c.includes('sky') || c.includes('turquoise') || c.includes('firozi')) return '#0052CC';
+  if (c.includes('yellow') || c.includes('gold') || c.includes('mustard') || c.includes('lemon')) return '#FFB800';
+  if (c.includes('purple') || c.includes('violet') || c.includes('lavender') || c.includes('lilac') || c.includes('plum') || c.includes('dark purple')) return '#7E57C2';
   if (c.includes('orange') || c.includes('peach') || c.includes('rust')) return '#FF7043';
-  if (c.includes('black') || c.includes('charcoal')) return '#212121';
+  if (c.includes('black') || c.includes('charcoal') || c.includes('dark')) return '#212121';
   if (c.includes('white') || c.includes('cream') || c.includes('ivory') || c.includes('offwhite')) return '#F5F5F5';
-  if (c.includes('pink')) return '#FF69B4';
-  if (c.includes('brown') || c.includes('khaki') || c.includes('beige')) return '#8D6E63';
-  if (c.includes('grey') || c.includes('gray')) return '#757575';
+  if (c.includes('pink') || c.includes('rani pink')) return '#FF69B4';
+  if (c.includes('brown') || c.includes('khaki') || c.includes('beige') || c.includes('choco')) return '#8D6E63';
+  if (c.includes('grey') || c.includes('gray') || c.includes('silver')) return '#757575';
   return '#6d4aff';
 }
 
@@ -193,7 +195,10 @@ export default function InventoryManager() {
         const [pId, color, size] = key.split('___');
         if (groupedMap.has(pId)) {
           const row = groupedMap.get(pId)!;
-          const hex = colorHexMap.get(color.toLowerCase().trim()) || getDynamicColorHex(color);
+          const cleanColorKey = color.toLowerCase().trim();
+          const slashCleanKey = cleanColorKey.split('/')[0].trim();
+          
+          const hex = colorHexMap.get(cleanColorKey) || colorHexMap.get(slashCleanKey) || getDynamicColorHex(color);
           row.variants.push({ color, size, stock, hex });
           row.total_stock += stock;
         }
@@ -723,7 +728,7 @@ export default function InventoryManager() {
                           <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
                             <tr>
                               <th className="py-1.5 px-2.5">ORDER NO</th>
-                              <th className="py-1.5 px-2.5">CUSTOMERNAME</th>
+                              <th className="py-1.5 px-2.5">CUSTOMER NAME</th>
                               <th className="py-1.5 px-2 text-center">VARIANT</th>
                               <th className="py-1.5 px-2 text-center">DATE</th>
                               <th className="py-1.5 px-2 text-center">QTY SOLD</th>
