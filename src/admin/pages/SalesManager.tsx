@@ -111,9 +111,11 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
 }
 
+// Kevalam CUST0001, CUST0002... series matrame Offline Walk-in Customer
 function isOfflineCustomer(id: string | null | undefined): boolean {
   if (!id) return false;
-  return id.trim().toUpperCase().startsWith('CUST');
+  const cleanId = id.trim().toUpperCase();
+  return /^CUST\d+$/.test(cleanId);
 }
 
 export default function SalesManager() {
@@ -134,10 +136,10 @@ export default function SalesManager() {
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // Customer Type Switcher in Picker (By-default 'offline')
+  // Customer Filter Switcher: By-default 'offline'
   const [customerPickerType, setCustomerPickerType] = useState<'offline' | 'online'>('offline');
 
-  // New Customer Form State (CUST0001 Series)
+  // New Customer Form State
   const [newCustId, setNewCustId] = useState<string>('CUST0001');
   const [newCustName, setNewCustName] = useState<string>('');
   const [newCustPhone, setNewCustPhone] = useState<string>('');
@@ -178,22 +180,28 @@ export default function SalesManager() {
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
+  // Strict CUST0001 format generator
   const generateCustomerId = async () => {
     try {
       const { data } = await supabase
         .from('customers')
         .select('id')
-        .like('id', 'CUST%')
-        .order('id', { ascending: false })
-        .limit(1);
+        .order('created_at', { ascending: false });
 
       if (data && data.length > 0) {
-        const match = String(data[0].id).match(/\d+$/);
-        const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
-        setNewCustId(`CUST${String(nextNum).padStart(4, '0')}`);
-      } else {
-        setNewCustId('CUST0001');
+        const custMatches = data
+          .map((c) => String(c.id).trim().toUpperCase())
+          .filter((id) => /^CUST\d+$/.test(id))
+          .map((id) => parseInt(id.replace('CUST', ''), 10))
+          .filter((num) => !isNaN(num));
+
+        if (custMatches.length > 0) {
+          const maxNum = Math.max(...custMatches);
+          setNewCustId(`CUST${String(maxNum + 1).padStart(4, '0')}`);
+          return;
+        }
       }
+      setNewCustId('CUST0001');
     } catch {
       setNewCustId('CUST0001');
     }
@@ -269,11 +277,10 @@ export default function SalesManager() {
     setIsNewCustomerModalOpen(true);
   };
 
-  // Open picker strictly defaulting to OFFLINE customers
   const handleChooseExistingCustomer = () => {
     setIsCustomerPromptOpen(false);
     setCustSearchTerm('');
-    setCustomerPickerType('offline'); // By default offline matrame kanipisthundi
+    setCustomerPickerType('offline'); // by-default offline
     setIsExistingCustomerPickerOpen(true);
   };
 
@@ -725,7 +732,7 @@ export default function SalesManager() {
     return orders.filter((o) => o.customer_id === selectedCustomer.id || (custPhone && o.customer_phone === custPhone));
   }, [orders, selectedCustomer]);
 
-  // STRICT BY-DEFAULT FILTER: Offline (CUST) only by default, or Online when switched
+  // OFFLINE FILTER: ^CUST\d+$ matrame Offline, Migithavanni Online
   const filteredExistingCustomers = useMemo(() => {
     let list = customersList;
 
@@ -787,7 +794,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • DEFAULT OFFLINE CUSTOMERS • TOP ONLINE TOGGLE SUPPORT
+              SERIES: KFINV0001 • CUST0001: OFFLINE • NON-CUST: ONLINE
             </span>
           </div>
         </div>
@@ -941,7 +948,7 @@ export default function SalesManager() {
 
             <div>
               <h3 className="text-base font-bold text-white uppercase">SELECT CUSTOMER TYPE</h3>
-              <p className="text-xs text-[#8b9bb4] mt-1">NEW REGISTER (CUST SERIES) OR EXISTING DIRECTORY</p>
+              <p className="text-xs text-[#8b9bb4] mt-1">NEW REGISTER (CUST0001) OR EXISTING DIRECTORY</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -1076,7 +1083,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2B: EXISTING CUSTOMER PICKER (BY-DEFAULT OFFLINE ONLY, TOP SWITCHER FOR ONLINE) */}
+      {/* DIALOG 2B: EXISTING CUSTOMER PICKER (BY-DEFAULT OFFLINE ONLY, TOP SWITCHER: OFFLINE / ONLINE) */}
       {isExistingCustomerPickerOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
@@ -1094,37 +1101,37 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* TOP OPTION SWITCHER: BY DEFAULT OFFLINE, SELECT ONLINE ONLY IF NEEDED */}
-            <div className="p-2 rounded-2xl bg-[#0a0e17] border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10.5px] font-mono text-[#8b9bb4] uppercase font-bold">DIRECTORY FILTER:</span>
-              </div>
+            {/* TOP COMPACT SWITCHER: OFFLINE (DEFAULT) & ONLINE */}
+            <div className="p-2 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-mono text-[#8b9bb4] uppercase font-bold tracking-wider">
+                FILTER:
+              </span>
 
-              <div className="inline-flex p-0.5 rounded-xl bg-[#101628] border border-white/15 w-full sm:w-auto">
+              <div className="inline-flex p-0.5 rounded-xl bg-[#101628] border border-white/15">
                 <button
                   type="button"
                   onClick={() => setCustomerPickerType('offline')}
-                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`px-4 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     customerPickerType === 'offline'
                       ? 'bg-[#ffa500] text-neutral-950 shadow-md font-extrabold'
                       : 'text-[#8b9bb4] hover:text-white'
                   }`}
                 >
                   <Store className="w-3.5 h-3.5" />
-                  <span>OFFLINE CUSTOMERS (DEFAULT)</span>
+                  <span>OFFLINE</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setCustomerPickerType('online')}
-                  className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`px-4 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     customerPickerType === 'online'
                       ? 'bg-[#00d9ff] text-neutral-950 shadow-md font-extrabold'
                       : 'text-[#8b9bb4] hover:text-white'
                   }`}
                 >
                   <Globe className="w-3.5 h-3.5" />
-                  <span>ONLINE CUSTOMERS</span>
+                  <span>ONLINE</span>
                 </button>
               </div>
             </div>
@@ -1134,7 +1141,7 @@ export default function SalesManager() {
               <input
                 type="text"
                 autoFocus
-                placeholder={`SEARCH ${customerPickerType.toUpperCase()} CUSTOMER NAME, ID OR MOBILE...`}
+                placeholder={`SEARCH ${customerPickerType.toUpperCase()} CUSTOMER...`}
                 value={custSearchTerm}
                 onChange={(e) => setCustSearchTerm(e.target.value.toUpperCase())}
                 className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff] uppercase font-mono"
@@ -1320,7 +1327,7 @@ export default function SalesManager() {
                       <div className="flex items-center gap-1.5">
                         <span className="font-bold text-white text-xs block uppercase">{selectedCustomer.name}</span>
                         <span className={`text-[9px] font-mono px-1 rounded ${isOfflineCustomer(selectedCustomer.id) ? 'bg-[#ffa500]/15 text-[#ffa500]' : 'bg-[#00d9ff]/15 text-[#00d9ff]'}`}>
-                          {isOfflineCustomer(selectedCustomer.id) ? 'OFFLINE (CUST)' : 'ONLINE'}
+                          {isOfflineCustomer(selectedCustomer.id) ? 'OFFLINE' : 'ONLINE'}
                         </span>
                       </div>
                       <span className="text-[10px] font-mono text-[#8b9bb4]">{selectedCustomer.phone || selectedCustomer.mobile} {selectedCustomer.city ? `• ${selectedCustomer.city}` : ''}</span>
@@ -1790,7 +1797,12 @@ export default function SalesManager() {
                     </div>
                     <div>
                       <span className="text-[#8b9bb4] text-[9.5px] uppercase block">CUSTOMER:</span>
-                      <strong className="text-white">{activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}</strong>
+                      <strong className="text-white">
+                        {activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}
+                      </strong>
+                      <span className="text-[9px] block text-[#8b9bb4]">
+                        TYPE: {isCustOffline ? 'OFFLINE (CUST)' : 'ONLINE'}
+                      </span>
                     </div>
                     <div>
                       <span className="text-[#8b9bb4] text-[9.5px] uppercase block">PAYMENT / STATUS:</span>
