@@ -9,7 +9,6 @@ import {
   X,
   Check,
   Eye,
-  Layers,
   Palette,
   Banknote,
   QrCode,
@@ -117,8 +116,12 @@ function isOfflineCustomer(id: string | null | undefined): boolean {
   return /^CUST\d+$/.test(cleanId);
 }
 
+function cleanStr(val: string | null | undefined): string {
+  return (val || '').toString().trim().toUpperCase();
+}
+
 function getBaseFamily(colorName: string): string {
-  const c = colorName.trim().toUpperCase();
+  const c = cleanStr(colorName);
   if (c.includes('GREEN') || c.includes('OLIVE') || c.includes('MINT') || c.includes('PISTA')) return 'GREEN';
   if (c.includes('PINK') || c.includes('ROSE') || c.includes('MAGENTA') || c.includes('RANI')) return 'PINK';
   if (c.includes('BLUE') || c.includes('NAVY') || c.includes('TEAL') || c.includes('AQUA') || c.includes('SKY')) return 'BLUE';
@@ -150,7 +153,7 @@ export default function SalesManager() {
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // Customer Filter Switcher: By-default 'offline'
+  // Customer Filter Switcher
   const [customerPickerType, setCustomerPickerType] = useState<'offline' | 'online'>('offline');
 
   // New Customer Form State
@@ -173,7 +176,7 @@ export default function SalesManager() {
   const [discountAmount, setDiscountAmount] = useState<number | string>(0);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
-  // Product Filter Search in POS Desk
+  // Product Filter Search
   const [billingProductSearch, setBillingProductSearch] = useState<string>('');
 
   // Variant Picker Modal State
@@ -188,7 +191,7 @@ export default function SalesManager() {
   // Cart
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  // Invoice & Receipt Preview Modal
+  // Invoice Preview Modal
   const [completedInvoice, setCompletedInvoice] = useState<OrderRecord | null>(null);
   const [completedItems, setCompletedItems] = useState<CartItem[]>([]);
   const [viewingOrder, setViewingOrder] = useState<OrderRecord | null>(null);
@@ -203,7 +206,7 @@ export default function SalesManager() {
 
       if (data && data.length > 0) {
         const custMatches = data
-          .map((c) => String(c.id).trim().toUpperCase())
+          .map((c) => cleanStr(c.id))
           .filter((id) => /^CUST\d+$/.test(id))
           .map((id) => parseInt(id.replace('CUST', ''), 10))
           .filter((num) => !isNaN(num));
@@ -247,7 +250,7 @@ export default function SalesManager() {
       const [orderRes, prodRes, invRes, clrRes, custRes, sizeRes, subCatRes] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
-        supabase.from('inventory').select('*'), // Central single inventory table
+        supabase.from('inventory').select('*'),
         supabase.from('colours').select('*'),
         supabase.from('customers').select('*').order('created_at', { ascending: false }),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
@@ -357,7 +360,6 @@ export default function SalesManager() {
       setCustomersList((prev) => [createdCust, ...prev]);
       setSelectedCustomer(createdCust);
       setIsNewCustomerModalOpen(false);
-
       openSalesBillingDesk(createdCust);
     } catch (err: any) {
       alert('Error registering customer: ' + (err.message || 'Check database columns'));
@@ -396,26 +398,26 @@ export default function SalesManager() {
     setIsVariantModalOpen(true);
   };
 
-  // Central Inventory filter for the selected product
+  // Central Inventory Rows for Selected Product (Case & Trim Insensitive)
   const currentProductInventory = useMemo(() => {
     if (!selectedProductForModal) return [];
-    const targetId = String(selectedProductForModal.id).trim().toUpperCase();
+    const targetId = cleanStr(selectedProductForModal.id);
 
     return inventoryList.filter((inv) => {
-      const pId = String(inv.product_id || '').trim().toUpperCase();
+      const pId = cleanStr(inv.product_id);
       return pId === targetId || pId.replace(/\s+/g, '') === targetId.replace(/\s+/g, '');
     });
   }, [selectedProductForModal, inventoryList]);
 
-  // Live stock from central inventory
+  // Live Stock Finder from Central Inventory
   const getCentralizedStock = (colorName: string, sizeName?: string): number => {
-    const cTarget = colorName.trim().toUpperCase();
-    const sTarget = sizeName ? sizeName.trim().toUpperCase() : null;
+    const cTarget = cleanStr(colorName);
+    const sTarget = sizeName ? cleanStr(sizeName) : null;
 
     const matches = currentProductInventory.filter((inv) => {
-      const c = String(inv.variant_color || 'STANDARD').trim().toUpperCase();
+      const c = cleanStr(inv.variant_color || 'STANDARD');
       if (sTarget) {
-        const s = String(inv.variant_size || 'FREE SIZE').trim().toUpperCase();
+        const s = cleanStr(inv.variant_size || 'FREE SIZE');
         return c === cTarget && s === sTarget;
       }
       return c === cTarget;
@@ -424,39 +426,40 @@ export default function SalesManager() {
     return matches.reduce((sum, inv) => sum + Number(inv.stock_quantity ?? 0), 0);
   };
 
-  // Distinct shades available with real-time central stock
+  // All Variant Shades Available for Selected Product
   const allShadesForProduct = useMemo(() => {
     if (!selectedProductForModal) return [];
     const map = new Map<string, { stock: number; hex?: string; parent?: string }>();
 
-    // 1. From central inventory table
+    // 1. Central Inventory Table
     currentProductInventory.forEach((r) => {
-      const clr = String(r.variant_color || 'STANDARD').trim().toUpperCase();
-      if (!map.has(clr)) {
-        const liveStock = getCentralizedStock(clr);
-        const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr);
-        map.set(clr, {
+      const rawClr = (r.variant_color || 'STANDARD').toString().trim();
+      const clrKey = rawClr.toUpperCase();
+      if (!map.has(clrKey)) {
+        const liveStock = getCentralizedStock(clrKey);
+        const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
+        map.set(clrKey, {
           stock: liveStock,
           hex: matched?.hex_code || '#6d4aff',
-          parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
+          parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
         });
       }
     });
 
-    // 2. From product master specification
+    // 2. Product Master Specifications
     const prod = selectedProductForModal;
     if (prod.colour) {
       const rawColors = typeof prod.colour === 'string'
         ? prod.colour.split(',').map((c) => c.trim().toUpperCase())
-        : [String(prod.colour).toUpperCase()];
-      rawColors.filter(Boolean).forEach((clr) => {
-        if (!map.has(clr)) {
-          const liveStock = getCentralizedStock(clr);
-          const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr);
-          map.set(clr, {
+        : [cleanStr(prod.colour)];
+      rawColors.filter(Boolean).forEach((clrKey) => {
+        if (!map.has(clrKey)) {
+          const liveStock = getCentralizedStock(clrKey);
+          const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
+          map.set(clrKey, {
             stock: liveStock,
             hex: matched?.hex_code || '#6d4aff',
-            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
+            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
           });
         }
       });
@@ -464,27 +467,27 @@ export default function SalesManager() {
 
     if (prod.variants?.colors && Array.isArray(prod.variants.colors)) {
       prod.variants.colors.forEach((c: string) => {
-        const clr = String(c).trim().toUpperCase();
-        if (!map.has(clr)) {
-          const liveStock = getCentralizedStock(clr);
-          const matched = coloursList.find((x) => x.name.trim().toUpperCase() === clr);
-          map.set(clr, {
+        const clrKey = cleanStr(c);
+        if (!map.has(clrKey)) {
+          const liveStock = getCentralizedStock(clrKey);
+          const matched = coloursList.find((x) => cleanStr(x.name) === clrKey);
+          map.set(clrKey, {
             stock: liveStock,
             hex: matched?.hex_code || '#6d4aff',
-            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
+            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
           });
         }
       });
     }
 
-    // 3. Fallback: master colours
+    // 3. Master Colours fallback
     if (map.size === 0) {
       coloursList.forEach((c) => {
-        const clr = c.name.trim().toUpperCase();
-        map.set(clr, {
+        const clrKey = cleanStr(c.name);
+        map.set(clrKey, {
           stock: 0,
           hex: c.hex_code || '#6d4aff',
-          parent: c.parent_colour || c.parent_color || getBaseFamily(clr)
+          parent: c.parent_colour || c.parent_color || getBaseFamily(clrKey)
         });
       });
     }
@@ -497,7 +500,7 @@ export default function SalesManager() {
     }));
   }, [currentProductInventory, selectedProductForModal, coloursList]);
 
-  // Distinct parent color capsules
+  // Distinct Parent Color Groups
   const parentColorFamilies = useMemo(() => {
     const map = new Map<string, { totalStock: number; sampleHex: string; shadeCount: number }>();
 
@@ -526,56 +529,57 @@ export default function SalesManager() {
     }
   }, [isVariantModalOpen, parentColorFamilies, selectedParentColor]);
 
-  // Sub-shades under active parent color
+  // Active Sub-Shades under current parent color
   const activeSubShades = useMemo(() => {
     if (!selectedParentColor) return allShadesForProduct;
     return allShadesForProduct.filter((s) => s.parent === selectedParentColor);
   }, [allShadesForProduct, selectedParentColor]);
 
-  // Sizes for selected shade
+  // Sizes for Chosen Color Shade
   const modalAvailableSizes = useMemo(() => {
     if (!selectedProductForModal || !modalColor) return [];
-    const chosenColor = modalColor.trim().toUpperCase();
+    const chosenColor = cleanStr(modalColor);
     const map = new Map<string, number>();
 
-    // From inventory
+    // Central Inventory
     currentProductInventory
-      .filter((r) => String(r.variant_color || 'STANDARD').trim().toUpperCase() === chosenColor)
+      .filter((r) => cleanStr(r.variant_color || 'STANDARD') === chosenColor)
       .forEach((r) => {
-        const sz = String(r.variant_size || 'FREE SIZE').trim().toUpperCase();
-        if (!map.has(sz)) {
-          const liveStock = getCentralizedStock(chosenColor, sz);
-          map.set(sz, liveStock);
+        const rawSz = (r.variant_size || 'FREE SIZE').toString().trim();
+        const szKey = rawSz.toUpperCase();
+        if (!map.has(szKey)) {
+          const liveStock = getCentralizedStock(chosenColor, szKey);
+          map.set(szKey, liveStock);
         }
       });
 
-    // From product master
+    // Product Master Sizes
     const prod = selectedProductForModal;
     if (prod.size) {
       const rawSizes = typeof prod.size === 'string'
         ? prod.size.split(',').map((s) => s.trim().toUpperCase())
-        : [String(prod.size).toUpperCase()];
-      rawSizes.filter(Boolean).forEach((sz) => {
-        if (!map.has(sz)) {
-          const liveStock = getCentralizedStock(chosenColor, sz);
-          map.set(sz, liveStock);
+        : [cleanStr(prod.size)];
+      rawSizes.filter(Boolean).forEach((szKey) => {
+        if (!map.has(szKey)) {
+          const liveStock = getCentralizedStock(chosenColor, szKey);
+          map.set(szKey, liveStock);
         }
       });
     }
 
     if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
       prod.variants.sizes.forEach((s: string) => {
-        const sz = String(s).trim().toUpperCase();
-        if (!map.has(sz)) {
-          const liveStock = getCentralizedStock(chosenColor, sz);
-          map.set(sz, liveStock);
+        const szKey = cleanStr(s);
+        if (!map.has(szKey)) {
+          const liveStock = getCentralizedStock(chosenColor, szKey);
+          map.set(szKey, liveStock);
         }
       });
     }
 
-    // From sub-category
+    // Sub-Category Sizes
     const subCatObj = subCategoriesList.find(
-      (sc) => sc.id === prod.sub_category_id || sc.name?.toUpperCase() === prod.sub_category?.toUpperCase()
+      (sc) => sc.id === prod.sub_category_id || cleanStr(sc.name) === cleanStr(prod.sub_category)
     );
 
     if (subCatObj) {
@@ -584,7 +588,7 @@ export default function SalesManager() {
       );
       if (directMatches.length > 0) {
         directMatches.forEach((s) => {
-          const sName = String(s.name).trim().toUpperCase();
+          const sName = cleanStr(s.name);
           if (!map.has(sName)) {
             const liveStock = getCentralizedStock(chosenColor, sName);
             map.set(sName, liveStock);
@@ -592,10 +596,10 @@ export default function SalesManager() {
         });
       } else if (subCatObj.size_group) {
         const groupMatches = allSizesList.filter(
-          (sz) => (sz.size_group || '').trim().toUpperCase() === subCatObj.size_group.trim().toUpperCase()
+          (sz) => cleanStr(sz.size_group) === cleanStr(subCatObj.size_group)
         );
         groupMatches.forEach((s) => {
-          const sName = String(s.name).trim().toUpperCase();
+          const sName = cleanStr(s.name);
           if (!map.has(sName)) {
             const liveStock = getCentralizedStock(chosenColor, sName);
             map.set(sName, liveStock);
@@ -606,7 +610,7 @@ export default function SalesManager() {
 
     if (map.size === 0 && allSizesList.length > 0) {
       allSizesList.slice(0, 8).forEach((s) => {
-        const sName = String(s.name).trim().toUpperCase();
+        const sName = cleanStr(s.name);
         map.set(sName, 0);
       });
     }
@@ -621,7 +625,7 @@ export default function SalesManager() {
     }));
   }, [currentProductInventory, selectedProductForModal, modalColor, subCategoriesList, allSizesList]);
 
-  // Exact live stock for the chosen color & size
+  // Exact live stock for current color + size
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
     return getCentralizedStock(modalColor, modalSize);
@@ -642,7 +646,7 @@ export default function SalesManager() {
       return;
     }
 
-    const matchedHex = coloursList.find((c) => c.name.toUpperCase().trim() === modalColor.toUpperCase().trim())?.hex_code;
+    const matchedHex = coloursList.find((c) => cleanStr(c.name) === cleanStr(modalColor))?.hex_code;
     const cartId = `${selectedProductForModal.id}_${modalColor}_${modalSize}`.toUpperCase();
 
     const existingIndex = cartItems.findIndex((c) => c.cart_id === cartId);
@@ -690,7 +694,7 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // Central sale execution with direct inventory deduction
+  // Central Sale Execution & Direct Inventory Deduction
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -720,15 +724,14 @@ export default function SalesManager() {
         payment_mode: paymentMode,
         utr_number: paymentMode === 'upi' && cleanUtr ? cleanUtr : null,
         payment_status: isUtrPending ? 'utr_pending' : 'paid',
-        items_summary: cartItems, // Inline items backup
+        items_summary: cartItems,
         created_at: new Date().toISOString()
       };
 
-      // 1. Insert Order
       const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
       if (orderErr) throw orderErr;
 
-      // 2. Safe Line items insert (attempt order_items, won't break if table doesn't exist)
+      // Safe Line Items insert
       try {
         const orderItemsPayload = cartItems.map((item, idx) => ({
           id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
@@ -742,10 +745,10 @@ export default function SalesManager() {
         }));
         await supabase.from('order_items').insert(orderItemsPayload);
       } catch (e) {
-        console.warn('order_items table not present or skipped:', e);
+        console.warn('order_items table skipped:', e);
       }
 
-      // 3. Central inventory deduction (Shared Online & Offline Stock)
+      // Deduct Central Inventory Stock (Allows Negative/Zero)
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
@@ -763,7 +766,6 @@ export default function SalesManager() {
             .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
             .eq('id', invRow.id);
         } else {
-          // If not yet present in inventory, compute and insert
           const liveStockBeforeSale = getCentralizedStock(item.color, item.size);
           const newStock = liveStockBeforeSale - item.quantity;
 
@@ -1210,7 +1212,7 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* TOP COMPACT SWITCHER: OFFLINE & ONLINE */}
+            {/* Top Compact Switcher */}
             <div className="p-2 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-center justify-between gap-2">
               <span className="text-[10px] font-mono text-[#8b9bb4] uppercase font-bold tracking-wider">
                 FILTER:
@@ -1716,12 +1718,11 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. VARIANT SELECTION MODAL (PARENT CAPSULES -> TINY SWATCH CUBES WITHOUT TEXT LABELS) */}
+      {/* 5. VARIANT SELECTION MODAL */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             
-            {/* Top Product Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div>
                 <span className="font-mono text-xs font-bold text-[#00ff9d] uppercase">[{selectedProductForModal.id}]</span>
@@ -1826,12 +1827,10 @@ export default function SalesManager() {
                           }`}
                           style={{ backgroundColor: cardBg }}
                         >
-                          {/* Selected Checkmark */}
                           {isSelected && (
                             <Check className="w-4 h-4 stroke-[3]" style={{ color: textColor }} />
                           )}
 
-                          {/* Top-Right Stock Counter Badge */}
                           <span
                             className={`absolute -top-1.5 -right-1.5 px-1 py-0.2 rounded-full text-[8px] font-mono font-black border shadow-sm ${
                               s.stock > 0
@@ -2022,7 +2021,7 @@ export default function SalesManager() {
                           <tr key={idx}>
                             <td className="py-2 px-2.5">
                               <span className="font-bold text-white block uppercase">{(it.product_name || it.product_id).toUpperCase()}</span>
-                              <span className="text-[10px] text-[#00d9ff] font-mono">
+                              <span className="text-[10px] text-[#00d9ff] font-mono uppercase">
                                 {(it.color || it.variant_color).toUpperCase()} • {(it.size || it.variant_size).toUpperCase()}
                               </span>
                             </td>
