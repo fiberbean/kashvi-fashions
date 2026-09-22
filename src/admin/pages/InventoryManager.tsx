@@ -1,115 +1,148 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Boxes,
   Search,
   RefreshCw,
   Loader2,
-  AlertTriangle,
-  Plus,
-  Minus,
   Package,
-  Building2,
+  Layers,
+  ShoppingBag,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Calendar,
+  User,
+  Store,
+  Receipt,
+  X,
+  History,
+  TrendingUp,
   Tag,
-  CheckCircle2,
-  Layers
+  Palette
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface InventoryItem {
   id: string;
   product_id: string;
-  variant_color: string;
-  variant_size: string;
-  stock_quantity: number;
-  low_stock_threshold: number;
-  updated_at: string;
-  product?: {
-    name: string;
-    category?: string | null;
-    sub_category?: string | null;
-    brand?: string | null;
-    selling_price?: number;
-    images?: any[] | null;
-  };
+  product_code: string;
+  product_name: string;
+  category: string;
+  sub_category: string;
+  color: string;
+  size: string;
+  selling_price: number;
+  cost_price: number;
+  available_stock: number;
+  hex_code?: string;
+}
+
+interface PurchaseHistoryItem {
+  purchase_id: string;
+  supplier_name: string;
+  supplier_bill_no: string;
+  purchase_date: string;
+  quantity: number;
+  unit_cost: number;
+  total_cost: number;
+}
+
+interface SalesHistoryItem {
+  order_id: string;
+  customer_name: string;
+  sale_date: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
 }
 
 export default function InventoryManager() {
-  const [items, setItems] = useState<InventoryItem[]>([]);
+  const [inventoryList, setInventoryList] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
-  const [brandFilter, setBrandFilter] = useState<'all' | 'fashions' | 'jewellery'>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [stockLevelFilter, setStockLevelFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  const fetchInventory = async () => {
+  // History Drawer / Modal state
+  const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryItem | null>(null);
+  const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
+  const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+
+  // Load Inventory Data (Robust combination of products + inventory entries)
+  const loadInventory = async () => {
     setLoading(true);
     try {
-      // 1. Fetch inventory records
-      const { data: invData, error: invErr } = await supabase
-        .from('inventory')
-        .select('*')
-        .order('product_id', { ascending: true });
+      const [prodRes, invRes, colorRes] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('inventory').select('*'),
+        supabase.from('colours').select('name, hex_code')
+      ]);
 
-      if (invErr) throw invErr;
+      const products = prodRes.data || [];
+      const inventoryRecords = invRes.data || [];
+      const colours = colorRes.data || [];
 
-      // 2. Fetch all products to hydrate details
-      const { data: prodData, error: prodErr } = await supabase
-        .from('products')
-        .select('id, name, category, sub_category, brand, selling_price, images, variants, colour, size');
-
-      if (prodErr) throw prodErr;
-
-      const prodMap = new Map((prodData || []).map((p) => [p.id, p]));
-
-      // 3. Auto-seed inventory for any product variant not yet in inventory table
-      const existingKeySet = new Set(
-        (invData || []).map((i) => `${i.product_id}_${i.variant_color}_${i.variant_size}`)
-      );
-
-      const missingInserts: any[] = [];
-
-      (prodData || []).forEach((prod) => {
-        const colors = prod.variants?.colors?.length ? prod.variants.colors : [prod.colour || 'Standard'];
-        const sizes = prod.variants?.sizes?.length ? prod.variants.sizes : [prod.size || 'Free Size'];
-
-        colors.forEach((c: string) => {
-          sizes.forEach((s: string) => {
-            const key = `${prod.id}_${c}_${s}`;
-            if (!existingKeySet.has(key)) {
-              missingInserts.push({
-                id: `inv_${prod.id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-                product_id: prod.id,
-                variant_color: c,
-                variant_size: s,
-                stock_quantity: 0,
-                low_stock_threshold: 3
-              });
-              existingKeySet.add(key);
-            }
-          });
-        });
+      const colorHexMap = new Map<string, string>();
+      colours.forEach((c) => {
+        if (c.name) colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code || '#6d4aff');
       });
 
-      if (missingInserts.length > 0) {
-        await supabase.from('inventory').insert(missingInserts);
-        // Refresh with inserted items
-        const { data: reloaded } = await supabase
-          .from('inventory')
-          .select('*')
-          .order('product_id', { ascending: true });
+      const processedItems: InventoryItem[] = [];
 
-        const mapped = (reloaded || []).map((item) => ({
-          ...item,
-          product: prodMap.get(item.product_id)
-        }));
-        setItems(mapped);
+      if (inventoryRecords.length > 0) {
+        // Build items directly from inventory records linked to product info
+        inventoryRecords.forEach((inv) => {
+          const prod = products.find((p) => String(p.id) === String(inv.product_id));
+          const colorName = inv.variant_color || inv.color || 'Standard';
+          processedItems.push({
+            id: inv.id || `${inv.product_id}_${colorName}_${inv.variant_size || 'Free'}`,
+            product_id: inv.product_id,
+            product_code: prod?.id || inv.product_id,
+            product_name: prod?.name || 'Unknown Product',
+            category: prod?.category || 'Fashion',
+            sub_category: prod?.sub_category || 'General',
+            color: colorName,
+            size: inv.variant_size || inv.size || 'Free Size',
+            selling_price: Number(prod?.selling_price || prod?.price || 0),
+            cost_price: Number(prod?.cost_price || 0),
+            available_stock: Number(inv.stock_quantity ?? inv.quantity ?? 0),
+            hex_code: colorHexMap.get(colorName.toLowerCase().trim()) || '#6d4aff'
+          });
+        });
       } else {
-        const mapped = (invData || []).map((item) => ({
-          ...item,
-          product: prodMap.get(item.product_id)
-        }));
-        setItems(mapped);
+        // Fallback: If inventory table has not been populated yet, display products with 0 stock
+        products.forEach((prod) => {
+          let sizes: string[] = ['Free Size'];
+          if (prod.size) {
+            sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim()) : prod.size;
+          }
+          let colors: string[] = ['Standard'];
+          if (prod.colour) {
+            colors = typeof prod.colour === 'string' ? prod.colour.split(',').map((c: string) => c.trim()) : prod.colour;
+          }
+
+          colors.forEach((c) => {
+            sizes.forEach((s) => {
+              processedItems.push({
+                id: `${prod.id}_${c}_${s}`,
+                product_id: prod.id,
+                product_code: prod.id,
+                product_name: prod.name,
+                category: prod.category || 'Fashion',
+                sub_category: prod.sub_category || 'General',
+                color: c,
+                size: s,
+                selling_price: Number(prod.selling_price || prod.price || 0),
+                cost_price: Number(prod.cost_price || 0),
+                available_stock: 0,
+                hex_code: colorHexMap.get(c.toLowerCase().trim()) || '#6d4aff'
+              });
+            });
+          });
+        }
+      );
       }
+
+      setInventoryList(processedItems);
     } catch (err) {
       console.error('Failed to load inventory:', err);
     } finally {
@@ -118,100 +151,210 @@ export default function InventoryManager() {
   };
 
   useEffect(() => {
-    fetchInventory();
+    loadInventory();
   }, []);
 
-  const handleAdjustStock = async (item: InventoryItem, delta: number) => {
-    const newQty = Math.max(0, (item.stock_quantity || 0) + delta);
-    setUpdatingId(item.id);
+  // Fetch full inward & outward history when a product is clicked
+  const handleOpenProductHistory = async (item: InventoryItem) => {
+    setSelectedItemForHistory(item);
+    setLoadingHistory(true);
+    setPurchaseHistory([]);
+    setSalesHistory([]);
+
     try {
-      const { error } = await supabase
-        .from('inventory')
-        .update({ stock_quantity: newQty, updated_at: new Date().toISOString() })
-        .eq('id', item.id);
+      // 1. Fetch Purchase Inward History
+      const { data: purItems } = await supabase
+        .from('purchase_items')
+        .select(`
+          quantity,
+          unit_cost,
+          total_cost,
+          purchases (
+            id,
+            supplier_name,
+            supplier_bill_no,
+            purchase_date
+          )
+        `)
+        .eq('product_id', item.product_id)
+        .eq('variant_color', item.color)
+        .eq('variant_size', item.size);
 
-      if (error) throw error;
+      if (purItems && purItems.length > 0) {
+        const mappedPurchases: PurchaseHistoryItem[] = purItems.map((pi: any) => ({
+          purchase_id: pi.purchases?.id || '—',
+          supplier_name: pi.purchases?.supplier_name || 'Direct Inward',
+          supplier_bill_no: pi.purchases?.supplier_bill_no || '—',
+          purchase_date: pi.purchases?.purchase_date || '—',
+          quantity: Number(pi.quantity || 0),
+          unit_cost: Number(pi.unit_cost || 0),
+          total_cost: Number(pi.total_cost || (pi.quantity * pi.unit_cost) || 0)
+        }));
+        setPurchaseHistory(mappedPurchases);
+      }
 
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, stock_quantity: newQty } : i))
-      );
-    } catch (err: any) {
-      alert('Failed to update stock: ' + err.message);
+      // 2. Fetch Sales Dispatch History
+      const { data: saleItems } = await supabase
+        .from('order_items')
+        .select(`
+          quantity,
+          price,
+          total,
+          orders (
+            id,
+            customer_name,
+            created_at
+          )
+        `)
+        .eq('product_id', item.product_id)
+        .eq('variant_color', item.color)
+        .eq('variant_size', item.size);
+
+      if (saleItems && saleItems.length > 0) {
+        const mappedSales: SalesHistoryItem[] = saleItems.map((si: any) => ({
+          order_id: si.orders?.id || '—',
+          customer_name: si.orders?.customer_name || 'Walk-in Customer',
+          sale_date: si.orders?.created_at ? new Date(si.orders.created_at).toLocaleDateString('en-IN') : '—',
+          quantity: Number(si.quantity || 0),
+          unit_price: Number(si.price || 0),
+          total_amount: Number(si.total || (si.quantity * si.price) || 0)
+        }));
+        setSalesHistory(mappedSales);
+      }
+    } catch (err) {
+      console.error('Failed to load history:', err);
     } finally {
-      setUpdatingId(null);
+      setLoadingHistory(false);
     }
   };
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      const prod = item.product;
-      const isJewel = (prod?.brand || '').toLowerCase().includes('jewel') || item.product_id.startsWith('KJ');
+  // Counters for Low Stock and Out of Stock
+  const lowStockCount = useMemo(() => {
+    return inventoryList.filter((it) => it.available_stock > 0 && it.available_stock <= 3).length;
+  }, [inventoryList]);
 
-      if (brandFilter === 'fashions' && isJewel) return false;
-      if (brandFilter === 'jewellery' && !isJewel) return false;
+  const outOfStockCount = useMemo(() => {
+    return inventoryList.filter((it) => it.available_stock <= 0).length;
+  }, [inventoryList]);
 
-      if (stockFilter === 'low' && (item.stock_quantity > item.low_stock_threshold || item.stock_quantity === 0)) return false;
-      if (stockFilter === 'out' && item.stock_quantity > 0) return false;
+  // Dynamic filter for category & search
+  const filteredInventory = useMemo(() => {
+    return inventoryList.filter((item) => {
+      // Category filter
+      if (categoryFilter !== 'all' && item.category.toLowerCase() !== categoryFilter.toLowerCase()) {
+        return false;
+      }
 
+      // Stock Level Filter
+      if (stockLevelFilter === 'low' && !(item.available_stock > 0 && item.available_stock <= 3)) {
+        return false;
+      }
+      if (stockLevelFilter === 'out' && item.available_stock > 0) {
+        return false;
+      }
+
+      // Search Query filter
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const mId = item.product_id.toLowerCase().includes(q);
-        const mName = (prod?.name || '').toLowerCase().includes(q);
-        const mColor = item.variant_color.toLowerCase().includes(q);
-        const mSize = item.variant_size.toLowerCase().includes(q);
-        return mId || mName || mColor || mSize;
+        const q = searchQuery.toLowerCase().trim();
+        const matchCode = item.product_code.toLowerCase().includes(q);
+        const matchName = item.product_name.toLowerCase().includes(q);
+        const matchSubCat = item.sub_category.toLowerCase().includes(q);
+        const matchColor = item.color.toLowerCase().includes(q);
+        const matchSize = item.size.toLowerCase().includes(q);
+        return matchCode || matchName || matchSubCat || matchColor || matchSize;
       }
 
       return true;
     });
-  }, [items, brandFilter, stockFilter, searchQuery]);
-
-  const totalStockCount = useMemo(() => {
-    return items.reduce((sum, item) => sum + (item.stock_quantity || 0), 0);
-  }, [items]);
-
-  const lowStockCount = useMemo(() => {
-    return items.filter((i) => i.stock_quantity > 0 && i.stock_quantity <= i.low_stock_threshold).length;
-  }, [items]);
-
-  const outOfStockCount = useMemo(() => {
-    return items.filter((i) => i.stock_quantity === 0).length;
-  }, [items]);
+  }, [inventoryList, categoryFilter, stockLevelFilter, searchQuery]);
 
   return (
-    <div className="space-y-4 font-sans text-xs select-none">
+    <div className="space-y-3 font-sans text-xs select-none">
       
-      {/* 1. Header & Summary Metrics */}
-      <div className="p-4 rounded-3xl bg-[#101628]/95 border border-white/10 shadow-xl backdrop-blur-2xl flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] text-white flex items-center justify-center shadow-lg shadow-[#6d4aff]/30">
-            <Boxes className="w-5 h-5 text-[#00d9ff]" />
+      {/* 1. FILTER & SEARCH CONTROL BAR */}
+      <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
+        
+        {/* Left: Category Tabs */}
+        <div className="flex items-center gap-1.5">
+          <div className="inline-flex p-0.5 rounded-xl bg-[#0a0e17] border border-white/10">
+            {['all', 'fashion', 'jewellery'].map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategoryFilter(cat)}
+                className={`px-3 py-1.5 rounded-lg font-bold text-xs capitalize transition-all cursor-pointer ${
+                  categoryFilter === cat
+                    ? 'bg-[#6d4aff] text-white shadow-md'
+                    : 'text-[#8b9bb4] hover:text-white'
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
           </div>
-          <div>
-            <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
-              <span>Inventory & Stock Deck</span>
-              <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/40 text-[9.5px] font-mono">
-                {totalStockCount} Units In Stock
-              </span>
-            </h2>
-            <span className="text-[10px] text-[#8b9bb4]">
-              Realtime Variant Stock Levels, Instant Adjustments & Inward Tracking
-            </span>
+
+          <div className="inline-flex p-0.5 rounded-xl bg-[#0a0e17] border border-white/10">
+            <button
+              type="button"
+              onClick={() => setStockLevelFilter('all')}
+              className={`px-2.5 py-1.5 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
+                stockLevelFilter === 'all'
+                  ? 'bg-white/15 text-white font-bold'
+                  : 'text-[#8b9bb4] hover:text-white'
+              }`}
+            >
+              All Levels
+            </button>
           </div>
         </div>
 
+        {/* Right: Low & Out badges placed right BEFORE Search Bar */}
         <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-xl bg-[#ffa500]/10 border border-[#ffa500]/30 text-[#ffa500] font-mono font-bold text-[10px] flex items-center gap-1.5">
-            <AlertTriangle className="w-3.5 h-3.5" />
-            <span>Low: {lowStockCount}</span>
-          </div>
-          <div className="px-3 py-1.5 rounded-xl bg-[#ff6b6b]/10 border border-[#ff6b6b]/30 text-[#ff6b6b] font-mono font-bold text-[10px] flex items-center gap-1.5">
-            <span>Out: {outOfStockCount}</span>
-          </div>
+          
+          {/* Low Stock Indicator Filter Button */}
           <button
             type="button"
-            onClick={fetchInventory}
-            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#00d9ff] cursor-pointer transition-colors"
+            onClick={() => setStockLevelFilter(stockLevelFilter === 'low' ? 'all' : 'low')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
+              stockLevelFilter === 'low'
+                ? 'bg-[#ffa500] text-neutral-950 border-[#ffa500] shadow-md scale-105'
+                : 'bg-[#ffa500]/10 text-[#ffa500] border-[#ffa500]/30 hover:bg-[#ffa500]/20'
+            }`}
+          >
+            <span>Low:</span>
+            <span className="font-extrabold">{lowStockCount}</span>
+          </button>
+
+          {/* Out of Stock Indicator Filter Button */}
+          <button
+            type="button"
+            onClick={() => setStockLevelFilter(stockLevelFilter === 'out' ? 'all' : 'out')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
+              stockLevelFilter === 'out'
+                ? 'bg-[#ff6b6b] text-white border-[#ff6b6b] shadow-md scale-105'
+                : 'bg-[#ff6b6b]/10 text-[#ff6b6b] border-[#ff6b6b]/30 hover:bg-[#ff6b6b]/20'
+            }`}
+          >
+            <span>Out:</span>
+            <span className="font-extrabold">{outOfStockCount}</span>
+          </button>
+
+          {/* Search Bar */}
+          <div className="relative w-56 sm:w-72">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search code, title, color, size..."
+              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff]"
+            />
+            <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+          </div>
+
+          <button
+            type="button"
+            onClick={loadInventory}
+            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-[#00d9ff] cursor-pointer"
             title="Refresh Inventory"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -219,237 +362,105 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. Filter & Search Controls */}
-      <div className="p-3 rounded-2xl bg-[#0a0e17]/80 border border-white/10 flex flex-wrap items-center justify-between gap-3 text-[11px]">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Brand Domain Filter */}
-          <div className="inline-flex p-1 bg-[#101628] rounded-xl border border-white/10 font-bold">
-            <button
-              type="button"
-              onClick={() => setBrandFilter('all')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                brandFilter === 'all' ? 'bg-[#6d4aff] text-white' : 'text-[#8b9bb4] hover:text-white'
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setBrandFilter('fashions')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                brandFilter === 'fashions' ? 'bg-[#6d4aff] text-white' : 'text-[#8b9bb4] hover:text-white'
-              }`}
-            >
-              Fashion
-            </button>
-            <button
-              type="button"
-              onClick={() => setBrandFilter('jewellery')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                brandFilter === 'jewellery' ? 'bg-[#6d4aff] text-white' : 'text-[#8b9bb4] hover:text-white'
-              }`}
-            >
-              Jewellery
-            </button>
-          </div>
-
-          {/* Stock Condition Filter */}
-          <div className="inline-flex p-1 bg-[#101628] rounded-xl border border-white/10 font-semibold">
-            <button
-              type="button"
-              onClick={() => setStockFilter('all')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                stockFilter === 'all' ? 'bg-white/15 text-white' : 'text-[#8b9bb4] hover:text-white'
-              }`}
-            >
-              All Levels
-            </button>
-            <button
-              type="button"
-              onClick={() => setStockFilter('low')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                stockFilter === 'low' ? 'bg-[#ffa500]/30 text-[#ffa500] font-bold' : 'text-[#8b9bb4] hover:text-white'
-              }`}
-            >
-              Low Stock
-            </button>
-            <button
-              type="button"
-              onClick={() => setStockFilter('out')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                stockFilter === 'out' ? 'bg-[#ff6b6b]/30 text-[#ff6b6b] font-bold' : 'text-[#8b9bb4] hover:text-white'
-              }`}
-            >
-              Out of Stock
-            </button>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div className="relative flex-1 max-w-xs">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search code, title, color, size..."
-            className="w-full pl-8 pr-3 py-1.5 bg-[#101628] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/50"
-          />
-          <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
-        </div>
-      </div>
-
-      {/* 3. Realtime Stock Table */}
-      <div className="rounded-3xl bg-[#101628]/95 border border-white/10 shadow-xl overflow-hidden">
+      {/* 2. INVENTORY TABLE */}
+      <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[9.5px] uppercase tracking-wider">
-                <th className="p-3.5">Product</th>
-                <th className="p-3.5">Category</th>
-                <th className="p-3.5">Variant (Color / Size)</th>
-                <th className="p-3.5">Selling Price</th>
-                <th className="p-3.5 text-center">Status</th>
-                <th className="p-3.5 text-center">Current Stock</th>
-                <th className="p-3.5 text-right">Instant Adjust</th>
+              <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
+                <th className="py-2.5 px-3">Product Code & Name</th>
+                <th className="py-2.5 px-3">Category / Sub-Category</th>
+                <th className="py-2.5 px-3">Colour</th>
+                <th className="py-2.5 px-3 text-center">Size</th>
+                <th className="py-2.5 px-3 text-right">Selling Price</th>
+                <th className="py-2.5 px-3 text-center">Available Stock</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-white/5 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-[#8b9bb4]">
+                  <td colSpan={6} className="p-8 text-center text-[#8b9bb4]">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-2" />
-                    Loading inventory records...
+                    Loading real-time inventory...
                   </td>
                 </tr>
-              ) : filteredItems.length === 0 ? (
+              ) : filteredInventory.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-[#8b9bb4] italic">
-                    No inventory records match your filter criteria.
+                  <td colSpan={6} className="p-8 text-center text-[#8b9bb4] italic text-xs">
+                    No inventory records match your criteria. Click &quot;Purchase&quot; to inward stock.
                   </td>
                 </tr>
               ) : (
-                filteredItems.map((item) => {
-                  const prod = item.product;
-                  const firstImg = prod?.images && prod.images[0] ? prod.images[0].url : null;
-                  const isLow = item.stock_quantity > 0 && item.stock_quantity <= item.low_stock_threshold;
-                  const isOut = item.stock_quantity === 0;
+                filteredInventory.map((item) => {
+                  const isOut = item.available_stock <= 0;
+                  const isLow = item.available_stock > 0 && item.available_stock <= 3;
 
                   return (
-                    <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                      
-                      {/* Product details */}
-                      <td className="p-3.5">
-                        <div className="flex items-center gap-2.5">
-                          {firstImg ? (
-                            <img
-                              src={firstImg}
-                              alt=""
-                              className="w-9 h-10 object-cover rounded-lg border border-white/10 shrink-0"
-                            />
-                          ) : (
-                            <div className="w-9 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-[#8b9bb4] shrink-0">
-                              <Package className="w-4 h-4" />
-                            </div>
-                          )}
-                          <div>
-                            <span className="font-mono font-extrabold text-[#00ff9d] text-xs block">
-                              {item.product_id}
-                            </span>
-                            <span className="font-bold text-white text-xs block max-w-xs truncate">
-                              {prod?.name || 'Product'}
-                            </span>
-                          </div>
+                    <tr
+                      key={item.id}
+                      onClick={() => handleOpenProductHistory(item)}
+                      className="hover:bg-white/[0.04] transition-all cursor-pointer group"
+                      title="Click to view complete inward & sales history"
+                    >
+                      {/* Product Code & Name */}
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-extrabold text-[#00ff9d] text-xs shrink-0 group-hover:underline">
+                            [{item.product_code}]
+                          </span>
+                          <span className="font-semibold text-white text-xs block truncate max-w-[200px]">
+                            {item.product_name}
+                          </span>
                         </div>
                       </td>
 
-                      {/* Category */}
-                      <td className="p-3.5">
-                        <span className="font-semibold text-white block">{prod?.category || 'General'}</span>
-                        <span className="text-[9.5px] text-[#00d9ff] font-mono block mt-0.5">
-                          {prod?.sub_category || '—'}
+                      {/* Category & Sub-Category */}
+                      <td className="py-2.5 px-3">
+                        <span className="font-bold text-white text-xs block capitalize">
+                          {item.category}
+                        </span>
+                        <span className="text-[10px] font-mono text-[#8b9bb4] block">
+                          {item.sub_category}
                         </span>
                       </td>
 
-                      {/* Variant Combo */}
-                      <td className="p-3.5">
-                        <div className="inline-flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-white font-medium">
-                            {item.variant_color}
-                          </span>
-                          <span className="px-2 py-0.5 rounded-lg bg-[#00d9ff]/10 border border-[#00d9ff]/30 text-[#00d9ff] font-mono font-bold">
-                            {item.variant_size}
+                      {/* Colour with swatch */}
+                      <td className="py-2.5 px-3">
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0a0e17] border border-white/10">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0 shadow"
+                            style={{ backgroundColor: item.hex_code }}
+                          />
+                          <span className="font-semibold text-white text-xs">
+                            {item.color}
                           </span>
                         </div>
+                      </td>
+
+                      {/* Size */}
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-[#00d9ff]">
+                        {item.size}
                       </td>
 
                       {/* Selling Price */}
-                      <td className="p-3.5 font-mono font-bold text-white">
-                        ₹{Number(prod?.selling_price || 0).toLocaleString('en-IN')}
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                        ₹{item.selling_price.toLocaleString('en-IN')}
                       </td>
 
-                      {/* Status */}
-                      <td className="p-3.5 text-center">
-                        {isOut ? (
-                          <span className="inline-block px-2.5 py-0.5 rounded-full bg-[#ff6b6b]/15 text-[#ff6b6b] border border-[#ff6b6b]/30 font-mono font-bold text-[9px] uppercase">
-                            Out of Stock
-                          </span>
-                        ) : isLow ? (
-                          <span className="inline-block px-2.5 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] border border-[#ffa500]/30 font-mono font-bold text-[9px] uppercase">
-                            Low Stock
-                          </span>
-                        ) : (
-                          <span className="inline-block px-2.5 py-0.5 rounded-full bg-[#00ff9d]/15 text-[#00ff9d] border border-[#00ff9d]/30 font-mono font-bold text-[9px] uppercase">
-                            Healthy
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Stock Quantity */}
-                      <td className="p-3.5 text-center">
-                        <span className={`font-mono text-base font-extrabold ${
-                          isOut ? 'text-[#ff6b6b]' : isLow ? 'text-[#ffa500]' : 'text-[#00ff9d]'
-                        }`}>
-                          {updatingId === item.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin mx-auto text-[#00d9ff]" />
-                          ) : (
-                            item.stock_quantity
-                          )}
+                      {/* Available Stock with status badge */}
+                      <td className="py-2.5 px-3 text-center">
+                        <span
+                          className={`inline-flex items-center justify-center min-w-[55px] px-2.5 py-0.5 rounded-full font-mono text-xs font-black border ${
+                            isOut
+                              ? 'bg-[#ff6b6b]/15 text-[#ff6b6b] border-[#ff6b6b]/30'
+                              : isLow
+                              ? 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/30'
+                              : 'bg-[#00ff9d]/15 text-[#00ff9d] border-[#00ff9d]/30'
+                          }`}
+                        >
+                          {item.available_stock} Units
                         </span>
                       </td>
-
-                      {/* Quick Adjust Actions */}
-                      <td className="p-3.5 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            disabled={item.stock_quantity <= 0 || updatingId === item.id}
-                            onClick={() => handleAdjustStock(item, -1)}
-                            className="w-7 h-7 rounded-xl bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b] flex items-center justify-center transition-all cursor-pointer disabled:opacity-30 active:scale-95"
-                            title="Decrease 1 Unit"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={updatingId === item.id}
-                            onClick={() => handleAdjustStock(item, 1)}
-                            className="w-7 h-7 rounded-xl bg-white/5 hover:bg-[#00ff9d]/20 text-[#8b9bb4] hover:text-[#00ff9d] flex items-center justify-center transition-all cursor-pointer active:scale-95"
-                            title="Increase 1 Unit"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={updatingId === item.id}
-                            onClick={() => handleAdjustStock(item, 5)}
-                            className="px-2 h-7 rounded-xl bg-white/5 hover:bg-[#00d9ff]/20 text-[#00d9ff] font-mono text-[10px] font-bold flex items-center justify-center transition-all cursor-pointer active:scale-95"
-                            title="Add Pack (+5)"
-                          >
-                            +5
-                          </button>
-                        </div>
-                      </td>
-
                     </tr>
                   );
                 })
@@ -458,6 +469,175 @@ export default function InventoryManager() {
           </table>
         </div>
       </div>
+
+      {/* 3. PRODUCT LIFECYCLE HISTORY MODAL / DRAWER (WHERE BOUGHT & WHO SOLD TO) */}
+      {selectedItemForHistory && (
+        <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-3xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00d9ff] to-[#6d4aff] text-white flex items-center justify-center shadow">
+                  <History className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>[{selectedItemForHistory.product_code}] {selectedItemForHistory.product_name}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[10px] font-mono">
+                      {selectedItemForHistory.color} • {selectedItemForHistory.size}
+                    </span>
+                  </h4>
+                  <span className="text-[10.5px] text-[#8b9bb4]">
+                    Complete Product Audit Trail: Inward Purchases & Customer Outward Dispatches
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedItemForHistory(null)}
+                className="p-1 rounded-xl bg-white/5 hover:bg-white/10 text-[#8b9bb4] hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Metrics Bar */}
+            <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-[#0a0e17] border border-white/10 text-center font-mono">
+              <div>
+                <span className="text-[9px] text-[#8b9bb4] uppercase block">Selling Price</span>
+                <span className="font-extrabold text-white text-xs">₹{selectedItemForHistory.selling_price}</span>
+              </div>
+              <div>
+                <span className="text-[9px] text-[#8b9bb4] uppercase block">Current Stock</span>
+                <span className="font-extrabold text-[#00ff9d] text-xs">{selectedItemForHistory.available_stock} Units</span>
+              </div>
+              <div>
+                <span className="text-[9px] text-[#8b9bb4] uppercase block">Sub-Category</span>
+                <span className="font-extrabold text-[#00d9ff] text-xs">{selectedItemForHistory.sub_category}</span>
+              </div>
+            </div>
+
+            {/* Content: Inward vs Outward */}
+            <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar p-1">
+              
+              {loadingHistory ? (
+                <div className="p-8 text-center text-[#8b9bb4]">
+                  <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-1.5" />
+                  Fetching lifecycle logs...
+                </div>
+              ) : (
+                <>
+                  {/* Section 1: Inward History (Ekkada Konnam) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
+                        <ArrowDownLeft className="w-3.5 h-3.5 text-[#00d9ff]" />
+                        Purchase Inward Log (ఎక్కడ కొన్నాం / సప్లయర్ బిల్స్)
+                      </span>
+                      <span className="text-[#8b9bb4]">{purchaseHistory.length} Inward Records</span>
+                    </div>
+
+                    <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
+                      {purchaseHistory.length === 0 ? (
+                        <div className="p-4 text-center text-[#8b9bb4] italic text-xs">
+                          No direct purchase inward records tracked for this specific variant.
+                        </div>
+                      ) : (
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
+                            <tr>
+                              <th className="py-1.5 px-2.5">Purchase Bill</th>
+                              <th className="py-1.5 px-2.5">Supplier Name</th>
+                              <th className="py-1.5 px-2 text-center">Date</th>
+                              <th className="py-1.5 px-2 text-center">Qty</th>
+                              <th className="py-1.5 px-2 text-right">Cost (₹)</th>
+                              <th className="py-1.5 px-2.5 text-right">Total (₹)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 font-mono">
+                            {purchaseHistory.map((ph, idx) => (
+                              <tr key={idx} className="hover:bg-white/[0.02]">
+                                <td className="py-2 px-2.5 font-bold text-[#00ff9d]">
+                                  {ph.purchase_id}
+                                  <span className="block text-[9px] text-[#8b9bb4]">Bill: {ph.supplier_bill_no}</span>
+                                </td>
+                                <td className="py-2 px-2.5 font-sans font-semibold text-white">{ph.supplier_name}</td>
+                                <td className="py-2 px-2 text-center text-[#8b9bb4] text-[11px]">{ph.purchase_date}</td>
+                                <td className="py-2 px-2 text-center font-bold text-[#00ff9d]">+{ph.quantity}</td>
+                                <td className="py-2 px-2 text-right text-[#8b9bb4]">₹{ph.unit_cost}</td>
+                                <td className="py-2 px-2.5 text-right font-bold text-white">₹{ph.total_cost.toLocaleString('en-IN')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Section 2: Outward Sales History (Yevariki Ammanu) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="font-bold text-[#ffa500] uppercase flex items-center gap-1.5">
+                        <ArrowUpRight className="w-3.5 h-3.5 text-[#ffa500]" />
+                        Sales Dispatch Log (ఎవరికి అమ్మాం / కస్టమర్ ఆర్డర్స్)
+                      </span>
+                      <span className="text-[#8b9bb4]">{salesHistory.length} Sales Records</span>
+                    </div>
+
+                    <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
+                      {salesHistory.length === 0 ? (
+                        <div className="p-4 text-center text-[#8b9bb4] italic text-xs">
+                          No outward customer sales recorded for this specific variant yet.
+                        </div>
+                      ) : (
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
+                            <tr>
+                              <th className="py-1.5 px-2.5">Order No</th>
+                              <th className="py-1.5 px-2.5">Customer Name</th>
+                              <th className="py-1.5 px-2 text-center">Date</th>
+                              <th className="py-1.5 px-2 text-center">Qty Sold</th>
+                              <th className="py-1.5 px-2 text-right">Price (₹)</th>
+                              <th className="py-1.5 px-2.5 text-right">Total (₹)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 font-mono">
+                            {salesHistory.map((sh, idx) => (
+                              <tr key={idx} className="hover:bg-white/[0.02]">
+                                <td className="py-2 px-2.5 font-bold text-[#ffa500]">{sh.order_id}</td>
+                                <td className="py-2 px-2.5 font-sans font-semibold text-white">{sh.customer_name}</td>
+                                <td className="py-2 px-2 text-center text-[#8b9bb4] text-[11px]">{sh.sale_date}</td>
+                                <td className="py-2 px-2 text-center font-bold text-[#ff6b6b]">-{sh.quantity}</td>
+                                <td className="py-2 px-2 text-right text-[#8b9bb4]">₹{sh.unit_price}</td>
+                                <td className="py-2 px-2.5 text-right font-bold text-white">₹{sh.total_amount.toLocaleString('en-IN')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-white/10 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedItemForHistory(null)}
+                className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer"
+              >
+                Close History
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
