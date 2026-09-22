@@ -149,7 +149,6 @@ export default function InventoryManager() {
         });
       });
 
-      // Populate variants with accurate inventory stock
       inventoryRecords.forEach((inv: any) => {
         const pId = String(inv.product_id);
         if (groupedMap.has(pId)) {
@@ -275,7 +274,6 @@ export default function InventoryManager() {
     }
   };
 
-  // DETAILED LIVE STOCK MATRIX FOR MODAL VIEW
   const productMatrixSummary = useMemo(() => {
     if (!selectedProductForHistory) return null;
     const variants = selectedProductForHistory.variants;
@@ -363,9 +361,7 @@ export default function InventoryManager() {
   return (
     <div className="space-y-3 font-sans text-xs select-none uppercase">
       
-      {/* 1. FILTER & SEARCH BAR */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
-        
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
             <Filter className="w-3.5 h-3.5 text-[#00d9ff]" />
@@ -390,7 +386,7 @@ export default function InventoryManager() {
 
           {distinctSubCategories.length > 0 && (
             <div className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
-              <span className="text-[11px] text-[#8b9bb4] font-semibold">SUB-CAT:</span>
+              <span className="text-[11px] font-mono text-[#8b9bb4]">SUB-CAT:</span>
               <select
                 value={selectedSubCatFilter}
                 onChange={(e) => setSelectedSubCatFilter(e.target.value)}
@@ -470,7 +466,6 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE (ROW-WISE PRODUCTS WITH COLOR CUBES & STOCK COUNT) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -506,7 +501,6 @@ export default function InventoryManager() {
                   const isOut = row.total_stock <= 0;
                   const isLow = row.total_stock > 0 && row.total_stock <= 3;
 
-                  // Unique distinct colors with stock aggregation
                   const uniqueColors = Array.from(new Set(row.variants.map((v) => v.color))).map((colorName) => {
                     const found = row.variants.find((v) => v.color === colorName);
                     const shadeStock = row.variants.filter((v) => v.color === colorName).reduce((sum, v) => sum + v.stock, 0);
@@ -540,7 +534,6 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* SMALL CUBES WITH EXACT SHADE STOCK COUNT */}
                       <td className="py-3 px-3">
                         <div className="flex flex-wrap gap-1.5 max-w-[220px]">
                           {uniqueColors.map((uc) => {
@@ -621,7 +614,6 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. DETAILED PRODUCT MATRIX & AUDIT TRAIL MODAL */}
       {selectedProductForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -650,7 +642,6 @@ export default function InventoryManager() {
               </button>
             </div>
 
-            {/* LIVE STOCK MATRIX GRID */}
             {productMatrixSummary && productMatrixSummary.shades.length > 0 && (
               <div className="space-y-1.5 shrink-0">
                 <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
@@ -806,7 +797,7 @@ export default function InventoryManager() {
                 onClick={() => setSelectedProductForHistory(null)}
                 className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer uppercase"
               >
-                CLOSE MATRIX & HISTORY
+                CLOSE HISTORY
               </button>
             </div>
 
