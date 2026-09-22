@@ -140,7 +140,6 @@ export default function OrdersManager() {
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Store Settings Cache State
   const [storeConfig, setStoreConfig] = useState<StoreSettingsData>({
     store_name: 'Kashvi Fashions',
     sender_address: 'Main Road, Near Clock Tower',
@@ -153,24 +152,20 @@ export default function OrdersManager() {
     pipeline_pin: '1234'
   });
 
-  // Filters State
   const [currentStageFilter, setCurrentStageFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
 
-  // Modal States
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const [showDetailModal, setShowDetailModal] = useState<boolean>(false);
 
-  // Pipeline Status Confirmation State
   const [confirmStageChange, setConfirmStageChange] = useState<{
     orderId: string;
     targetStatus: string;
     currentStatus: string;
   } | null>(null);
 
-  // Rollback PIN modal
   const [pendingRollback, setPendingRollback] = useState<{
     orderId: string;
     targetStatus: string;
@@ -179,15 +174,12 @@ export default function OrdersManager() {
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
 
-  // Dispatch Courier modal
   const [dispatchOrderId, setDispatchOrderId] = useState<string | null>(null);
   const [trackingNumber, setTrackingNumber] = useState<string>('');
 
-  // Refund UTR modal
   const [refundOrderId, setRefundOrderId] = useState<string | null>(null);
   const [refundUtr, setRefundUtr] = useState<string>('');
 
-  // Load Settings & Orders
   const fetchStoreConfig = async () => {
     try {
       const { data } = await supabase
@@ -224,7 +216,17 @@ export default function OrdersManager() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setOrders(data || []);
+      
+      // Filter out Offline Store Bills (KFINV series & offline type) strictly for Online Orders Pipeline
+      const onlineOrders = (data || []).filter((o: any) => {
+        const orderId = String(o.id || '').toUpperCase().trim();
+        const orderType = String(o.order_type || '').toLowerCase().trim();
+        const isOfflineBill = orderId.startsWith('KFINV');
+        const isOfflineCustomer = orderType === 'offline' || String(o.customer_id || '').toUpperCase().startsWith('CUST');
+        return !isOfflineBill && !isOfflineCustomer;
+      });
+
+      setOrders(onlineOrders);
     } catch (err: any) {
       console.error('Orders load error:', err);
       setErrorMsg(err.message || 'Failed to load live orders.');
@@ -238,7 +240,6 @@ export default function OrdersManager() {
     loadOrders();
   }, []);
 
-  // Close modals on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -253,7 +254,6 @@ export default function OrdersManager() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [confirmStageChange, pendingRollback, dispatchOrderId, refundOrderId, showDetailModal]);
 
-  // Update Status in Supabase
   const updateOrderStatus = async (orderId: string, newStatus: string, additionalFields: any = {}) => {
     try {
       const payload = { 
@@ -276,7 +276,6 @@ export default function OrdersManager() {
     }
   };
 
-  // Stage Progression Trigger with Confirmation
   const handleStageSelectChange = (orderId: string, targetStatus: string, currentStatus: string) => {
     if (currentStatus === targetStatus) return;
 
@@ -287,7 +286,6 @@ export default function OrdersManager() {
     });
   };
 
-  // Execute stage change after OK is clicked in confirmation
   const handleProceedStageChange = async () => {
     if (!confirmStageChange) return;
 
@@ -374,7 +372,6 @@ export default function OrdersManager() {
     setRefundUtr('');
   };
 
-  // SUPER STYLISH 4x6 SHIPPING LABEL
   const printShippingLabel = (order: OrderRecord) => {
     const custName = order.customer?.name || order.customer_name || 'Customer';
     const custPhone = order.customer?.phone || order.customer_phone || '-';
@@ -635,7 +632,6 @@ export default function OrdersManager() {
     printWindow.document.close();
   };
 
-  // SUPER STYLISH A4 BILL (CUSTOMER & DELIVERY COMBINED, PAYMENT DETAILS BESIDE IT)
   const handlePrintTaxInvoice = (order: OrderRecord) => {
     const custName = order.customer?.name || order.customer_name || 'Customer';
     const custPhone = order.customer?.phone || order.customer_phone || '';
@@ -653,7 +649,6 @@ export default function OrdersManager() {
     const storeTitle = (storeConfig.store_name || 'Kashvi Fashions').toUpperCase();
     const returnAddressText = `${storeConfig.sender_address}, ${storeConfig.city}, ${storeConfig.state} - ${storeConfig.pincode}`;
 
-    // Resolve Payment Type
     const rawPayMethod = (order.payment_method || order.payment?.method || '').toLowerCase();
     const rawPayType = (order.payment_type || order.payment_mode || order.payment?.payment_type || '').toLowerCase();
     
@@ -672,7 +667,6 @@ export default function OrdersManager() {
       resolvedPaymentType = order.payment_method || 'Prepaid';
     }
 
-    // Resolve UTR / Bank Reference Number
     const resolvedUtr =
       order.bank_reference ||
       order.payment?.utr ||
@@ -1040,7 +1034,6 @@ export default function OrdersManager() {
     printWindow.document.close();
   };
 
-  // WhatsApp Messaging
   const sendWhatsAppUpdate = (order: OrderRecord) => {
     const custName = order.customer?.name || order.customer_name || 'Customer';
     const rawPhone = order.customer?.phone || order.customer_phone || '';
@@ -1059,7 +1052,6 @@ export default function OrdersManager() {
     window.open(`https://wa.me/${cleanPhone}?text=${text}`, '_blank');
   };
 
-  // Export CSV
   const handleExportCSV = () => {
     if (filteredOrders.length === 0) {
       alert('No orders to export.');
@@ -1099,7 +1091,6 @@ export default function OrdersManager() {
     document.body.removeChild(link);
   };
 
-  // Filter Pipeline Logic
   const filteredOrders = useMemo(() => {
     let list = orders;
 
@@ -1163,7 +1154,7 @@ export default function OrdersManager() {
             <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
               <span>Orders Command Deck</span>
               <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/40 text-[9.5px] font-mono">
-                {orders.length} Total Live
+                {orders.length} Online Web Orders
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
@@ -1238,7 +1229,7 @@ export default function OrdersManager() {
         </div>
 
         <div className="text-[10px] font-mono text-[#8b9bb4]">
-          Showing <strong className="text-white">{filteredOrders.length}</strong> of {orders.length} orders
+          Showing <strong className="text-white">{filteredOrders.length}</strong> online orders
         </div>
       </div>
 
@@ -1312,13 +1303,13 @@ export default function OrdersManager() {
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-[#8b9bb4]">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-2" />
-                    Loading live orders pipeline...
+                    Loading online orders pipeline...
                   </td>
                 </tr>
               ) : filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-8 text-center text-[#8b9bb4] italic">
-                    No orders match your filter criteria.
+                    No online orders match your filter criteria.
                   </td>
                 </tr>
               ) : (
@@ -1445,9 +1436,7 @@ export default function OrdersManager() {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 5. CENTER POPUP MODAL: VIEW FULL ORDER DETAILS                            */}
-      {/* ========================================================================= */}
+      {/* 5. CENTER POPUP MODAL: VIEW FULL ORDER DETAILS */}
       {showDetailModal && selectedOrder && (
         <div
           onClick={() => setShowDetailModal(false)}
@@ -1457,7 +1446,6 @@ export default function OrdersManager() {
             onClick={(e) => e.stopPropagation()}
             className="bg-[#101628] border border-white/15 w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] cursor-default animate-in zoom-in-95 duration-200"
           >
-            {/* Modal Top Header */}
             <div className="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between bg-[#0a0e17]/80 shrink-0">
               <div className="flex items-center gap-3">
                 <button
@@ -1494,10 +1482,7 @@ export default function OrdersManager() {
               </button>
             </div>
 
-            {/* Scrollable Center Body */}
             <div className="p-5 overflow-y-auto space-y-4 flex-1 custom-scrollbar">
-              
-              {/* Visual 8-Stage Progress Tracker */}
               <div className="p-3.5 bg-[#0a0e17] rounded-2xl border border-white/10 overflow-x-auto custom-scrollbar">
                 <span className="text-[10px] font-mono text-[#8b9bb4] uppercase tracking-wider block mb-2.5">
                   Pipeline Stage Tracker
@@ -1535,7 +1520,6 @@ export default function OrdersManager() {
                 </div>
               </div>
 
-              {/* Customer & Shipping Details Card */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-1.5">
                   <span className="text-[10px] font-mono text-[#00d9ff] uppercase font-bold flex items-center gap-1.5">
@@ -1569,7 +1553,6 @@ export default function OrdersManager() {
                 </div>
               </div>
 
-              {/* Items Table */}
               <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
                 <div className="p-2.5 bg-white/5 border-b border-white/10 flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold text-white uppercase tracking-wider">
@@ -1620,7 +1603,6 @@ export default function OrdersManager() {
                 </table>
               </div>
 
-              {/* Payment Breakdown Card */}
               <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2 text-xs">
                 <div className="flex justify-between text-[#8b9bb4]">
                   <span>Subtotal</span>
@@ -1650,7 +1632,6 @@ export default function OrdersManager() {
 
             </div>
 
-            {/* Modal Bottom Action Footer */}
             <div className="p-4 border-t border-white/10 bg-[#0a0e17]/90 flex flex-wrap items-center justify-between gap-2 shrink-0">
               <div className="flex items-center gap-2">
                 <button
@@ -1693,9 +1674,7 @@ export default function OrdersManager() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 6. PIPELINE STAGE CHANGE CONFIRMATION MODAL                               */}
-      {/* ========================================================================= */}
+      {/* 6. PIPELINE STAGE CHANGE CONFIRMATION MODAL */}
       {confirmStageChange && (
         <div 
           onClick={() => setConfirmStageChange(null)}
@@ -1746,9 +1725,7 @@ export default function OrdersManager() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 7. SECURITY PIN MODAL FOR STEP ROLLBACK                                    */}
-      {/* ========================================================================= */}
+      {/* 7. SECURITY PIN MODAL FOR STEP ROLLBACK */}
       {pendingRollback && (
         <div 
           onClick={() => setPendingRollback(null)}
@@ -1806,9 +1783,7 @@ export default function OrdersManager() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 8. INDIA POST TRACKING NUMBER MODAL                                       */}
-      {/* ========================================================================= */}
+      {/* 8. INDIA POST TRACKING NUMBER MODAL */}
       {dispatchOrderId && (
         <div 
           onClick={() => setDispatchOrderId(null)}
@@ -1858,9 +1833,7 @@ export default function OrdersManager() {
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 9. CANCEL & REFUND UTR MODAL                                              */}
-      {/* ========================================================================= */}
+      {/* 9. CANCEL & REFUND UTR MODAL */}
       {refundOrderId && (
         <div 
           onClick={() => setRefundOrderId(null)}
