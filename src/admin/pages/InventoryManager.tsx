@@ -149,7 +149,6 @@ export default function InventoryManager() {
         });
       });
 
-      // Map inventory records precisely
       const variantStockMap = new Map<string, number>();
       inventoryRecords.forEach((inv: any) => {
         const pId = String(inv.product_id).toUpperCase().trim();
@@ -160,7 +159,6 @@ export default function InventoryManager() {
         variantStockMap.set(key, (variantStockMap.get(key) || 0) + stock);
       });
 
-      // Fallback from purchase items if any variant is missing in inventory
       purchaseRecords.forEach((pi: any) => {
         const pId = String(pi.product_id).toUpperCase().trim();
         const color = String(pi.variant_color || pi.color || 'STANDARD').toUpperCase().trim();
@@ -293,38 +291,6 @@ export default function InventoryManager() {
       setLoadingHistory(false);
     }
   };
-
-  const productMatrixSummary = useMemo(() => {
-    if (!selectedProductForHistory) return null;
-    const variants = selectedProductForHistory.variants;
-
-    const shadeMap = new Map<string, Map<string, number>>();
-    const allSizesSet = new Set<string>();
-
-    variants.forEach((v) => {
-      const c = v.color.toUpperCase();
-      const s = v.size.toUpperCase();
-      allSizesSet.add(s);
-
-      if (!shadeMap.has(c)) {
-        shadeMap.set(c, new Map<string, number>());
-      }
-      shadeMap.get(c)!.set(s, (shadeMap.get(c)!.get(s) || 0) + v.stock);
-    });
-
-    const sizes = Array.from(allSizesSet);
-    const shades = Array.from(shadeMap.entries()).map(([color, sizeStockMap]) => {
-      const foundVar = variants.find((v) => v.color === color);
-      return {
-        color,
-        hex: foundVar?.hex || '#6d4aff',
-        stocks: sizes.map((sz) => sizeStockMap.get(sz) || 0),
-        totalShadeStock: Array.from(sizeStockMap.values()).reduce((a, b) => a + b, 0)
-      };
-    });
-
-    return { sizes, shades };
-  }, [selectedProductForHistory]);
 
   const lowStockCount = useMemo(() => {
     return productRows.filter((r) => r.total_stock > 0 && r.total_stock <= 3).length;
@@ -536,7 +502,7 @@ export default function InventoryManager() {
                       key={row.product_id}
                       onClick={() => handleOpenProductHistory(row)}
                       className="hover:bg-white/[0.04] transition-all cursor-pointer group"
-                      title="CLICK TO VIEW DETAILED MATRIX & AUDIT TRAIL"
+                      title="CLICK TO VIEW AUDIT TRAIL"
                     >
                       <td className="py-3 px-3">
                         <span className="font-mono font-bold text-[#00ff9d] text-[11px] block">
@@ -634,7 +600,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. DETAILED MATRIX & AUDIT TRAIL MODAL */}
+      {/* 3. AUDIT TRAIL MODAL (WITHOUT MATRIX GRID) */}
       {selectedProductForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -642,14 +608,14 @@ export default function InventoryManager() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00d9ff] to-[#6d4aff] text-white flex items-center justify-center shadow">
-                  <Grid className="w-4 h-4 text-white" />
+                  <History className="w-4 h-4 text-white" />
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-white flex items-center gap-2 uppercase">
                     <span>[{selectedProductForHistory.product_code}] {selectedProductForHistory.product_name}</span>
                   </h4>
                   <span className="text-[10px] font-mono text-[#00d9ff]">
-                    LIVE STOCK MATRIX (SHADES VS SIZES) • AUDIT TRAIL
+                    PURCHASE INWARD & SALES DISPATCH AUDIT TRAIL
                   </span>
                 </div>
               </div>
@@ -662,49 +628,6 @@ export default function InventoryManager() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            {productMatrixSummary && productMatrixSummary.shades.length > 0 && (
-              <div className="space-y-1.5 shrink-0">
-                <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                  LIVE STOCK MATRIX (SHADES & SIZES BREAKDOWN):
-                </span>
-                
-                <div className="border border-white/10 rounded-2xl overflow-x-auto bg-[#0a0e17] max-h-56">
-                  <table className="w-full text-center border-collapse">
-                    <thead>
-                      <tr className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
-                        <th className="py-2 px-3 text-left">COLOUR \ SIZE</th>
-                        {productMatrixSummary.sizes.map((sz) => (
-                          <th key={sz} className="py-2 px-2 text-[#00d9ff] font-bold">{sz}</th>
-                        ))}
-                        <th className="py-2 px-3 text-right text-[#00ff9d]">TOTAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5 font-mono text-xs">
-                      {productMatrixSummary.shades.map((sh) => (
-                        <tr key={sh.color} className="hover:bg-white/[0.02]">
-                          <td className="py-2 px-3 text-left font-bold text-white uppercase flex items-center gap-2">
-                            <span
-                              className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
-                              style={{ backgroundColor: sh.hex }}
-                            />
-                            <span>{sh.color}</span>
-                          </td>
-                          {sh.stocks.map((st, i) => (
-                            <td key={i} className={`py-2 px-2 font-bold ${st > 0 ? 'text-[#00ff9d]' : 'text-[#8b9bb4]/40'}`}>
-                              {st}
-                            </td>
-                          ))}
-                          <td className="py-2 px-3 text-right font-black text-[#00ff9d]">
-                            {sh.totalShadeStock}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
 
             <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar p-1">
               {loadingHistory ? (
