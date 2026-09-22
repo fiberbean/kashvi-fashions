@@ -12,11 +12,9 @@ import {
   Calendar,
   Layers,
   Palette,
-  CreditCard,
   Banknote,
   QrCode,
   Store,
-  Globe,
   Receipt,
   Printer,
   ArrowRight,
@@ -24,16 +22,23 @@ import {
   Phone,
   Tag,
   AlertTriangle,
-  ChevronDown
+  ChevronDown,
+  UserPlus,
+  Users,
+  Share2,
+  BookOpen,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-interface InventoryItemRecord {
+interface CustomerRecord {
   id: string;
-  product_id: string;
-  variant_color: string;
-  variant_size: string;
-  stock_quantity: number;
+  name: string;
+  phone: string;
+  city?: string | null;
+  address?: string | null;
+  created_at?: string;
 }
 
 interface ProductRecord {
@@ -45,6 +50,14 @@ interface ProductRecord {
   online_price?: number;
   selling_price?: number;
   price?: number;
+}
+
+interface InventoryItemRecord {
+  id: string;
+  product_id: string;
+  variant_color: string;
+  variant_size: string;
+  stock_quantity: number;
 }
 
 interface CartItem {
@@ -62,13 +75,16 @@ interface CartItem {
 
 interface OrderRecord {
   id: string;
+  customer_id?: string | null;
   customer_name: string;
   customer_phone?: string;
-  order_type: 'offline' | 'online';
+  order_type: 'offline';
   total_amount: number;
   discount_amount: number;
   final_amount: number;
-  payment_mode: string;
+  payment_mode: 'cash' | 'upi';
+  utr_number?: string | null;
+  payment_status: 'paid' | 'utr_pending';
   created_at: string;
 }
 
@@ -77,67 +93,108 @@ export default function SalesManager() {
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
   const [inventoryList, setInventoryList] = useState<InventoryItemRecord[]>([]);
   const [coloursList, setColoursList] = useState<{ name: string; hex_code?: string }[]>([]);
+  const [customersList, setCustomersList] = useState<CustomerRecord[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // POS Billing Modal state
-  const [isBillingModalOpen, setIsBillingModalOpen] = useState<boolean>(false);
-  const [orderType, setOrderType] = useState<'offline' | 'online'>('offline');
-  const [customerName, setCustomerName] = useState<string>('Walk-in Customer');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
-  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi' | 'card'>('cash');
-  const [discountAmount, setDiscountAmount] = useState<number | string>(0);
-  const [invoiceNo, setInvoiceNo] = useState<string>('INV0001');
+  // 1. Initial Customer Prompt & Registration Modals
+  const [isCustomerPromptOpen, setIsCustomerPromptOpen] = useState<boolean>(false);
+  const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState<boolean>(false);
+  const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
+  const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // Product Selection in POS
-  const [selectedProductId, setSelectedProductId] = useState<string>('');
-  const [productSearchTerm, setProductSearchTerm] = useState<string>('');
-  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState<boolean>(false);
-  const [selectedColor, setSelectedColor] = useState<string>('');
-  const [selectedSize, setSelectedSize] = useState<string>('');
-  const [itemRate, setItemRate] = useState<number>(0);
-  const [sellQuantity, setSellQuantity] = useState<number>(1);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  // New Customer Form State
+  const [newCustId, setNewCustId] = useState<string>('CUST0001');
+  const [newCustName, setNewCustName] = useState<string>('');
+  const [newCustPhone, setNewCustPhone] = useState<string>('');
+  const [newCustCity, setNewCustCity] = useState<string>('');
+  const [registeringCust, setRegisteringCust] = useState<boolean>(false);
+
+  // Existing Customer Search
+  const [custSearchTerm, setCustSearchTerm] = useState<string>('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null);
+
+  // 2. Sales Form State
+  const [isBillingModalOpen, setIsBillingModalOpen] = useState<boolean>(false);
+  const [invoiceNo, setInvoiceNo] = useState<string>('KFINV0001');
+  const [invoiceDate, setInvoiceDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [paymentMode, setPaymentMode] = useState<'cash' | 'upi'>('cash');
+  const [utrNumber, setUtrNumber] = useState<string>('');
+  const [discountAmount, setDiscountAmount] = useState<number | string>(0);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // 3. Variant Picker Modal State
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState<boolean>(false);
+  const [selectedProductForModal, setSelectedProductForModal] = useState<ProductRecord | null>(null);
+  const [modalColor, setModalColor] = useState<string>('');
+  const [modalSize, setModalSize] = useState<string>('');
+  const [modalRate, setModalRate] = useState<number>(0);
+  const [modalQty, setModalQty] = useState<number>(1);
 
   // Cart
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [submitting, setSubmitting] = useState<boolean>(false);
 
-  // Invoice Details View Modal
+  // 4. Colorful Invoice & WhatsApp Share Preview Modal
+  const [completedInvoice, setCompletedInvoice] = useState<OrderRecord | null>(null);
+  const [completedItems, setCompletedItems] = useState<CartItem[]>([]);
   const [viewingOrder, setViewingOrder] = useState<OrderRecord | null>(null);
-  const [viewingItems, setViewingItems] = useState<any[]>([]);
+  const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
-  const generateInvoiceNo = async () => {
+  // Generate Customer ID (CUST0001 format)
+  const generateCustomerId = async () => {
     try {
       const { data } = await supabase
-        .from('orders')
+        .from('customers')
         .select('id')
-        .like('id', 'INV%')
+        .like('id', 'CUST%')
         .order('id', { ascending: false })
         .limit(1);
 
       if (data && data.length > 0) {
         const match = data[0].id.match(/\d+$/);
         const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
-        setInvoiceNo(`INV${String(nextNum).padStart(4, '0')}`);
+        setNewCustId(`CUST${String(nextNum).padStart(4, '0')}`);
       } else {
-        setInvoiceNo('INV0001');
+        setNewCustId('CUST0001');
       }
     } catch {
-      setInvoiceNo(`INV${Math.floor(1000 + Math.random() * 9000)}`);
+      setNewCustId(`CUST${Math.floor(1000 + Math.random() * 9000)}`);
+    }
+  };
+
+  // Generate Bill Number Strictly in KFINV0001 series
+  const generateBillNumber = async () => {
+    try {
+      const { data } = await supabase
+        .from('orders')
+        .select('id')
+        .like('id', 'KFINV%')
+        .order('id', { ascending: false })
+        .limit(1);
+
+      if (data && data.length > 0) {
+        const match = data[0].id.match(/\d+$/);
+        const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
+        setInvoiceNo(`KFINV${String(nextNum).padStart(4, '0')}`);
+      } else {
+        setInvoiceNo('KFINV0001');
+      }
+    } catch {
+      setInvoiceNo(`KFINV${Math.floor(1000 + Math.random() * 9000)}`);
     }
   };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [orderRes, prodRes, invRes, clrRes] = await Promise.all([
+      const [orderRes, prodRes, invRes, clrRes, custRes] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
         supabase.from('inventory').select('*'),
-        supabase.from('colours').select('name, hex_code')
+        supabase.from('colours').select('name, hex_code'),
+        supabase.from('customers').select('*').order('name', { ascending: true })
       ]);
 
       if (orderRes.data) setOrders(orderRes.data);
@@ -149,8 +206,9 @@ export default function SalesManager() {
       }
       if (invRes.data) setInventoryList(invRes.data);
       if (clrRes.data) setColoursList(clrRes.data);
+      if (custRes.data) setCustomersList(custRes.data);
     } catch (err) {
-      console.error('Failed to load sales data:', err);
+      console.error('Failed to load data:', err);
     } finally {
       setLoading(false);
     }
@@ -160,132 +218,162 @@ export default function SalesManager() {
     loadData();
   }, []);
 
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsProductDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
+  // Step 1: Start New Bill
+  const handleStartNewBill = () => {
+    setIsCustomerPromptOpen(true);
+  };
 
-  const openNewBillingDesk = () => {
-    generateInvoiceNo();
-    setCustomerName('Walk-in Customer');
-    setCustomerPhone('');
-    setOrderType('offline');
+  // Step 2A: New Customer Selected
+  const handleChooseNewCustomer = () => {
+    setIsCustomerPromptOpen(false);
+    generateCustomerId();
+    setNewCustName('');
+    setNewCustPhone('');
+    setNewCustCity('');
+    setIsNewCustomerModalOpen(true);
+  };
+
+  // Step 2B: Existing Customer Selected
+  const handleChooseExistingCustomer = () => {
+    setIsCustomerPromptOpen(false);
+    setCustSearchTerm('');
+    setIsExistingCustomerPickerOpen(true);
+  };
+
+  // Save New Customer to DB
+  const handleRegisterCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustName.trim() || !newCustPhone.trim()) {
+      alert('Customer Name mariyu Mobile Number tappanisari.');
+      return;
+    }
+
+    setRegisteringCust(true);
+    try {
+      const newRecord: CustomerRecord = {
+        id: newCustId.trim(),
+        name: newCustName.trim(),
+        phone: newCustPhone.trim(),
+        city: newCustCity.trim() || null
+      };
+
+      const { error } = await supabase.from('customers').insert([newRecord]);
+      if (error) throw error;
+
+      setCustomersList((prev) => [newRecord, ...prev]);
+      setSelectedCustomer(newRecord);
+      setIsNewCustomerModalOpen(false);
+
+      openSalesBillingDesk(newRecord);
+    } catch (err: any) {
+      alert('Error registering customer: ' + err.message);
+    } finally {
+      setRegisteringCust(false);
+    }
+  };
+
+  // Select Existing Customer
+  const handleSelectExistingCustomer = (cust: CustomerRecord) => {
+    setSelectedCustomer(cust);
+    setIsExistingCustomerPickerOpen(false);
+    openSalesBillingDesk(cust);
+  };
+
+  // Step 3: Open Sales Billing Desk
+  const openSalesBillingDesk = (cust: CustomerRecord) => {
+    setSelectedCustomer(cust);
+    setInvoiceDate(new Date().toISOString().split('T')[0]);
+    generateBillNumber();
     setPaymentMode('cash');
+    setUtrNumber('');
     setDiscountAmount(0);
     setCartItems([]);
-    setSelectedProductId('');
-    setProductSearchTerm('');
-    setSelectedColor('');
-    setSelectedSize('');
-    setItemRate(0);
-    setSellQuantity(1);
     setIsBillingModalOpen(true);
   };
 
-  const activeProduct = useMemo(() => {
-    return productsList.find((p) => String(p.id) === String(selectedProductId));
-  }, [productsList, selectedProductId]);
+  // Open Product Variant Selection Modal
+  const handleOpenVariantPicker = (prod: ProductRecord) => {
+    setSelectedProductForModal(prod);
+    const storePrice = prod.offline_price || prod.selling_price || prod.price || 0;
 
-  useEffect(() => {
-    if (!activeProduct) {
-      setItemRate(0);
-      return;
-    }
-    if (orderType === 'online') {
-      const p = activeProduct.online_price || activeProduct.selling_price || activeProduct.price || 0;
-      setItemRate(Number(p));
-    } else {
-      const p = activeProduct.offline_price || activeProduct.selling_price || activeProduct.price || 0;
-      setItemRate(Number(p));
-    }
-  }, [activeProduct, orderType]);
+    setModalRate(Number(storePrice));
+    setModalColor('');
+    setModalSize('');
+    setModalQty(1);
+    setIsVariantModalOpen(true);
+  };
 
-  const productInventoryRows = useMemo(() => {
-    if (!activeProduct) return [];
-    return inventoryList.filter((inv) => String(inv.product_id) === String(activeProduct.id));
-  }, [activeProduct, inventoryList]);
+  // Variant stock list for product
+  const modalProductInventory = useMemo(() => {
+    if (!selectedProductForModal) return [];
+    return inventoryList.filter((inv) => String(inv.product_id) === String(selectedProductForModal.id));
+  }, [selectedProductForModal, inventoryList]);
 
-  const availableColorsForProduct = useMemo(() => {
-    const map = new Map<string, { totalStock: number; hex?: string }>();
-    productInventoryRows.forEach((r) => {
+  const modalAvailableColors = useMemo(() => {
+    const map = new Map<string, { stock: number; hex?: string }>();
+    modalProductInventory.forEach((r) => {
       const clr = r.variant_color || 'Standard';
-      const prev = map.get(clr) || { totalStock: 0 };
-      const matchedHex = coloursList.find((c) => c.name.toLowerCase().trim() === clr.toLowerCase().trim())?.hex_code;
+      const prev = map.get(clr) || { stock: 0 };
+      const matched = coloursList.find((c) => c.name.toLowerCase().trim() === clr.toLowerCase().trim())?.hex_code;
       map.set(clr, {
-        totalStock: prev.totalStock + (r.stock_quantity || 0),
-        hex: matchedHex || '#6d4aff'
+        stock: prev.stock + (r.stock_quantity || 0),
+        hex: matched || '#6d4aff'
       });
     });
     return Array.from(map.entries()).map(([color, data]) => ({
       color,
-      stock: data.totalStock,
+      stock: data.stock,
       hex: data.hex
     }));
-  }, [productInventoryRows, coloursList]);
+  }, [modalProductInventory, coloursList]);
 
-  const availableSizesForSelection = useMemo(() => {
-    if (!selectedColor) return [];
-    return productInventoryRows
-      .filter((r) => (r.variant_color || 'Standard') === selectedColor)
+  const modalAvailableSizes = useMemo(() => {
+    if (!modalColor) return [];
+    return modalProductInventory
+      .filter((r) => (r.variant_color || 'Standard') === modalColor)
       .map((r) => ({
         size: r.variant_size || 'Free Size',
         stock: r.stock_quantity || 0
       }));
-  }, [productInventoryRows, selectedColor]);
+  }, [modalProductInventory, modalColor]);
 
-  const currentVariantStock = useMemo(() => {
-    if (!selectedColor || !selectedSize) return 0;
-    const match = productInventoryRows.find(
-      (r) => (r.variant_color || 'Standard') === selectedColor && (r.variant_size || 'Free Size') === selectedSize
+  const modalCurrentStock = useMemo(() => {
+    if (!modalColor || !modalSize) return 0;
+    const match = modalProductInventory.find(
+      (r) => (r.variant_color || 'Standard') === modalColor && (r.variant_size || 'Free Size') === modalSize
     );
     return match ? match.stock_quantity : 0;
-  }, [productInventoryRows, selectedColor, selectedSize]);
+  }, [modalProductInventory, modalColor, modalSize]);
 
-  const handleSelectProduct = (prod: ProductRecord) => {
-    setSelectedProductId(prod.id);
-    setProductSearchTerm(`[${prod.id}] ${prod.name}`);
-    setIsProductDropdownOpen(false);
-    setSelectedColor('');
-    setSelectedSize('');
-    setSellQuantity(1);
-  };
-
-  const handleAddToCart = () => {
-    if (!activeProduct) {
-      alert('ముందు Product సెలెక్ట్ చేయండి.');
+  // Add Item to Cart from Modal
+  const handleConfirmVariantToCart = () => {
+    if (!selectedProductForModal) return;
+    if (!modalColor) {
+      alert('Color shade select cheyandi.');
       return;
     }
-    if (!selectedColor) {
-      alert('Colour సెలెక్ట్ చేయండి.');
+    if (!modalSize) {
+      alert('Size select cheyandi.');
       return;
     }
-    if (!selectedSize) {
-      alert('Size సెలెక్ట్ చేయండి.');
+    if (modalQty <= 0) {
+      alert('Quantity kanisam 1 undali.');
       return;
     }
-    if (sellQuantity <= 0) {
-      alert('Quantity కనీసం 1 ఉండాలి.');
-      return;
-    }
-    if (sellQuantity > currentVariantStock) {
-      alert(`స్టాక్ సరిపోదు! అందుబాటులో ఉన్నది ${currentVariantStock} మాత్రమే.`);
+    if (modalQty > modalCurrentStock) {
+      alert(`Stock saripodu! Undedi kevalam ${modalCurrentStock} matrame.`);
       return;
     }
 
-    const matchedHex = coloursList.find((c) => c.name.toLowerCase().trim() === selectedColor.toLowerCase().trim())?.hex_code;
-    const cartId = `${activeProduct.id}_${selectedColor}_${selectedSize}`;
+    const matchedHex = coloursList.find((c) => c.name.toLowerCase().trim() === modalColor.toLowerCase().trim())?.hex_code;
+    const cartId = `${selectedProductForModal.id}_${modalColor}_${modalSize}`;
 
     const existingIndex = cartItems.findIndex((c) => c.cart_id === cartId);
     if (existingIndex >= 0) {
       const updated = [...cartItems];
-      const newQty = updated[existingIndex].quantity + sellQuantity;
-      if (newQty > currentVariantStock) {
-        alert(`మొత్తం అందుబాటులో ఉన్న స్టాక్ (${currentVariantStock}) మించి బిల్ చేయలేరు.`);
+      const newQty = updated[existingIndex].quantity + modalQty;
+      if (newQty > modalCurrentStock) {
+        alert(`Mottam stock (${modalCurrentStock}) minchi bill cheyaleru.`);
         return;
       }
       updated[existingIndex].quantity = newQty;
@@ -296,22 +384,20 @@ export default function SalesManager() {
         ...prev,
         {
           cart_id: cartId,
-          product_id: activeProduct.id,
-          product_name: activeProduct.name,
-          color: selectedColor,
-          size: selectedSize,
-          quantity: sellQuantity,
-          unit_price: itemRate,
-          total_price: sellQuantity * itemRate,
-          available_stock: currentVariantStock,
+          product_id: selectedProductForModal.id,
+          product_name: selectedProductForModal.name,
+          color: modalColor,
+          size: modalSize,
+          quantity: modalQty,
+          unit_price: modalRate,
+          total_price: modalQty * modalRate,
+          available_stock: modalCurrentStock,
           hex_code: matchedHex || '#6d4aff'
         }
       ]);
     }
 
-    setSelectedColor('');
-    setSelectedSize('');
-    setSellQuantity(1);
+    setIsVariantModalOpen(false);
   };
 
   const handleRemoveFromCart = (cartId: string) => {
@@ -331,31 +417,42 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
+  // Complete Sale & Store Everything in Proper Architecture
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedCustomer) {
+      alert('Customer select cheyali.');
+      return;
+    }
     if (cartItems.length === 0) {
-      alert('బిల్ చేయడానికి కార్ట్‌లో కనీసం ఒక ఐటమ్ అయినా ఉండాలి.');
+      alert('Cart lo kanisam oka item aina undali.');
       return;
     }
 
+    const isUtrPending = paymentMode === 'upi' && !utrNumber.trim();
+
     setSubmitting(true);
     try {
-      const orderPayload = {
+      const orderPayload: OrderRecord = {
         id: invoiceNo.trim(),
-        customer_name: customerName.trim() || 'Walk-in Customer',
-        customer_phone: customerPhone.trim() || null,
-        order_type: orderType,
+        customer_id: selectedCustomer.id,
+        customer_name: selectedCustomer.name,
+        customer_phone: selectedCustomer.phone || undefined,
+        order_type: 'offline',
         total_amount: subTotalAmount,
         discount_amount: Number(discountAmount) || 0,
         final_amount: finalPayableAmount,
         payment_mode: paymentMode,
-        payment_status: 'paid',
+        utr_number: paymentMode === 'upi' && utrNumber.trim() ? utrNumber.trim() : null,
+        payment_status: isUtrPending ? 'utr_pending' : 'paid',
         created_at: new Date().toISOString()
       };
 
+      // 1. Insert Order into orders table
       const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
       if (orderErr) throw orderErr;
 
+      // 2. Insert Line Items into order_items table
       const orderItemsPayload = cartItems.map((item, idx) => ({
         id: `oi_${invoiceNo}_${Date.now()}_${idx}`,
         order_id: invoiceNo.trim(),
@@ -370,6 +467,7 @@ export default function SalesManager() {
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsPayload);
       if (itemsErr) throw itemsErr;
 
+      // 3. Deduct Stock in inventory table
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
@@ -388,14 +486,43 @@ export default function SalesManager() {
         }
       }
 
-      alert(`Sale completed successfully! Invoice ${invoiceNo} recorded.`);
+      // 4. Launch Colorful Invoice View
+      setCompletedInvoice(orderPayload);
+      setCompletedItems([...cartItems]);
       setIsBillingModalOpen(false);
       loadData();
     } catch (err: any) {
-      alert('Failed to save sale: ' + err.message);
+      alert('Failed to save order: ' + err.message);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // WhatsApp Message Share
+  const handleShareWhatsApp = (inv: OrderRecord, items: any[]) => {
+    const phone = inv.customer_phone?.replace(/\D/g, '') || '';
+    if (!phone) {
+      alert('Customer mobile number ledu.');
+      return;
+    }
+
+    const itemsSummary = items
+      .map((it, idx) => `${idx + 1}. ${it.product_name || it.product_id} (${it.color || it.variant_color} / ${it.size || it.variant_size}) x ${it.quantity} = ₹${it.total_price || it.total}`)
+      .join('%0A');
+
+    const message = `✨ *KASHVI CREATIONS - TAX INVOICE* ✨%0A%0A` +
+      `*Bill No:* ${inv.id}%0A` +
+      `*Date:* ${new Date(inv.created_at).toLocaleDateString('en-IN')}%0A` +
+      `*Customer:* ${inv.customer_name}%0A` +
+      `*Payment Mode:* ${inv.payment_mode.toUpperCase()} ${inv.payment_status === 'utr_pending' ? '(UTR Pending)' : '(Paid)'}%0A%0A` +
+      `*ITEMS PURCHASED:*%0A${itemsSummary}%0A%0A` +
+      `*Subtotal:* ₹${inv.total_amount}%0A` +
+      `*Discount:* ₹${inv.discount_amount}%0A` +
+      `*TOTAL AMOUNT:* ₹${inv.final_amount}%0A%0A` +
+      `Thank you for shopping with us! Visit again. 🙏%0A` +
+      `_Kashvi Command Deck_`;
+
+    window.open(`https://wa.me/91${phone}?text=${message}`, '_blank');
   };
 
   const handleOpenViewOrder = async (order: OrderRecord) => {
@@ -406,22 +533,38 @@ export default function SalesManager() {
         .from('order_items')
         .select('*')
         .eq('order_id', order.id);
-      setViewingItems(data || []);
+      setViewingOrderItems(data || []);
     } catch (err: any) {
-      alert('Error fetching invoice items: ' + err.message);
+      alert('Error fetching items: ' + err.message);
     } finally {
       setLoadingViewItems(false);
     }
   };
+
+  const customerPastOrders = useMemo(() => {
+    if (!selectedCustomer) return [];
+    return orders.filter((o) => o.customer_id === selectedCustomer.id || o.customer_phone === selectedCustomer.phone);
+  }, [orders, selectedCustomer]);
+
+  const filteredExistingCustomers = useMemo(() => {
+    if (!custSearchTerm.trim()) return customersList;
+    const q = custSearchTerm.toLowerCase().trim();
+    return customersList.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.phone.toLowerCase().includes(q) ||
+        (c.city && c.city.toLowerCase().includes(q))
+    );
+  }, [customersList, custSearchTerm]);
 
   const filteredOrders = useMemo(() => {
     if (!searchQuery.trim()) return orders;
     const q = searchQuery.toLowerCase().trim();
     return orders.filter(
       (o) =>
-        (o.id || '').toLowerCase().includes(q) ||
-        (o.customer_name || '').toLowerCase().includes(q) ||
-        (o.customer_phone || '').toLowerCase().includes(q)
+        o.id.toLowerCase().includes(q) ||
+        o.customer_name.toLowerCase().includes(q) ||
+        (o.customer_phone && o.customer_phone.includes(q))
     );
   }, [orders, searchQuery]);
 
@@ -436,13 +579,13 @@ export default function SalesManager() {
           </div>
           <div>
             <h2 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-2">
-              <span>Sales & Billing Desk</span>
+              <span>Sales & POS Invoicing Desk</span>
               <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/40 text-[10px] font-mono">
                 {orders.length} Invoices
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Offline & Online Store Pricing • Live Stock Deduction • Fast POS Billing
+              Series: KFINV0001 • Variant Card Picker • Customer Ledger • WhatsApp Invoices
             </span>
           </div>
         </div>
@@ -453,7 +596,7 @@ export default function SalesManager() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search invoice, customer, mobile..."
+              placeholder="Search bill no, customer, mobile..."
               className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff]"
             />
             <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -468,16 +611,14 @@ export default function SalesManager() {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
 
-          {/* New Sale / POS Button */}
+          {/* New Bill Button */}
           <button
             type="button"
-            onClick={() => {
-              openNewBillingDesk();
-            }}
+            onClick={handleStartNewBill}
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] hover:opacity-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#00d9ff]/30 cursor-pointer active:scale-95"
           >
             <Plus className="w-3.5 h-3.5 text-white stroke-[3]" />
-            <span>New Sale / POS</span>
+            <span>New Bill</span>
           </button>
         </div>
       </div>
@@ -489,12 +630,12 @@ export default function SalesManager() {
             <thead>
               <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
                 <th className="py-2.5 px-3">Invoice No</th>
-                <th className="py-2.5 px-3">Date & Time</th>
-                <th className="py-2.5 px-3">Store Channel</th>
+                <th className="py-2.5 px-3">Date</th>
                 <th className="py-2.5 px-3">Customer Details</th>
-                <th className="py-2.5 px-3">Payment Mode</th>
+                <th className="py-2.5 px-3">Store Channel</th>
+                <th className="py-2.5 px-3">Payment & UTR Status</th>
                 <th className="py-2.5 px-3 text-right">Net Amount</th>
-                <th className="py-2.5 px-3 text-center">Action</th>
+                <th className="py-2.5 px-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-xs">
@@ -508,7 +649,7 @@ export default function SalesManager() {
               ) : filteredOrders.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-[#8b9bb4] italic text-xs">
-                    No sales invoices recorded yet. Click &quot;New Sale / POS&quot; to bill your first order.
+                    No sales invoices recorded yet. Click &quot;New Bill&quot; to begin.
                   </td>
                 </tr>
               ) : (
@@ -518,22 +659,7 @@ export default function SalesManager() {
                       {ord.id}
                     </td>
                     <td className="py-2.5 px-3 font-mono text-[#8b9bb4] text-[11px]">
-                      {new Date(ord.created_at).toLocaleDateString('en-IN', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      {ord.order_type === 'online' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#00d9ff]/15 text-[#00d9ff] text-[10px] font-mono font-bold">
-                          <Globe className="w-3 h-3" /> Online Store
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
-                          <Store className="w-3 h-3" /> Walk-in
-                        </span>
-                      )}
+                      {new Date(ord.created_at).toLocaleDateString('en-IN')}
                     </td>
                     <td className="py-2.5 px-3">
                       <span className="font-bold text-white block">{ord.customer_name}</span>
@@ -541,21 +667,49 @@ export default function SalesManager() {
                         <span className="text-[10px] font-mono text-[#8b9bb4]">{ord.customer_phone}</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 uppercase font-mono font-bold text-[#8b9bb4] text-[10px]">
-                      {ord.payment_mode}
+                    <td className="py-2.5 px-3">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
+                        <Store className="w-3 h-3" /> Walk-in
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="uppercase font-mono font-bold text-[#8b9bb4] text-[10px]">
+                          {ord.payment_mode}
+                        </span>
+                        {ord.payment_status === 'utr_pending' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ff6b6b]/20 text-[#ff6b6b] border border-[#ff6b6b]/40 text-[9px] font-mono font-bold">
+                            <Clock className="w-2.5 h-2.5" /> UTR Pending
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#00ff9d]/15 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono font-bold">
+                            <Check className="w-2.5 h-2.5" /> Paid
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono font-extrabold text-white text-xs">
                       ₹{Number(ord.final_amount || ord.total_amount || 0).toLocaleString('en-IN')}
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenViewOrder(ord)}
-                        className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer"
-                        title="View Invoice Details"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenViewOrder(ord)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00d9ff]/20 text-[#8b9bb4] hover:text-[#00d9ff] cursor-pointer"
+                          title="View Invoice"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleShareWhatsApp(ord, [])}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-[#25D366]/20 text-[#8b9bb4] hover:text-[#25D366] cursor-pointer"
+                          title="Share to WhatsApp"
+                        >
+                          <Share2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -565,9 +719,287 @@ export default function SalesManager() {
         </div>
       </div>
 
-      {/* 3. POS BILLING DESK MODAL (HIGHEST Z-INDEX & FIXED CLEARANCE) */}
-      {isBillingModalOpen && (
-        <div className="fixed inset-0 z-[100005] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
+      {/* DIALOG 1: NEW OR EXISTING CUSTOMER CHOICE */}
+      {isCustomerPromptOpen && (
+        <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#00d9ff] to-[#6d4aff] text-white flex items-center justify-center mx-auto shadow-lg">
+              <User className="w-6 h-6" />
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-white">Select Customer Type</h3>
+              <p className="text-xs text-[#8b9bb4] mt-1">Kotha customer leda existing customer ni select cheyandi</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <button
+                type="button"
+                onClick={handleChooseNewCustomer}
+                className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/15 hover:border-[#00d9ff] text-white font-bold text-xs flex flex-col items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 group hover:bg-white/5"
+              >
+                <div className="w-8 h-8 rounded-xl bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <UserPlus className="w-4 h-4" />
+                </div>
+                <span>New Customer</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleChooseExistingCustomer}
+                className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/15 hover:border-[#6d4aff] text-white font-bold text-xs flex flex-col items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 group hover:bg-white/5"
+              >
+                <div className="w-8 h-8 rounded-xl bg-[#6d4aff]/20 text-[#6d4aff] flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Users className="w-4 h-4" />
+                </div>
+                <span>Existing Customer</span>
+              </button>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setIsCustomerPromptOpen(false)}
+                className="w-full py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION (CUST0001 Format) */}
+      {isNewCustomerModalOpen && (
+        <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-[#00d9ff]" />
+                <h3 className="text-sm font-bold text-white">New Customer Registration</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewCustomerModalOpen(false)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRegisterCustomer} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                  Customer ID (Auto-Generated)
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={newCustId}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                  Customer Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter full name..."
+                  value={newCustName}
+                  onChange={(e) => setNewCustName(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-semibold text-xs outline-none focus:border-[#00d9ff]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                  Mobile Number (For WhatsApp Invoice) *
+                </label>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  required
+                  placeholder="10 digit mobile..."
+                  value={newCustPhone}
+                  onChange={(e) => setNewCustPhone(e.target.value.replace(/\D/g, ''))}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                  City / Location
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Hyderabad, Kakinada..."
+                  value={newCustCity}
+                  onChange={(e) => setNewCustCity(e.target.value)}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setIsNewCustomerModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={registeringCust}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50"
+                >
+                  {registeringCust ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Save & Open Sales Desk</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DIALOG 2B: EXISTING CUSTOMER SEARCH PICKER */}
+      {isExistingCustomerPickerOpen && (
+        <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-[#00d9ff]" />
+                <h3 className="text-sm font-bold text-white">Select Existing Customer</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExistingCustomerPickerOpen(false)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="relative shrink-0">
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search by customer name, mobile or city..."
+                value={custSearchTerm}
+                onChange={(e) => setCustSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white text-xs outline-none focus:border-[#00d9ff]"
+              />
+              <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
+              {filteredExistingCustomers.length === 0 ? (
+                <div className="p-6 text-center text-[#8b9bb4] italic text-xs">
+                  No matching customers found.
+                </div>
+              ) : (
+                filteredExistingCustomers.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => handleSelectExistingCustomer(c)}
+                    className="p-2.5 rounded-xl hover:bg-white/10 cursor-pointer flex items-center justify-between transition-colors border border-transparent hover:border-white/10"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[#00ff9d] font-bold text-xs">[{c.id}]</span>
+                        <span className="font-bold text-white text-xs">{c.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#8b9bb4] block mt-0.5">
+                        Phone: {c.phone} {c.city ? `• ${c.city}` : ''}
+                      </span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-[#8b9bb4]" />
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsExistingCustomerPickerOpen(false)}
+                className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DIALOG 3: CUSTOMER LEDGER MODAL */}
+      {isCustomerLedgerOpen && selectedCustomer && (
+        <div className="fixed inset-0 z-[100020] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-2xl w-full p-5 shadow-2xl space-y-3 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-4 h-4 text-[#00d9ff]" />
+                <div>
+                  <h4 className="text-sm font-bold text-white">Customer Ledger: {selectedCustomer.name}</h4>
+                  <span className="text-[10px] font-mono text-[#8b9bb4]">ID: {selectedCustomer.id} • Mobile: {selectedCustomer.phone}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCustomerLedgerOpen(false)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {customerPastOrders.length === 0 ? (
+                <div className="p-8 text-center text-[#8b9bb4] italic text-xs">
+                  Ee customer ku sambandhinchina previous bills levu.
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase sticky top-0">
+                    <tr>
+                      <th className="py-2 px-2.5">Bill No</th>
+                      <th className="py-2 px-2.5">Date</th>
+                      <th className="py-2 px-2.5">Mode</th>
+                      <th className="py-2 px-2.5 text-right">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 font-mono">
+                    {customerPastOrders.map((ord) => (
+                      <tr key={ord.id}>
+                        <td className="py-2 px-2.5 text-[#00ff9d] font-bold">{ord.id}</td>
+                        <td className="py-2 px-2.5 text-[#8b9bb4]">{new Date(ord.created_at).toLocaleDateString('en-IN')}</td>
+                        <td className="py-2 px-2.5 uppercase">{ord.payment_mode}</td>
+                        <td className="py-2 px-2.5 text-right font-bold text-white">₹{ord.final_amount.toLocaleString('en-IN')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-white/10 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsCustomerLedgerOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer"
+              >
+                Close Ledger
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. MAIN SALES BILLING FORM (KFINV0001 Format) */}
+      {isBillingModalOpen && selectedCustomer && (
+        <div className="fixed inset-0 z-[100005] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
             
             {/* Header */}
@@ -578,42 +1010,18 @@ export default function SalesManager() {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
-                    <span>POS Billing Workspace</span>
+                    <span>Store POS Billing Desk</span>
                     <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono font-bold">
-                      LIVE INVOICE: {invoiceNo}
+                      {invoiceNo}
                     </span>
                   </h3>
                 </div>
               </div>
 
-              {/* Online / Offline Price Mode Switcher */}
               <div className="flex items-center gap-2">
-                <div className="inline-flex p-0.5 rounded-xl bg-[#101628] border border-white/15">
-                  <button
-                    type="button"
-                    onClick={() => setOrderType('offline')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      orderType === 'offline'
-                        ? 'bg-[#ffa500] text-neutral-950 shadow-md'
-                        : 'text-[#8b9bb4] hover:text-white'
-                    }`}
-                  >
-                    <Store className="w-3.5 h-3.5" />
-                    <span>Walk-in (Offline SP)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setOrderType('online')}
-                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      orderType === 'online'
-                        ? 'bg-[#00d9ff] text-neutral-950 shadow-md'
-                        : 'text-[#8b9bb4] hover:text-white'
-                    }`}
-                  >
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>Online Store (Online SP)</span>
-                  </button>
-                </div>
+                <span className="px-3 py-1 rounded-xl bg-[#ffa500]/15 text-[#ffa500] border border-[#ffa500]/30 font-mono text-xs font-bold flex items-center gap-1.5">
+                  <Store className="w-3.5 h-3.5" /> Walk-in POS Sale
+                </span>
 
                 <button
                   type="button"
@@ -627,259 +1035,114 @@ export default function SalesManager() {
 
             <form onSubmit={handleCompleteSale} className="p-3 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar text-xs">
               
-              {/* Customer Header */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-2.5 rounded-2xl bg-[#0a0e17] border border-white/10">
-                <div className="relative">
-                  <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                    Customer Name
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      required
-                      placeholder="Walk-in Customer"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-semibold outline-none text-xs focus:border-[#00d9ff]"
-                    />
-                    <User className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+              {/* Selected Customer & Bill Header */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10 items-center">
+                
+                {/* Customer Identity with Ledger Trigger */}
+                <div className="sm:col-span-2 flex items-center justify-between p-2 rounded-xl bg-[#101628] border border-white/15">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[#00d9ff]/20 text-[#00d9ff] flex items-center justify-center font-bold font-mono text-xs">
+                      {selectedCustomer.id.slice(-2)}
+                    </div>
+                    <div>
+                      <span className="font-bold text-white text-xs block">{selectedCustomer.name}</span>
+                      <span className="text-[10px] font-mono text-[#8b9bb4]">{selectedCustomer.phone} {selectedCustomer.city ? `• ${selectedCustomer.city}` : ''}</span>
+                    </div>
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerLedgerOpen(true)}
+                    className="px-2.5 py-1 rounded-lg bg-[#6d4aff]/20 hover:bg-[#6d4aff]/30 border border-[#6d4aff]/40 text-[#00d9ff] text-[10.5px] font-bold flex items-center gap-1 cursor-pointer"
+                    title="View Customer Transaction Ledger"
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    <span>Ledger</span>
+                  </button>
                 </div>
 
-                <div className="relative">
-                  <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                    Mobile Number (Optional)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="tel"
-                      maxLength={10}
-                      placeholder="Customer phone..."
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff]"
-                    />
-                    <Phone className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
-                  </div>
-                </div>
-
+                {/* Auto Date */}
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                    Payment Mode
+                    Billing Date (Automatic)
                   </label>
-                  <div className="grid grid-cols-3 gap-1">
-                    {(['cash', 'upi', 'card'] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setPaymentMode(m)}
-                        className={`py-1.5 rounded-xl uppercase font-mono font-bold text-[10px] transition-all cursor-pointer border ${
-                          paymentMode === m
-                            ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow'
-                            : 'bg-[#101628] text-[#8b9bb4] border-white/10 hover:text-white'
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
+                  <input
+                    type="date"
+                    disabled
+                    value={invoiceDate}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs"
+                  />
                 </div>
+
+                {/* Bill No Series Display */}
+                <div>
+                  <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                    Invoice Series
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={invoiceNo}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono font-extrabold text-xs"
+                  />
+                </div>
+
               </div>
 
-              {/* Two Column POS Workspace */}
+              {/* Two Column POS Workspace: Left Product Selection & Right Cart */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* === LEFT COLUMN: PRODUCT & AVAILABLE VARIANT SELECTION (Span 6) === */}
-                <div className="lg:col-span-6 space-y-3 p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10">
-                  <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5" /> 1. Select Product & Live In-Stock Variants
-                  </span>
-
-                  {/* Searchable Product Dropdown */}
-                  <div className="relative" ref={dropdownRef}>
-                    <div
-                      onClick={() => setIsProductDropdownOpen(!isProductDropdownOpen)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#101628] border border-white/20 text-white font-semibold text-xs flex items-center justify-between cursor-pointer focus-within:border-[#00d9ff]"
-                    >
-                      <span className={activeProduct ? 'text-white font-bold truncate' : 'text-[#8b9bb4]'}>
-                        {activeProduct ? `[${activeProduct.id}] ${activeProduct.name}` : 'Search Product (KF...) or Name...'}
-                      </span>
-                      <ChevronDown className="w-4 h-4 text-[#8b9bb4] shrink-0 ml-1" />
-                    </div>
-
-                    {isProductDropdownOpen && (
-                      <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#101628] border border-white/20 rounded-2xl shadow-2xl p-2 max-h-60 overflow-hidden flex flex-col">
-                        <div className="relative mb-1.5">
-                          <input
-                            type="text"
-                            autoFocus
-                            placeholder="Type product code or title..."
-                            value={productSearchTerm}
-                            onChange={(e) => setProductSearchTerm(e.target.value)}
-                            className="w-full pl-7 pr-2.5 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white text-xs outline-none focus:border-[#00d9ff]"
-                          />
-                          <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2 top-1/2 -translate-y-1/2" />
-                        </div>
-
-                        <div className="overflow-y-auto space-y-0.5 custom-scrollbar">
-                          {productsList.map((p) => (
-                            <div
-                              key={p.id}
-                              onClick={() => handleSelectProduct(p)}
-                              className="p-1.5 rounded-lg hover:bg-white/10 cursor-pointer flex items-center justify-between"
-                            >
-                              <div className="flex items-center gap-1.5 truncate">
-                                <span className="font-mono font-extrabold text-[#00ff9d] text-xs shrink-0">
-                                  [{p.id}]
-                                </span>
-                                <span className="text-white font-semibold text-xs truncate">
-                                  {p.name}
-                                </span>
-                              </div>
-                              <span className="text-[10px] font-mono text-[#00d9ff] shrink-0 ml-2">
-                                ₹{orderType === 'online' ? (p.online_price || p.price || 0) : (p.offline_price || p.price || 0)}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                {/* === LEFT: PRODUCT LIST (CLICK TO OPEN VARIANT POPUP) === */}
+                <div className="lg:col-span-6 space-y-2.5 p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5" /> Select Product (Opens Variant Popup)
+                    </span>
+                    <span className="text-[10px] text-[#8b9bb4] font-mono">{productsList.length} Models</span>
                   </div>
 
-                  {/* Available Stocked Variants */}
-                  {activeProduct ? (
-                    <div className="space-y-3 pt-1 border-t border-white/5">
-                      
-                      {/* Colour Swatches */}
-                      <div className="space-y-1.5">
-                        <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                          Select Colour (In-Stock Only):
-                        </span>
-                        {availableColorsForProduct.length === 0 ? (
-                          <div className="p-2.5 rounded-xl bg-[#101628] border border-dashed border-[#ff6b6b]/30 text-[#ff6b6b] text-[11px] font-bold flex items-center gap-1.5">
-                            <AlertTriangle className="w-3.5 h-3.5" />
-                            <span>No stock available for this product in inventory!</span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            {availableColorsForProduct.map((c) => {
-                              const isSelected = selectedColor === c.color;
-                              return (
-                                <button
-                                  key={c.color}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedColor(c.color);
-                                    setSelectedSize('');
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer border ${
-                                    isSelected
-                                      ? 'border-2 border-[#FFB6C1] shadow-[0_0_12px_rgba(255,182,193,0.8)] ring-1 ring-[#FF69B4] scale-105 bg-[#101628] text-white'
-                                      : 'border-white/10 bg-[#101628] text-[#8b9bb4] hover:text-white'
-                                  }`}
-                                >
-                                  <span
-                                    className="w-3 h-3 rounded-full border border-white/30 shrink-0"
-                                    style={{ backgroundColor: c.hex }}
-                                  />
-                                  <span>{c.color}</span>
-                                  <span className="text-[9px] font-mono opacity-70">({c.stock})</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
+                  {/* Grid of Product Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto custom-scrollbar p-1">
+                    {productsList.map((p) => {
+                      const price = p.offline_price || p.selling_price || p.price || 0;
 
-                      {/* Sizes for chosen color */}
-                      {selectedColor && (
-                        <div className="space-y-1.5">
-                          <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                            Select Size for &quot;{selectedColor}&quot;:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {availableSizesForSelection.map((s) => {
-                              const isSelected = selectedSize === s.size;
-                              const isNoStock = s.stock <= 0;
-                              return (
-                                <button
-                                  key={s.size}
-                                  disabled={isNoStock}
-                                  type="button"
-                                  onClick={() => setSelectedSize(s.size)}
-                                  className={`px-3 py-1.5 rounded-xl font-mono text-xs font-extrabold transition-all cursor-pointer border ${
-                                    isSelected
-                                      ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
-                                      : isNoStock
-                                      ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
-                                      : 'bg-[#101628] text-white border-white/15 hover:border-[#00d9ff]'
-                                  }`}
-                                >
-                                  <span>{s.size}</span>
-                                  <span className="text-[9px] ml-1 opacity-75">[{s.stock}]</span>
-                                </button>
-                              );
-                            })}
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => handleOpenVariantPicker(p)}
+                          className="p-3 rounded-2xl bg-[#101628] border border-white/10 hover:border-[#00d9ff] cursor-pointer transition-all hover:scale-[1.02] shadow-md flex flex-col justify-between group"
+                        >
+                          <div>
+                            <span className="font-mono font-extrabold text-[#00ff9d] text-xs block group-hover:underline">
+                              [{p.id}]
+                            </span>
+                            <span className="font-bold text-white text-xs block truncate mt-0.5">
+                              {p.name}
+                            </span>
+                            <span className="text-[9.5px] font-mono text-[#8b9bb4] block">
+                              {p.sub_category || 'Fashion'}
+                            </span>
+                          </div>
+
+                          <div className="pt-2 mt-2 border-t border-white/5 flex items-center justify-between">
+                            <span className="font-mono font-bold text-[#00d9ff] text-xs">
+                              ₹{price}
+                            </span>
+                            <span className="text-[9px] font-bold text-white bg-white/10 px-1.5 py-0.5 rounded-md">
+                              Choose
+                            </span>
                           </div>
                         </div>
-                      )}
-
-                      {/* Selling Price & Quantity Inputs */}
-                      {selectedColor && selectedSize && (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-2.5 rounded-xl bg-[#101628] border border-white/10 items-end">
-                          <div>
-                            <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1">
-                              Unit Rate (₹)
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={itemRate}
-                              onChange={(e) => setItemRate(Number(e.target.value))}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-[#0a0e17] border border-white/15 text-white font-mono font-bold text-xs outline-none"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex justify-between items-center mb-1">
-                              <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">Qty</label>
-                              <span className="text-[9px] font-mono text-[#00ff9d]">Max: {currentVariantStock}</span>
-                            </div>
-                            <input
-                              type="number"
-                              min="1"
-                              max={currentVariantStock}
-                              value={sellQuantity}
-                              onChange={(e) => setSellQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-mono font-extrabold text-xs outline-none text-center"
-                            />
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={handleAddToCart}
-                            className="w-full py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow"
-                          >
-                            <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                            <span>Add Item</span>
-                          </button>
-                        </div>
-                      )}
-
-                    </div>
-                  ) : (
-                    <div className="p-4 text-center text-[#8b9bb4] italic text-xs">
-                      Choose a product above to inspect and sell available variants.
-                    </div>
-                  )}
-
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* === RIGHT COLUMN: LIVE CART & FINAL CHECKOUT (Span 6) === */}
+                {/* === RIGHT: LIVE CART & FINAL CHECKOUT WITH PAYMENT SELECTION === */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
-                    {/* Header */}
+                    {/* Cart Header */}
                     <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
                         <ShoppingBag className="w-3.5 h-3.5" /> Cart Items ({cartItems.length})
@@ -887,11 +1150,11 @@ export default function SalesManager() {
                       <span className="text-white font-bold">{totalCartUnits} Units</span>
                     </div>
 
-                    {/* Cart Items List */}
-                    <div className="max-h-56 min-h-[140px] overflow-y-auto custom-scrollbar p-1">
+                    {/* Cart Items Table */}
+                    <div className="max-h-48 min-h-[120px] overflow-y-auto custom-scrollbar p-1">
                       {cartItems.length === 0 ? (
                         <div className="p-8 text-center text-[#8b9bb4] italic text-xs">
-                          Cart is currently empty. Add variants on Left to generate bill.
+                          Cart khaleega undi. Left side product click chesi variants add cheyandi.
                         </div>
                       ) : (
                         <table className="w-full text-left text-xs">
@@ -908,7 +1171,7 @@ export default function SalesManager() {
                             {cartItems.map((c) => (
                               <tr key={c.cart_id} className="hover:bg-white/[0.02]">
                                 <td className="py-1.5 px-2">
-                                  <span className="font-bold text-white block truncate max-w-[170px]">
+                                  <span className="font-bold text-white block truncate max-w-[160px]">
                                     {c.product_name}
                                   </span>
                                   <span className="text-[10px] text-[#00d9ff] font-mono">
@@ -940,15 +1203,69 @@ export default function SalesManager() {
                       )}
                     </div>
 
-                    {/* Bill Calculation Card */}
-                    <div className="p-3 bg-[#101628] border-t border-white/10 space-y-2">
-                      <div className="space-y-1 font-mono text-xs">
+                    {/* Payment Mode Selection (Cash or UPI) & Calculation Card */}
+                    <div className="p-3 bg-[#101628] border-t border-white/10 space-y-2.5">
+                      
+                      {/* Payment Mode Toggle */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                          Select Payment Mode:
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPaymentMode('cash')}
+                            className={`py-2 rounded-xl flex items-center justify-center gap-1.5 font-mono text-xs font-bold transition-all cursor-pointer border ${
+                              paymentMode === 'cash'
+                                ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md'
+                                : 'bg-[#0a0e17] text-[#8b9bb4] border-white/10 hover:text-white'
+                            }`}
+                          >
+                            <Banknote className="w-4 h-4" />
+                            <span>CASH</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setPaymentMode('upi')}
+                            className={`py-2 rounded-xl flex items-center justify-center gap-1.5 font-mono text-xs font-bold transition-all cursor-pointer border ${
+                              paymentMode === 'upi'
+                                ? 'bg-[#00d9ff] text-neutral-950 border-[#00d9ff] shadow-md'
+                                : 'bg-[#0a0e17] text-[#8b9bb4] border-white/10 hover:text-white'
+                            }`}
+                          >
+                            <QrCode className="w-4 h-4" />
+                            <span>UPI PAYMENT</span>
+                          </button>
+                        </div>
+
+                        {/* UPI UTR Field */}
+                        {paymentMode === 'upi' && (
+                          <div className="pt-1">
+                            <input
+                              type="text"
+                              placeholder="Enter UPI / UTR Reference No (Leave blank if pending)..."
+                              value={utrNumber}
+                              onChange={(e) => setUtrNumber(e.target.value)}
+                              className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00d9ff] font-mono text-xs outline-none focus:border-[#00d9ff]"
+                            />
+                            {!utrNumber.trim() && (
+                              <span className="text-[9.5px] text-[#ff6b6b] block mt-0.5">
+                                * UTR number enter cheyakapothe invoice &quot;UTR Pending&quot; status tho save avthundi.
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Calculations */}
+                      <div className="space-y-1 font-mono text-xs pt-1 border-t border-white/5">
                         <div className="flex justify-between text-[#8b9bb4]">
-                          <span>Subtotal ({totalCartUnits} units):</span>
+                          <span>Subtotal:</span>
                           <span>₹{subTotalAmount.toLocaleString('en-IN')}</span>
                         </div>
 
-                        <div className="flex justify-between items-center text-[#8b9bb4] pt-1">
+                        <div className="flex justify-between items-center text-[#8b9bb4]">
                           <span>Discount (₹):</span>
                           <input
                             type="number"
@@ -982,9 +1299,10 @@ export default function SalesManager() {
                           className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-lg cursor-pointer active:scale-95 disabled:opacity-50"
                         >
                           {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          <span>Complete Sale & Deduct Stock</span>
+                          <span>Generate & Complete Bill</span>
                         </button>
                       </div>
+
                     </div>
 
                   </div>
@@ -997,69 +1315,270 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 4. VIEW INVOICE DETAILS MODAL */}
-      {viewingOrder && (
-        <div className="fixed inset-0 z-[100000] p-3 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/15 rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+      {/* 5. DEDICATED PRODUCT VARIANT SELECTION MODAL */}
+      {isVariantModalOpen && selectedProductForModal && (
+        <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div>
-                <span className="font-mono text-xs font-extrabold text-[#00ff9d]">{viewingOrder.id}</span>
-                <h4 className="text-sm font-bold text-white">{viewingOrder.customer_name}</h4>
-                <span className="text-[10px] text-[#8b9bb4]">
-                  {viewingOrder.order_type === 'online' ? 'Online Store Dispatch' : 'Walk-in Store Bill'} • Mode: {viewingOrder.payment_mode.toUpperCase()}
-                </span>
+                <span className="font-mono text-xs font-bold text-[#00ff9d]">[{selectedProductForModal.id}]</span>
+                <h3 className="text-sm font-bold text-white">{selectedProductForModal.name}</h3>
               </div>
               <button
                 type="button"
-                onClick={() => setViewingOrder(null)}
-                className="p-1 rounded-xl bg-white/5 hover:bg-white/10 text-[#8b9bb4] hover:text-white cursor-pointer"
+                onClick={() => setIsVariantModalOpen(false)}
+                className="text-[#8b9bb4] hover:text-white p-1"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="max-h-56 overflow-y-auto custom-scrollbar">
-              {loadingViewItems ? (
-                <div className="p-5 text-center text-[#8b9bb4]">
-                  <Loader2 className="w-4 h-4 animate-spin mx-auto text-[#00d9ff] mb-1.5" />
-                  Loading invoice lines...
-                </div>
-              ) : viewingItems.length === 0 ? (
-                <div className="p-3 text-center text-[#8b9bb4] italic text-xs">
-                  No line items found.
+            {/* Colors in Stock */}
+            <div className="space-y-1.5">
+              <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                1. Select Colour Shade (In-Stock Only):
+              </span>
+              {modalAvailableColors.length === 0 ? (
+                <div className="p-3 rounded-xl bg-[#0a0e17] text-[#ff6b6b] text-xs font-bold">
+                  Ee product ku inventory lo stock ledu!
                 </div>
               ) : (
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase sticky top-0">
-                    <tr>
-                      <th className="py-1 px-2">Product</th>
-                      <th className="py-1 px-2">Variant</th>
-                      <th className="py-1 px-2 text-center">Qty</th>
-                      <th className="py-1 px-2 text-right">Price</th>
-                      <th className="py-1 px-2 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {viewingItems.map((item) => (
-                      <tr key={item.id}>
-                        <td className="py-1.5 px-2 text-white font-semibold">{item.product_id}</td>
-                        <td className="py-1.5 px-2 text-[#00d9ff]">{item.variant_color} / {item.variant_size}</td>
-                        <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{item.quantity}</td>
-                        <td className="py-1.5 px-2 text-right font-mono text-[#8b9bb4]">₹{item.price}</td>
-                        <td className="py-1.5 px-2 text-right font-mono font-bold text-white">₹{item.total}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="flex flex-wrap gap-2">
+                  {modalAvailableColors.map((c) => (
+                    <button
+                      key={c.color}
+                      type="button"
+                      onClick={() => {
+                        setModalColor(c.color);
+                        setModalSize('');
+                      }}
+                      className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer border ${
+                        modalColor === c.color
+                          ? 'border-2 border-[#FFB6C1] shadow-[0_0_15px_rgba(255,182,193,0.85)] scale-105 bg-[#0a0e17] text-white'
+                          : 'border-white/10 bg-[#0a0e17] text-[#8b9bb4] hover:text-white'
+                      }`}
+                    >
+                      <span
+                        className="w-3 h-3 rounded-full border border-white/30 shrink-0"
+                        style={{ backgroundColor: c.hex }}
+                      />
+                      <span>{c.color}</span>
+                      <span className="text-[9px] font-mono opacity-70">({c.stock})</span>
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
 
-            <div className="flex items-center justify-between border-t border-white/10 pt-2.5 text-xs">
-              <span className="text-[#8b9bb4] font-mono">Invoice Net Total:</span>
-              <span className="font-mono font-extrabold text-[#00ff9d] text-base">
-                ₹{Number(viewingOrder.final_amount || viewingOrder.total_amount || 0).toLocaleString('en-IN')}
-              </span>
+            {/* Sizes */}
+            {modalColor && (
+              <div className="space-y-1.5">
+                <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                  2. Select Size:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {modalAvailableSizes.map((s) => (
+                    <button
+                      key={s.size}
+                      type="button"
+                      disabled={s.stock <= 0}
+                      onClick={() => setModalSize(s.size)}
+                      className={`px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border ${
+                        modalSize === s.size
+                          ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
+                          : s.stock <= 0
+                          ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
+                          : 'bg-[#0a0e17] text-white border-white/15 hover:border-[#00d9ff]'
+                      }`}
+                    >
+                      <span>{s.size}</span>
+                      <span className="text-[9px] ml-1 opacity-70">[{s.stock}]</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Rate & Qty */}
+            {modalColor && modalSize && (
+              <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
+                <div>
+                  <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1">
+                    Selling Price (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={modalRate}
+                    onChange={(e) => setModalRate(Number(e.target.value))}
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono font-bold text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">Quantity</label>
+                    <span className="text-[9px] font-mono text-[#00ff9d]">Available: {modalCurrentStock}</span>
+                  </div>
+                  <input
+                    type="number"
+                    min="1"
+                    max={modalCurrentStock}
+                    value={modalQty}
+                    onChange={(e) => setModalQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs outline-none text-center"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => setIsVariantModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!modalColor || !modalSize}
+                onClick={handleConfirmVariantToCart}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Add to Bill</span>
+              </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. COLORFUL INVOICE MODAL WITH WHATSAPP SHARE BUTTON */}
+      {(completedInvoice || viewingOrder) && (
+        <div className="fixed inset-0 z-[100020] p-4 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in select-none overflow-y-auto">
+          <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-lg w-full p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 my-auto">
+            
+            {/* Invoice Top Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] p-[1px] shadow-lg">
+                  <div className="w-full h-full bg-[#0a0e17] rounded-2xl flex items-center justify-center font-serif font-black text-xs text-white">
+                    KF
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white tracking-wider">KASHVI CREATIONS</h3>
+                  <span className="text-[9px] font-mono text-[#00ff9d] uppercase">Authorized Tax Invoice</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCompletedInvoice(null);
+                  setViewingOrder(null);
+                }}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Bill Details Banner */}
+            {(() => {
+              const activeBill = completedInvoice || viewingOrder!;
+              const activeLineItems = completedInvoice ? completedItems : viewingOrderItems;
+
+              return (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2 p-3 rounded-2xl bg-[#0a0e17] border border-white/10 font-mono text-[11px]">
+                    <div>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Invoice No:</span>
+                      <strong className="text-[#00ff9d] text-xs">{activeBill.id}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Date:</span>
+                      <strong className="text-white">{new Date(activeBill.created_at).toLocaleDateString('en-IN')}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Customer:</span>
+                      <strong className="text-white">{activeBill.customer_name}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[#8b9bb4] text-[9.5px] uppercase block">Payment / Status:</span>
+                      <strong className={activeBill.payment_status === 'utr_pending' ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}>
+                        {activeBill.payment_mode.toUpperCase()} ({activeBill.payment_status === 'utr_pending' ? 'UTR PENDING' : 'PAID'})
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Line Items Table */}
+                  <div className="max-h-52 overflow-y-auto custom-scrollbar border border-white/10 rounded-2xl bg-[#0a0e17]">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
+                        <tr>
+                          <th className="py-2 px-2.5">Item & Variant</th>
+                          <th className="py-2 px-2 text-center">Qty</th>
+                          <th className="py-2 px-2 text-right">Price</th>
+                          <th className="py-2 px-2.5 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {activeLineItems.map((it: any, idx: number) => (
+                          <tr key={idx}>
+                            <td className="py-2 px-2.5">
+                              <span className="font-bold text-white block">{it.product_name || it.product_id}</span>
+                              <span className="text-[10px] text-[#00d9ff] font-mono">
+                                {it.color || it.variant_color} • {it.size || it.variant_size}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
+                            <td className="py-2 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_price || it.price}</td>
+                            <td className="py-2 px-2.5 text-right font-mono font-bold text-white">₹{(it.total_price || it.total).toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Total Summary */}
+                  <div className="p-3 rounded-2xl bg-gradient-to-r from-[#6d4aff]/20 to-[#00d9ff]/20 border border-white/15 flex items-center justify-between font-mono">
+                    <div>
+                      <span className="text-[10px] text-[#8b9bb4] block">NET PAYABLE AMOUNT</span>
+                      <span className="text-xl font-extrabold text-[#00ff9d]">
+                        ₹{Number(activeBill.final_amount || activeBill.total_amount).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+
+                    <div className="text-right text-[10px] text-[#8b9bb4]">
+                      <span>Discount: ₹{activeBill.discount_amount || 0}</span>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons: WhatsApp Share & Print */}
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => handleShareWhatsApp(activeBill, activeLineItems)}
+                      className="py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-neutral-950 font-extrabold text-xs flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 shadow-lg shadow-[#25D366]/30"
+                    >
+                      <Share2 className="w-4 h-4" />
+                      <span>Share on WhatsApp</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => window.print()}
+                      className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Printer className="w-4 h-4" />
+                      <span>Print Receipt</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
           </div>
         </div>
       )}
