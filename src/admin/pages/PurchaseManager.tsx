@@ -23,7 +23,10 @@ import {
   ArrowRight,
   ReceiptText,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Calculator,
+  Tag,
+  Truck
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import ProductMasterModal from '../components/modals/ProductMasterModal';
@@ -46,18 +49,26 @@ interface PurchaseRecord {
   supplier_bill_date: string;
   purchase_date: string;
   total_amount: number;
+  transport_charges?: number;
   notes?: string | null;
   created_at: string;
 }
 
 interface StagedMatrixItem {
   product_id: string;
+  product_code: string;
   product_name: string;
   color: string;
   size: string;
   quantity: number;
   unit_cost: number;
   total_cost: number;
+  // Calculated pricing
+  landed_cost: number;
+  offline_tag_mrp: number;
+  offline_final_price: number;
+  online_selling_price: number;
+  online_mrp: number;
 }
 
 interface ColourMasterRecord {
@@ -66,6 +77,23 @@ interface ColourMasterRecord {
   base_color?: string | null;
   hex_code?: string | null;
   active?: boolean;
+}
+
+interface TaggingChecklistItem {
+  id: string;
+  product_id: string;
+  product_code: string;
+  product_name: string;
+  variant_color: string;
+  variant_size: string;
+  quantity: number;
+  unit_cost: number;
+  landed_cost: number;
+  offline_tag_mrp: number;
+  offline_final_price: number;
+  online_selling_price: number;
+  online_mrp: number;
+  is_completed: boolean;
 }
 
 function getContrastTextColor(hexColor: string | null | undefined): string {
@@ -95,6 +123,38 @@ const BASE_FAMILY_PALETTE: { [key: string]: string } = {
   grey: '#757575'
 };
 
+// PRICING AUTOMATION ENGINE
+function calculateSmartPricing(baseUnitCost: number, transportPercentage: number) {
+  const baseCost = Number(baseUnitCost) || 0;
+  const tPercent = Number(transportPercentage) || 0;
+
+  // 1. Landed Cost (Cost Price)
+  const landedCost = baseCost + (baseCost * (tPercent / 100));
+
+  // 2. Offline Store (Double + 10%, round to nearest 5)
+  const rawOfflineTag = (landedCost * 2) + ((landedCost * 2) * 0.10);
+  const offlineTagMrp = Math.ceil(rawOfflineTag / 5) * 5;
+
+  // 3. Offline Final after 10% discount
+  const rawOfflineFinal = offlineTagMrp - (offlineTagMrp * 0.10);
+  const offlineFinalPrice = Math.round(rawOfflineFinal);
+
+  // 4. Online Selling Price (Double + 20%, round up to next 10)
+  const rawOnline = (landedCost * 2) + ((landedCost * 2) * 0.20);
+  const onlineSellingPrice = Math.ceil(rawOnline / 10) * 10;
+
+  // 5. Online Synthetic Compare-At MRP (~30% strike-through discount)
+  const onlineMrp = Math.ceil((onlineSellingPrice / 0.70) / 10) * 10;
+
+  return {
+    landedCost: Math.round(landedCost * 100) / 100,
+    offlineTagMrp,
+    offlineFinalPrice,
+    onlineSellingPrice,
+    onlineMrp
+  };
+}
+
 export default function PurchaseManager() {
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -115,6 +175,16 @@ export default function PurchaseManager() {
   const [viewingItems, setViewingItems] = useState<any[]>([]);
   const [loadingItems, setLoadingItems] = useState<boolean>(false);
 
+  // Sticker Tagging Checklist Modal
+  const [isChecklistModalOpen, setIsChecklistModalOpen] = useState<boolean>(false);
+  const [checklistItems, setChecklistItems] = useState<TaggingChecklistItem[]>([]);
+  const [currentBillReference, setCurrentBillReference] = useState<string>('');
+
+  // Standalone Quick Calculator State
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState<boolean>(false);
+  const [calcCost, setCalcCost] = useState<number | string>('');
+  const [calcTransportPercent, setCalcTransportPercent] = useState<number | string>(10);
+
   // Edit Mode & PIN
   const [editingPurchase, setEditingPurchase] = useState<PurchaseRecord | null>(null);
   const [existingItems, setExistingItems] = useState<any[]>([]);
@@ -129,6 +199,7 @@ export default function PurchaseManager() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [supplierBillNo, setSupplierBillNo] = useState<string>('');
   const [supplierBillDate, setSupplierBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [transportCharges, setTransportCharges] = useState<number | string>(0);
   const [notes, setNotes] = useState<string>('');
 
   // Searchable Product Dropdown State
@@ -260,6 +331,7 @@ export default function PurchaseManager() {
     setSupplierBillDate(new Date().toISOString().split('T')[0]);
     setSelectedSupplierId('');
     setSupplierBillNo('');
+    setTransportCharges(0);
     setNotes('');
     setStagedItems([]);
     setSelectedProductId('');
@@ -278,6 +350,7 @@ export default function PurchaseManager() {
     setSupplierBillDate(p.supplier_bill_date || new Date().toISOString().split('T')[0]);
     setSelectedSupplierId(p.supplier_id || '');
     setSupplierBillNo(p.supplier_bill_no || '');
+    setTransportCharges(p.transport_charges || 0);
     setNotes(p.notes || '');
     setStagedItems([]);
     setSelectedProductId('');
@@ -533,6 +606,31 @@ export default function PurchaseManager() {
     return Object.values(matrixQtyMap).reduce((sum, q) => sum + (Number(q) || 0), 0);
   }, [matrixQtyMap]);
 
+  // CALCULATION OF TRANSPORT PERCENTAGE FOR WHOLE BILL
+  const existingItemsTotal = useMemo(() => {
+    return existingItems.reduce((sum, it) => sum + (Number(it.total_cost) || (it.quantity * it.unit_cost) || 0), 0);
+  }, [existingItems]);
+
+  const stagedNewlyAddedBaseTotal = useMemo(() => {
+    return stagedItems.reduce((sum, it) => sum + it.total_cost, 0);
+  }, [stagedItems]);
+
+  const totalBillBaseAmount = useMemo(() => {
+    return existingItemsTotal + stagedNewlyAddedBaseTotal;
+  }, [existingItemsTotal, stagedNewlyAddedBaseTotal]);
+
+  const currentTransportPercent = useMemo(() => {
+    const tCharge = Number(transportCharges) || 0;
+    if (totalBillBaseAmount <= 0 || tCharge <= 0) return 0;
+    return (tCharge / totalBillBaseAmount) * 100;
+  }, [transportCharges, totalBillBaseAmount]);
+
+  // LIVE PRICING INDICATOR IN MATRIX DESK
+  const liveMatrixPricing = useMemo(() => {
+    const cost = Number(unitCost) || 0;
+    return calculateSmartPricing(cost, currentTransportPercent);
+  }, [unitCost, currentTransportPercent]);
+
   const handleAddMatrixToStaged = () => {
     if (!activeProduct) {
       alert('Product select cheyandi.');
@@ -549,6 +647,9 @@ export default function PurchaseManager() {
       return;
     }
 
+    const pricing = calculateSmartPricing(cost, currentTransportPercent);
+    const pCode = activeProduct.code || activeProduct.id;
+
     const newAdditions: StagedMatrixItem[] = [];
     activeMatrixColors.forEach((clr) => {
       productSizes.forEach((sz) => {
@@ -557,12 +658,18 @@ export default function PurchaseManager() {
         if (count > 0) {
           newAdditions.push({
             product_id: activeProduct.id,
+            product_code: pCode,
             product_name: activeProduct.name,
             color: clr,
             size: sz,
             quantity: count,
             unit_cost: cost,
-            total_cost: count * cost
+            total_cost: count * cost,
+            landed_cost: pricing.landedCost,
+            offline_tag_mrp: pricing.offlineTagMrp,
+            offline_final_price: pricing.offlineFinalPrice,
+            online_selling_price: pricing.onlineSellingPrice,
+            online_mrp: pricing.onlineMrp
           });
         }
       });
@@ -585,20 +692,27 @@ export default function PurchaseManager() {
     setStagedItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const existingItemsTotal = useMemo(() => {
-    return existingItems.reduce((sum, it) => sum + (Number(it.total_cost) || (it.quantity * it.unit_cost) || 0), 0);
-  }, [existingItems]);
-
-  const stagedNewlyAddedTotal = useMemo(() => {
-    return stagedItems.reduce((sum, it) => sum + it.total_cost, 0);
-  }, [stagedItems]);
+  // RE-COMPUTED STAGED ITEMS WITH UPDATED TRANSPORT ALLOCATION
+  const computedStagedItems = useMemo(() => {
+    return stagedItems.map((it) => {
+      const pricing = calculateSmartPricing(it.unit_cost, currentTransportPercent);
+      return {
+        ...it,
+        landed_cost: pricing.landedCost,
+        offline_tag_mrp: pricing.offlineTagMrp,
+        offline_final_price: pricing.offlineFinalPrice,
+        online_selling_price: pricing.onlineSellingPrice,
+        online_mrp: pricing.onlineMrp
+      };
+    });
+  }, [stagedItems, currentTransportPercent]);
 
   const grandTotalBillAmount = useMemo(() => {
-    if (editingPurchase) {
-      return existingItemsTotal + stagedNewlyAddedTotal;
-    }
-    return stagedNewlyAddedTotal;
-  }, [editingPurchase, existingItemsTotal, stagedNewlyAddedTotal]);
+    const totalItemsCost = editingPurchase
+      ? existingItemsTotal + stagedNewlyAddedBaseTotal
+      : stagedNewlyAddedBaseTotal;
+    return totalItemsCost + Number(transportCharges || 0);
+  }, [editingPurchase, existingItemsTotal, stagedNewlyAddedBaseTotal, transportCharges]);
 
   const totalInwardQuantity = useMemo(() => {
     const existingQty = existingItems.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
@@ -606,6 +720,7 @@ export default function PurchaseManager() {
     return editingPurchase ? existingQty + stagedQty : stagedQty;
   }, [editingPurchase, existingItems, stagedItems]);
 
+  // SAVE PURCHASE & AUTO SYNC INVENTORY & LAUNCH TAGGING CHECKLIST
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
@@ -631,6 +746,7 @@ export default function PurchaseManager() {
             supplier_bill_date: supplierBillDate,
             purchase_date: purchaseDate,
             total_amount: grandTotalBillAmount,
+            transport_charges: Number(transportCharges || 0),
             balance_amount: grandTotalBillAmount,
             notes: notes.trim() || null
           })
@@ -638,8 +754,8 @@ export default function PurchaseManager() {
 
         if (updateErr) throw updateErr;
 
-        if (stagedItems.length > 0) {
-          const linePayloads = stagedItems.map((it, idx) => ({
+        if (computedStagedItems.length > 0) {
+          const linePayloads = computedStagedItems.map((it, idx) => ({
             id: `pi_${editingPurchase.id}_${Date.now()}_${idx}`,
             purchase_id: editingPurchase.id,
             product_id: it.product_id,
@@ -647,14 +763,14 @@ export default function PurchaseManager() {
             variant_size: it.size,
             quantity: it.quantity,
             unit_cost: it.unit_cost,
-            selling_price: 0,
+            selling_price: it.offline_tag_mrp,
             total_cost: it.total_cost
           }));
 
           const { error: lineErr } = await supabase.from('purchase_items').insert(linePayloads);
           if (lineErr) throw lineErr;
 
-          for (const it of stagedItems) {
+          for (const it of computedStagedItems) {
             const { data: existInv } = await supabase
               .from('inventory')
               .select('id, stock_quantity')
@@ -683,20 +799,55 @@ export default function PurchaseManager() {
                 }
               ]);
             }
+
+            // Update product master prices
+            await supabase
+              .from('products')
+              .update({
+                offline_price: it.offline_tag_mrp,
+                online_price: it.online_selling_price,
+                selling_price: it.offline_tag_mrp
+              })
+              .eq('id', it.product_id);
           }
+
+          // Build Checklist
+          const checklistData: TaggingChecklistItem[] = computedStagedItems.map((it, idx) => ({
+            id: `chk_${idx}_${Date.now()}`,
+            product_id: it.product_id,
+            product_code: it.product_code,
+            product_name: it.product_name,
+            variant_color: it.color,
+            variant_size: it.size,
+            quantity: it.quantity,
+            unit_cost: it.unit_cost,
+            landed_cost: it.landed_cost,
+            offline_tag_mrp: it.offline_tag_mrp,
+            offline_final_price: it.offline_final_price,
+            online_selling_price: it.online_selling_price,
+            online_mrp: it.online_mrp,
+            is_completed: false
+          }));
+
+          setChecklistItems(checklistData);
+          setCurrentBillReference(editingPurchase.id);
+          setIsModalOpen(false);
+          setIsChecklistModalOpen(true);
+        } else {
+          alert(`Purchase [${editingPurchase.id}] updated successfully!`);
+          setIsModalOpen(false);
         }
 
-        alert(`Purchase [${editingPurchase.id}] updated successfully!`);
-        setIsModalOpen(false);
         loadData();
         return;
       }
 
-      if (stagedItems.length === 0) {
+      if (computedStagedItems.length === 0) {
         alert('Kudivaipu unna Inward Queue lo kanisam oka item aina add cheyandi.');
         return;
       }
 
+      // 1. Insert Purchases Table
       const { error: purErr } = await supabase.from('purchases').insert([
         {
           id: purchaseNo.trim(),
@@ -707,6 +858,7 @@ export default function PurchaseManager() {
           supplier_bill_date: supplierBillDate,
           purchase_date: purchaseDate,
           total_amount: grandTotalBillAmount,
+          transport_charges: Number(transportCharges || 0),
           tax_amount: 0,
           paid_amount: 0,
           balance_amount: grandTotalBillAmount,
@@ -716,7 +868,8 @@ export default function PurchaseManager() {
       ]);
       if (purErr) throw purErr;
 
-      const linePayloads = stagedItems.map((it, idx) => ({
+      // 2. Insert Purchase Items Table
+      const linePayloads = computedStagedItems.map((it, idx) => ({
         id: `pi_${purchaseNo.trim()}_${Date.now()}_${idx}`,
         purchase_id: purchaseNo.trim(),
         product_id: it.product_id,
@@ -724,7 +877,7 @@ export default function PurchaseManager() {
         variant_size: it.size,
         quantity: it.quantity,
         unit_cost: it.unit_cost,
-        selling_price: 0,
+        selling_price: it.offline_tag_mrp,
         total_cost: it.total_cost
       }));
 
@@ -733,7 +886,8 @@ export default function PurchaseManager() {
 
       const productInwardColorsMap = new Map<string, Set<string>>();
 
-      for (const it of stagedItems) {
+      // 3. Central Inventory Update (+) & Product Price Auto-sync
+      for (const it of computedStagedItems) {
         if (!productInwardColorsMap.has(it.product_id)) {
           productInwardColorsMap.set(it.product_id, new Set<string>());
         }
@@ -767,6 +921,16 @@ export default function PurchaseManager() {
             }
           ]);
         }
+
+        // Auto update product offline & online selling rates
+        await supabase
+          .from('products')
+          .update({
+            offline_price: it.offline_tag_mrp,
+            online_price: it.online_selling_price,
+            selling_price: it.offline_tag_mrp
+          })
+          .eq('id', it.product_id);
       }
 
       for (const [prodId, newColors] of productInwardColorsMap.entries()) {
@@ -791,8 +955,28 @@ export default function PurchaseManager() {
         }
       }
 
-      alert(`Purchase ${purchaseNo} saved successfully! ${totalInwardQuantity} units added to inventory.`);
+      // 4. Open Sticker Tagging Checklist Modal
+      const checklistData: TaggingChecklistItem[] = computedStagedItems.map((it, idx) => ({
+        id: `chk_${idx}_${Date.now()}`,
+        product_id: it.product_id,
+        product_code: it.product_code,
+        product_name: it.product_name,
+        variant_color: it.color,
+        variant_size: it.size,
+        quantity: it.quantity,
+        unit_cost: it.unit_cost,
+        landed_cost: it.landed_cost,
+        offline_tag_mrp: it.offline_tag_mrp,
+        offline_final_price: it.offline_final_price,
+        online_selling_price: it.online_selling_price,
+        online_mrp: it.online_mrp,
+        is_completed: false
+      }));
+
+      setChecklistItems(checklistData);
+      setCurrentBillReference(purchaseNo.trim());
       setIsModalOpen(false);
+      setIsChecklistModalOpen(true);
       loadData();
     } catch (err: any) {
       alert('Error: ' + err.message);
@@ -800,6 +984,20 @@ export default function PurchaseManager() {
       setSubmitting(false);
     }
   };
+
+  const handleToggleChecklistDone = (id: string) => {
+    setChecklistItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, is_completed: !item.is_completed } : item))
+    );
+  };
+
+  const completedChecklistCount = useMemo(() => {
+    return checklistItems.filter((it) => it.is_completed).length;
+  }, [checklistItems]);
+
+  const standaloneCalcResult = useMemo(() => {
+    return calculateSmartPricing(Number(calcCost) || 0, Number(calcTransportPercent) || 0);
+  }, [calcCost, calcTransportPercent]);
 
   const filteredPurchases = useMemo(() => {
     if (!searchQuery.trim()) return purchases;
@@ -823,19 +1021,28 @@ export default function PurchaseManager() {
           </div>
           <div>
             <h2 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-2">
-              <span>Purchase Inward Deck</span>
+              <span>Purchase Inward & Landed Pricing Desk</span>
               <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/40 text-[10px] font-mono">
                 {purchases.length} Invoices
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Alphabetical Shades • Dedicated Shade Popup • Balanced Inward Workspace
+              Value-Based Transport Allocation • Automated Retail Markups • Label Tagging Checklist
             </span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="relative w-56 sm:w-72">
+          <button
+            type="button"
+            onClick={() => setIsCalculatorOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-[#6d4aff]/20 hover:bg-[#6d4aff]/30 border border-[#6d4aff]/40 text-[#00d9ff] font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 uppercase"
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            <span>Price Calculator</span>
+          </button>
+
+          <div className="relative w-52 sm:w-64">
             <input
               type="text"
               value={searchQuery}
@@ -984,8 +1191,8 @@ export default function PurchaseManager() {
 
             <form onSubmit={handleSavePurchase} className="p-3 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar text-xs">
               
-              {/* Master Header: Supplier, Bill No, Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10">
+              {/* Master Header: Supplier, Bill No, Dates, Transport */}
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10 items-center">
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
                     Supplier Name *
@@ -1042,6 +1249,26 @@ export default function PurchaseManager() {
                     value={purchaseDate}
                     onChange={(e) => setPurchaseDate(e.target.value)}
                     className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#00ff9d] font-mono font-bold outline-none text-xs"
+                  />
+                </div>
+
+                {/* Transportation Input */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[9.5px] font-mono text-[#ffa500] uppercase font-bold flex items-center gap-1">
+                      <Truck className="w-3 h-3 text-[#ffa500]" /> Transport (₹)
+                    </label>
+                    <span className="text-[9px] font-mono text-[#00ff9d] font-bold">
+                      +{currentTransportPercent.toFixed(1)}%
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={transportCharges}
+                    onChange={(e) => setTransportCharges(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#ffa500] font-mono font-bold outline-none text-xs focus:border-[#ffa500]"
                   />
                 </div>
               </div>
@@ -1175,7 +1402,7 @@ export default function PurchaseManager() {
                             type="number"
                             min="0"
                             step="any"
-                            placeholder="Cost Price (CP) *"
+                            placeholder="Base CP Rate (₹) *"
                             value={unitCost}
                             onChange={(e) => setUnitCost(e.target.value)}
                             className="w-full px-3 py-2 rounded-xl bg-[#101628] border border-white/20 text-[#00ff9d] font-bold outline-none text-xs focus:border-[#00ff9d]"
@@ -1183,7 +1410,29 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* POPUP TRIGGER BUTTON (CLEAN & DIRECT TO MATRIX) */}
+                      {/* LIVE PRICING BADGES PREVIEW */}
+                      {Number(unitCost) > 0 && (
+                        <div className="p-2.5 rounded-xl bg-[#101628] border border-[#00d9ff]/30 grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] animate-in fade-in">
+                          <div>
+                            <span className="text-[#8b9bb4] text-[9px] block">LANDED COST:</span>
+                            <strong className="text-white text-xs">₹{liveMatrixPricing.landedCost}</strong>
+                          </div>
+                          <div>
+                            <span className="text-[#ffa500] text-[9px] block font-bold">STICKER TAG MRP:</span>
+                            <strong className="text-[#ffa500] text-xs">₹{liveMatrixPricing.offlineTagMrp}</strong>
+                          </div>
+                          <div>
+                            <span className="text-[#00ff9d] text-[9px] block">FINAL (10% OFF):</span>
+                            <strong className="text-[#00ff9d] text-xs">₹{liveMatrixPricing.offlineFinalPrice}</strong>
+                          </div>
+                          <div>
+                            <span className="text-[#00d9ff] text-[9px] block">ONLINE PRICE:</span>
+                            <strong className="text-[#00d9ff] text-xs">₹{liveMatrixPricing.onlineSellingPrice}</strong>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* POPUP TRIGGER BUTTON */}
                       {activeProduct ? (
                         <div className="space-y-3 pt-2 border-t border-white/5">
                           
@@ -1207,7 +1456,7 @@ export default function PurchaseManager() {
                             </button>
                           </div>
 
-                          {/* 3. QUANTITY MATRIX GRID FOR CHOSEN SHADES (WITH DELETE OPTION AT ROW END) */}
+                          {/* 3. QUANTITY MATRIX GRID */}
                           {activeMatrixColors.length > 0 ? (
                             <div className="space-y-2 pt-1 border-t border-white/5">
                               <span className="text-[10px] font-mono font-bold text-[#00ff9d] uppercase block">
@@ -1256,7 +1505,6 @@ export default function PurchaseManager() {
                                               </td>
                                             );
                                           })}
-                                          {/* Direct Delete Row Action */}
                                           <td className="py-1.5 px-2 text-center">
                                             <button
                                               type="button"
@@ -1322,7 +1570,7 @@ export default function PurchaseManager() {
                     {/* Scrollable Container with Distinct Saved vs Staged Sections */}
                     <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2.5 space-y-2.5">
                       
-                      {/* 1. EXISTING SAVED ITEMS ON BILL (Blue-Themed Container) */}
+                      {/* 1. EXISTING SAVED ITEMS ON BILL */}
                       {editingPurchase && existingItems.length > 0 && (
                         <div className="p-2.5 rounded-2xl bg-[#00d9ff]/5 border border-[#00d9ff]/30 space-y-1.5">
                           <div className="flex items-center justify-between text-xs font-mono">
@@ -1372,33 +1620,35 @@ export default function PurchaseManager() {
                         </div>
                       )}
 
-                      {/* 2. NEWLY ADDED QUEUE (Green-Themed Container) */}
-                      {stagedItems.length > 0 && (
+                      {/* 2. NEWLY ADDED QUEUE */}
+                      {computedStagedItems.length > 0 && (
                         <div className="p-2.5 rounded-2xl bg-[#00ff9d]/5 border border-[#00ff9d]/30 space-y-1.5">
                           <div className="flex items-center justify-between text-xs font-mono">
                             <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
                               <Plus className="w-3.5 h-3.5 text-[#00ff9d]" />
-                              Newly Added in this Session ({stagedItems.length} lines)
+                              Newly Added in this Session ({computedStagedItems.length} lines)
                             </span>
-                            <span className="text-white font-bold">Subtotal: ₹{stagedNewlyAddedTotal.toLocaleString('en-IN')}</span>
+                            <span className="text-white font-bold">Subtotal: ₹{stagedNewlyAddedBaseTotal.toLocaleString('en-IN')}</span>
                           </div>
 
-                          <div className="max-h-40 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#101628]">
+                          <div className="max-h-48 overflow-y-auto custom-scrollbar border border-white/10 rounded-xl bg-[#101628]">
                             <table className="w-full text-left text-xs">
                               <thead className="bg-[#0a0e17] text-[#8b9bb4] font-mono uppercase text-[8px] sticky top-0">
                                 <tr>
                                   <th className="py-1 px-2">Product & Variant</th>
                                   <th className="py-1 px-2 text-center">Qty</th>
-                                  <th className="py-1 px-2 text-right">Cost</th>
+                                  <th className="py-1 px-2 text-right text-[#ffa500]">Landed</th>
+                                  <th className="py-1 px-2 text-center text-[#ffa500]">Tag MRP</th>
+                                  <th className="py-1 px-2 text-center text-[#00d9ff]">Online</th>
                                   <th className="py-1 px-2 text-right">Total</th>
                                   <th className="py-1 px-1.5 text-center"></th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
-                                {stagedItems.map((it, idx) => (
+                                {computedStagedItems.map((it, idx) => (
                                   <tr key={idx} className="hover:bg-white/[0.02]">
                                     <td className="py-1.5 px-2">
-                                      <span className="font-bold text-white block truncate max-w-[170px]">
+                                      <span className="font-bold text-white block truncate max-w-[140px]">
                                         {it.product_name}
                                       </span>
                                       <span className="text-[10px] text-[#00ff9d] font-mono">
@@ -1406,7 +1656,9 @@ export default function PurchaseManager() {
                                       </span>
                                     </td>
                                     <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
-                                    <td className="py-1.5 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
+                                    <td className="py-1.5 px-2 text-right font-mono text-[#ffa500] font-bold">₹{it.landed_cost}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono font-black text-[#ffa500] bg-[#ffa500]/10 rounded">₹{it.offline_tag_mrp}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono text-[#00d9ff] font-bold">₹{it.online_selling_price}</td>
                                     <td className="py-1.5 px-2 text-right font-mono font-bold text-white">
                                       ₹{it.total_cost.toLocaleString('en-IN')}
                                     </td>
@@ -1449,10 +1701,14 @@ export default function PurchaseManager() {
                         )}
                         <div className="flex justify-between text-[#8b9bb4]">
                           <span>Newly Added ({stagedItems.length} lines):</span>
-                          <span className="text-[#00d9ff]">₹{stagedNewlyAddedTotal.toLocaleString('en-IN')}</span>
+                          <span className="text-[#00d9ff]">₹{stagedNewlyAddedBaseTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-[#8b9bb4]">
+                          <span>Transport Charges:</span>
+                          <span className="text-[#ffa500]">₹{Number(transportCharges || 0).toLocaleString('en-IN')}</span>
                         </div>
                         <div className="flex justify-between items-center text-xs font-bold pt-1.5 border-t border-white/5">
-                          <span className="text-white">GRAND TOTAL:</span>
+                          <span className="text-white">NET INVOICE VALUE:</span>
                           <span className="text-lg font-extrabold text-[#00ff9d]">
                             ₹{grandTotalBillAmount.toLocaleString('en-IN')}
                           </span>
@@ -1485,7 +1741,7 @@ export default function PurchaseManager() {
                           className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#ffa500] to-[#ff6b6b] hover:opacity-95 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-[#ffa500]/30 cursor-pointer active:scale-95 disabled:opacity-50"
                         >
                           {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                          <span>{editingPurchase ? 'Update Purchase Bill' : 'Save Purchase Entry'}</span>
+                          <span>{editingPurchase ? 'Update Purchase Bill' : 'Save Bill & Open Checklist'}</span>
                         </button>
                       </div>
                     </div>
@@ -1525,7 +1781,7 @@ export default function PurchaseManager() {
               </button>
             </div>
 
-            {/* Base Color Selection Tabs: Dynamic Color Fill + Auto Opposite Contrast Text */}
+            {/* Base Color Selection Tabs */}
             <div className="space-y-2 shrink-0">
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
                 1. Pick Base Color Family (A-Z):
@@ -1563,7 +1819,7 @@ export default function PurchaseManager() {
               </div>
             </div>
 
-            {/* LARGE SHADE CARDS GRID (ALPHABETICAL ORDER A-Z) */}
+            {/* LARGE SHADE CARDS GRID */}
             <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar p-1">
               <div className="flex items-center justify-between text-xs sticky top-0 bg-[#101628] py-1 z-10">
                 <span className="font-mono text-[#8b9bb4]">
@@ -1655,7 +1911,215 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 5. SECURITY PIN PROMPT MODAL */}
+      {/* 5. STICKER TAGGING CHECKLIST MODAL (ONE-BY-ONE DONE SYSTEM) */}
+      {isChecklistModalOpen && (
+        <div className="fixed inset-0 z-[100020] p-3 sm:p-5 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-4xl w-full p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#00ff9d] to-[#00d9ff] text-neutral-950 flex items-center justify-center font-bold shadow">
+                  <Tag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase">
+                    <span>Price Sticker Labelling Checklist</span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono">
+                      {currentBillReference}
+                    </span>
+                  </h3>
+                  <span className="text-[10px] text-[#8b9bb4]">
+                    Label meeda rate raasi product ki antinchagaane &quot;Mark Done&quot; kotti checklist check cheyandi.
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsChecklistModalOpen(false)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-1.5 shrink-0">
+              <div className="flex justify-between items-center text-[10px] font-mono font-bold">
+                <span className="text-[#8b9bb4]">TAGGING PROGRESS:</span>
+                <span className="text-[#00ff9d]">
+                  {completedChecklistCount} OF {checklistItems.length} VARIANTS COMPLETED
+                </span>
+              </div>
+              <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] transition-all duration-300"
+                  style={{
+                    width: `${checklistItems.length > 0 ? (completedChecklistCount / checklistItems.length) * 100 : 0}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Cards List */}
+            <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1">
+              {checklistItems.map((item) => (
+                <div
+                  key={item.id}
+                  className={`p-3 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                    item.is_completed
+                      ? 'bg-[#00ff9d]/5 border-[#00ff9d]/30 opacity-60'
+                      : 'bg-[#0a0e17] border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-extrabold text-[#00ff9d] text-xs">
+                        [{item.product_code || item.product_id}]
+                      </span>
+                      <span className={`font-bold text-xs uppercase ${item.is_completed ? 'line-through text-[#8b9bb4]' : 'text-white'}`}>
+                        {item.product_name}
+                      </span>
+                      <span className="px-2 py-0.2 rounded bg-white/10 text-white font-mono text-[10px] font-bold">
+                        {item.quantity} PCS
+                      </span>
+                    </div>
+
+                    <span className="text-[10px] font-mono text-[#00d9ff] uppercase block">
+                      VARIANT: {item.variant_color} • SIZE: {item.variant_size}
+                    </span>
+                  </div>
+
+                  {/* Price Tag Displays to write manually on sticker */}
+                  <div className="flex items-center gap-3 font-mono">
+                    <div className="px-3 py-1.5 rounded-xl bg-[#ffa500]/10 border border-[#ffa500]/30 text-center">
+                      <span className="text-[8.5px] text-[#ffa500] block uppercase font-bold">STICKER TAG MRP</span>
+                      <strong className="text-sm font-black text-[#ffa500]">₹{item.offline_tag_mrp}</strong>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 rounded-xl bg-white/5 text-center hidden sm:block">
+                      <span className="text-[8.5px] text-[#8b9bb4] block uppercase">FINAL (10% OFF)</span>
+                      <strong className="text-xs font-bold text-white">₹{item.offline_final_price}</strong>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 rounded-xl bg-[#00d9ff]/10 text-center hidden sm:block">
+                      <span className="text-[8.5px] text-[#00d9ff] block uppercase">ONLINE PRICE</span>
+                      <strong className="text-xs font-bold text-[#00d9ff]">₹{item.online_selling_price}</strong>
+                    </div>
+
+                    {/* Toggle Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleChecklistDone(item.id)}
+                      className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 uppercase ${
+                        item.is_completed
+                          ? 'bg-[#00ff9d] text-neutral-950 shadow-md font-extrabold'
+                          : 'bg-white/10 text-white hover:bg-white/20'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>{item.is_completed ? 'LABELED' : 'MARK DONE'}</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-2 border-t border-white/10 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsChecklistModalOpen(false)}
+                className="px-6 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer uppercase"
+              >
+                CLOSE CHECKLIST
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. STANDALONE QUICK PRICING CALCULATOR MODAL */}
+      {isCalculatorOpen && (
+        <div className="fixed inset-0 z-[100030] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-[#00d9ff]" />
+                <h3 className="text-sm font-bold text-white uppercase">Instant Price & Margin Calculator</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCalculatorOpen(false)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 font-mono text-xs">
+              <div>
+                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">ITEM BASE COST (₹)</label>
+                <input
+                  type="number"
+                  autoFocus
+                  placeholder="ENTER COST E.G. 100"
+                  value={calcCost}
+                  onChange={(e) => setCalcCost(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-bold text-sm outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">TRANSPORT ALLOCATION (%)</label>
+                <input
+                  type="number"
+                  placeholder="DEFAULT 10%"
+                  value={calcTransportPercent}
+                  onChange={(e) => setCalcTransportPercent(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#ffa500] font-bold text-xs outline-none"
+                />
+              </div>
+
+              {/* Calculated Outputs */}
+              <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2 pt-3">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#8b9bb4]">LANDED COST:</span>
+                  <span className="text-white font-bold">₹{standaloneCalcResult.landedCost}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#ffa500] font-bold">OFFLINE STICKER TAG MRP:</span>
+                  <span className="text-base font-black text-[#ffa500]">₹{standaloneCalcResult.offlineTagMrp}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#00ff9d]">OFFLINE FINAL (10% OFF):</span>
+                  <span className="text-white font-bold">₹{standaloneCalcResult.offlineFinalPrice}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#00d9ff]">ONLINE SELLING PRICE:</span>
+                  <span className="text-[#00d9ff] font-bold">₹{standaloneCalcResult.onlineSellingPrice}</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] text-[#8b9bb4] border-t border-white/5 pt-1.5">
+                  <span>ONLINE DISPLAY MRP (~30% OFF):</span>
+                  <span>₹{standaloneCalcResult.onlineMrp}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-white/10 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsCalculatorOpen(false)}
+                className="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold cursor-pointer uppercase"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. SECURITY PIN PROMPT MODAL */}
       {isPinModalOpen && (
         <div className="fixed inset-0 z-[100000] p-3 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-4 shadow-2xl space-y-3">
@@ -1718,7 +2182,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 6. VIEW PURCHASE DETAIL MODAL */}
+      {/* 8. VIEW PURCHASE DETAIL MODAL */}
       {viewingPurchase && (
         <div className="fixed inset-0 z-[99999] p-3 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-white/15 rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl p-4 space-y-3">
@@ -1785,7 +2249,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 7. QUICK ADD PRODUCT MASTER MODAL (FIXED Z-INDEX TO POP OVER INWARD DESK) */}
+      {/* 9. PRODUCT MASTER MODAL */}
       {isProductMasterOpen && (
         <div className="relative z-[100005]">
           <ProductMasterModal
@@ -1807,7 +2271,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 8. DIRECT COLOUR MASTER MODAL (FIXED Z-INDEX TO POP OVER INWARD DESK) */}
+      {/* 10. COLOUR MASTER MODAL */}
       {isColorMasterOpen && (
         <div className="relative z-[100005]">
           <ColorMasterModal
