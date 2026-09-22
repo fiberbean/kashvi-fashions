@@ -26,7 +26,9 @@ import {
   Sparkles,
   Calculator,
   Tag,
-  Truck
+  Truck,
+  Percent,
+  CircleDollarSign
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import ProductMasterModal from '../components/modals/ProductMasterModal';
@@ -63,12 +65,11 @@ interface StagedMatrixItem {
   quantity: number;
   unit_cost: number;
   total_cost: number;
-  // Calculated pricing
   landed_cost: number;
-  offline_tag_mrp: number;
-  offline_final_price: number;
+  sticker_selling_price: number;
+  max_discount_price: number;
   online_selling_price: number;
-  online_mrp: number;
+  mrp_price: number;
 }
 
 interface ColourMasterRecord {
@@ -89,10 +90,10 @@ interface TaggingChecklistItem {
   quantity: number;
   unit_cost: number;
   landed_cost: number;
-  offline_tag_mrp: number;
-  offline_final_price: number;
+  sticker_selling_price: number;
+  max_discount_price: number;
   online_selling_price: number;
-  online_mrp: number;
+  mrp_price: number;
   is_completed: boolean;
 }
 
@@ -123,35 +124,35 @@ const BASE_FAMILY_PALETTE: { [key: string]: string } = {
   grey: '#757575'
 };
 
-// PRICING AUTOMATION ENGINE
+// PRICING AUTOMATION ENGINE ACCORDING TO REQUIREMENTS
 function calculateSmartPricing(baseUnitCost: number, transportPercentage: number) {
   const baseCost = Number(baseUnitCost) || 0;
   const tPercent = Number(transportPercentage) || 0;
 
-  // 1. Landed Cost (Cost Price)
+  // 1. Landed Cost
   const landedCost = baseCost + (baseCost * (tPercent / 100));
 
-  // 2. Offline Store (Double + 10%, round to nearest 5)
+  // 2. Sticker Tag Selling Price (Offline Selling Price on Label)
   const rawOfflineTag = (landedCost * 2) + ((landedCost * 2) * 0.10);
-  const offlineTagMrp = Math.ceil(rawOfflineTag / 5) * 5;
+  const stickerSellingPrice = Math.ceil(rawOfflineTag / 5) * 5;
 
-  // 3. Offline Final after 10% discount
-  const rawOfflineFinal = offlineTagMrp - (offlineTagMrp * 0.10);
-  const offlineFinalPrice = Math.round(rawOfflineFinal);
+  // 3. Max Discount Price (Store Bottom Rate)
+  const rawOfflineFinal = stickerSellingPrice - (stickerSellingPrice * 0.10);
+  const maxDiscountPrice = Math.round(rawOfflineFinal);
 
-  // 4. Online Selling Price (Double + 20%, round up to next 10)
+  // 4. Online Selling Price (Landed * 2 + 20%, rounded up to next 10)
   const rawOnline = (landedCost * 2) + ((landedCost * 2) * 0.20);
   const onlineSellingPrice = Math.ceil(rawOnline / 10) * 10;
 
-  // 5. Online Synthetic Compare-At MRP (~30% strike-through discount)
-  const onlineMrp = Math.ceil((onlineSellingPrice / 0.70) / 10) * 10;
+  // 5. MRP Price (Calculated based on Online Price to show ~30% discount strike-through)
+  const mrpPrice = Math.ceil((onlineSellingPrice / 0.70) / 10) * 10;
 
   return {
     landedCost: Math.round(landedCost * 100) / 100,
-    offlineTagMrp,
-    offlineFinalPrice,
+    stickerSellingPrice,
+    maxDiscountPrice,
     onlineSellingPrice,
-    onlineMrp
+    mrpPrice
   };
 }
 
@@ -183,7 +184,8 @@ export default function PurchaseManager() {
   // Standalone Quick Calculator State
   const [isCalculatorOpen, setIsCalculatorOpen] = useState<boolean>(false);
   const [calcCost, setCalcCost] = useState<number | string>('');
-  const [calcTransportPercent, setCalcTransportPercent] = useState<number | string>(10);
+  const [calcTransportMode, setCalcTransportMode] = useState<'percent' | 'amount'>('percent');
+  const [calcTransportVal, setCalcTransportVal] = useState<number | string>(10);
 
   // Edit Mode & PIN
   const [editingPurchase, setEditingPurchase] = useState<PurchaseRecord | null>(null);
@@ -193,13 +195,22 @@ export default function PurchaseManager() {
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
 
+  // Editing existing saved line item
+  const [editingItemModal, setEditingItemModal] = useState<any | null>(null);
+  const [editItemQty, setEditItemQty] = useState<number>(1);
+  const [editItemCost, setEditItemCost] = useState<number>(0);
+  const [updatingLineItem, setUpdatingLineItem] = useState<boolean>(false);
+
   // Form State
   const [purchaseNo, setPurchaseNo] = useState<string>('PUR0001');
   const [purchaseDate, setPurchaseDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [supplierBillNo, setSupplierBillNo] = useState<string>('');
   const [supplierBillDate, setSupplierBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
-  const [transportCharges, setTransportCharges] = useState<number | string>(0);
+  
+  // Bill Transportation Mode
+  const [billTransportMode, setBillTransportMode] = useState<'amount' | 'percent'>('amount');
+  const [transportInputVal, setTransportInputVal] = useState<number | string>(0);
   const [notes, setNotes] = useState<string>('');
 
   // Searchable Product Dropdown State
@@ -268,9 +279,9 @@ export default function PurchaseManager() {
       if (suppRes.data) setSuppliers(suppRes.data);
 
       if (prodRes.data) {
-        const sorted = [...prodRes.data].sort((a, b) => {
-          return String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' });
-        });
+        const sorted = [...prodRes.data].sort((a, b) =>
+          String(a.id).localeCompare(String(b.id), undefined, { numeric: true, sensitivity: 'base' })
+        );
         setProductsList(sorted);
       }
 
@@ -331,7 +342,8 @@ export default function PurchaseManager() {
     setSupplierBillDate(new Date().toISOString().split('T')[0]);
     setSelectedSupplierId('');
     setSupplierBillNo('');
-    setTransportCharges(0);
+    setBillTransportMode('amount');
+    setTransportInputVal(0);
     setNotes('');
     setStagedItems([]);
     setSelectedProductId('');
@@ -350,7 +362,8 @@ export default function PurchaseManager() {
     setSupplierBillDate(p.supplier_bill_date || new Date().toISOString().split('T')[0]);
     setSelectedSupplierId(p.supplier_id || '');
     setSupplierBillNo(p.supplier_bill_no || '');
-    setTransportCharges(p.transport_charges || 0);
+    setBillTransportMode('amount');
+    setTransportInputVal(p.transport_charges || 0);
     setNotes(p.notes || '');
     setStagedItems([]);
     setSelectedProductId('');
@@ -449,6 +462,84 @@ export default function PurchaseManager() {
     }
   };
 
+  const handleOpenEditItemModal = (item: any) => {
+    setEditingItemModal(item);
+    setEditItemQty(Number(item.quantity) || 1);
+    setEditItemCost(Number(item.unit_cost) || 0);
+  };
+
+  const handleSaveEditedLineItem = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItemModal || !editingPurchase) return;
+
+    setUpdatingLineItem(true);
+    try {
+      const prevQty = Number(editingItemModal.quantity) || 0;
+      const newQty = Number(editItemQty) || 0;
+      const newCost = Number(editItemCost) || 0;
+      const qtyDifference = newQty - prevQty;
+      const newTotalCost = newQty * newCost;
+
+      const { error: itemErr } = await supabase
+        .from('purchase_items')
+        .update({
+          quantity: newQty,
+          unit_cost: newCost,
+          total_cost: newTotalCost
+        })
+        .eq('id', editingItemModal.id);
+      if (itemErr) throw itemErr;
+
+      const { data: inv } = await supabase
+        .from('inventory')
+        .select('id, stock_quantity')
+        .eq('product_id', editingItemModal.product_id)
+        .eq('variant_color', editingItemModal.variant_color)
+        .eq('variant_size', editingItemModal.variant_size)
+        .maybeSingle();
+
+      if (inv) {
+        const updatedStock = Math.max(0, (Number(inv.stock_quantity) || 0) + qtyDifference);
+        await supabase
+          .from('inventory')
+          .update({ stock_quantity: updatedStock, updated_at: new Date().toISOString() })
+          .eq('id', inv.id);
+      }
+
+      const updatedExisting = existingItems.map((it) =>
+        it.id === editingItemModal.id
+          ? { ...it, quantity: newQty, unit_cost: newCost, total_cost: newTotalCost }
+          : it
+      );
+      setExistingItems(updatedExisting);
+
+      const newItemsTotal = updatedExisting.reduce(
+        (sum, it) => sum + (Number(it.total_cost) || (it.quantity * it.unit_cost) || 0),
+        0
+      );
+      const computedTotal = newItemsTotal + Number(actualTransportAmount || 0);
+
+      await supabase
+        .from('purchases')
+        .update({
+          total_amount: computedTotal,
+          balance_amount: computedTotal
+        })
+        .eq('id', editingPurchase.id);
+
+      setEditingPurchase((prev) => (prev ? { ...prev, total_amount: computedTotal } : null));
+      setPurchases((prev) =>
+        prev.map((p) => (p.id === editingPurchase.id ? { ...p, total_amount: computedTotal } : p))
+      );
+
+      setEditingItemModal(null);
+    } catch (err: any) {
+      alert('Failed to update line item: ' + err.message);
+    } finally {
+      setUpdatingLineItem(false);
+    }
+  };
+
   const handleDeleteExistingItem = async (item: any) => {
     if (!editingPurchase) return;
     const confirmDel = window.confirm(`Delete "${item.product_id} (${item.variant_color} / ${item.variant_size})" from this bill? Stock will be rolled back.`);
@@ -492,8 +583,10 @@ export default function PurchaseManager() {
         })
         .eq('id', editingPurchase.id);
 
-      setEditingPurchase((prev) => prev ? { ...prev, total_amount: updatedTotal } : null);
-      setPurchases((prev) => prev.map((p) => p.id === editingPurchase.id ? { ...p, total_amount: updatedTotal } : p));
+      setEditingPurchase((prev) => (prev ? { ...prev, total_amount: updatedTotal } : null));
+      setPurchases((prev) =>
+        prev.map((p) => (p.id === editingPurchase.id ? { ...p, total_amount: updatedTotal } : p))
+      );
     } catch (err: any) {
       alert('Failed to delete item: ' + err.message);
     } finally {
@@ -606,9 +699,11 @@ export default function PurchaseManager() {
     return Object.values(matrixQtyMap).reduce((sum, q) => sum + (Number(q) || 0), 0);
   }, [matrixQtyMap]);
 
-  // CALCULATION OF TRANSPORT PERCENTAGE FOR WHOLE BILL
   const existingItemsTotal = useMemo(() => {
-    return existingItems.reduce((sum, it) => sum + (Number(it.total_cost) || (it.quantity * it.unit_cost) || 0), 0);
+    return existingItems.reduce(
+      (sum, it) => sum + (Number(it.total_cost) || it.quantity * it.unit_cost || 0),
+      0
+    );
   }, [existingItems]);
 
   const stagedNewlyAddedBaseTotal = useMemo(() => {
@@ -620,12 +715,23 @@ export default function PurchaseManager() {
   }, [existingItemsTotal, stagedNewlyAddedBaseTotal]);
 
   const currentTransportPercent = useMemo(() => {
-    const tCharge = Number(transportCharges) || 0;
-    if (totalBillBaseAmount <= 0 || tCharge <= 0) return 0;
-    return (tCharge / totalBillBaseAmount) * 100;
-  }, [transportCharges, totalBillBaseAmount]);
+    const val = Number(transportInputVal) || 0;
+    if (val <= 0) return 0;
 
-  // LIVE PRICING INDICATOR IN MATRIX DESK
+    if (billTransportMode === 'percent') {
+      return val;
+    }
+    if (totalBillBaseAmount <= 0) return 0;
+    return (val / totalBillBaseAmount) * 100;
+  }, [billTransportMode, transportInputVal, totalBillBaseAmount]);
+
+  const actualTransportAmount = useMemo(() => {
+    const val = Number(transportInputVal) || 0;
+    if (billTransportMode === 'amount') return val;
+    return (totalBillBaseAmount * val) / 100;
+  }, [billTransportMode, transportInputVal, totalBillBaseAmount]);
+
+  // LIVE PRICING ENGINE RUN
   const liveMatrixPricing = useMemo(() => {
     const cost = Number(unitCost) || 0;
     return calculateSmartPricing(cost, currentTransportPercent);
@@ -666,10 +772,10 @@ export default function PurchaseManager() {
             unit_cost: cost,
             total_cost: count * cost,
             landed_cost: pricing.landedCost,
-            offline_tag_mrp: pricing.offlineTagMrp,
-            offline_final_price: pricing.offlineFinalPrice,
+            sticker_selling_price: pricing.stickerSellingPrice,
+            max_discount_price: pricing.maxDiscountPrice,
             online_selling_price: pricing.onlineSellingPrice,
-            online_mrp: pricing.onlineMrp
+            mrp_price: pricing.mrpPrice
           });
         }
       });
@@ -692,17 +798,16 @@ export default function PurchaseManager() {
     setStagedItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // RE-COMPUTED STAGED ITEMS WITH UPDATED TRANSPORT ALLOCATION
   const computedStagedItems = useMemo(() => {
     return stagedItems.map((it) => {
       const pricing = calculateSmartPricing(it.unit_cost, currentTransportPercent);
       return {
         ...it,
         landed_cost: pricing.landedCost,
-        offline_tag_mrp: pricing.offlineTagMrp,
-        offline_final_price: pricing.offlineFinalPrice,
+        sticker_selling_price: pricing.stickerSellingPrice,
+        max_discount_price: pricing.maxDiscountPrice,
         online_selling_price: pricing.onlineSellingPrice,
-        online_mrp: pricing.onlineMrp
+        mrp_price: pricing.mrpPrice
       };
     });
   }, [stagedItems, currentTransportPercent]);
@@ -711,8 +816,8 @@ export default function PurchaseManager() {
     const totalItemsCost = editingPurchase
       ? existingItemsTotal + stagedNewlyAddedBaseTotal
       : stagedNewlyAddedBaseTotal;
-    return totalItemsCost + Number(transportCharges || 0);
-  }, [editingPurchase, existingItemsTotal, stagedNewlyAddedBaseTotal, transportCharges]);
+    return totalItemsCost + Number(actualTransportAmount || 0);
+  }, [editingPurchase, existingItemsTotal, stagedNewlyAddedBaseTotal, actualTransportAmount]);
 
   const totalInwardQuantity = useMemo(() => {
     const existingQty = existingItems.reduce((sum, it) => sum + (Number(it.quantity) || 0), 0);
@@ -720,7 +825,6 @@ export default function PurchaseManager() {
     return editingPurchase ? existingQty + stagedQty : stagedQty;
   }, [editingPurchase, existingItems, stagedItems]);
 
-  // SAVE PURCHASE & AUTO SYNC INVENTORY & LAUNCH TAGGING CHECKLIST
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
@@ -746,7 +850,7 @@ export default function PurchaseManager() {
             supplier_bill_date: supplierBillDate,
             purchase_date: purchaseDate,
             total_amount: grandTotalBillAmount,
-            transport_charges: Number(transportCharges || 0),
+            transport_charges: Number(actualTransportAmount || 0),
             balance_amount: grandTotalBillAmount,
             notes: notes.trim() || null
           })
@@ -763,7 +867,7 @@ export default function PurchaseManager() {
             variant_size: it.size,
             quantity: it.quantity,
             unit_cost: it.unit_cost,
-            selling_price: it.offline_tag_mrp,
+            selling_price: it.sticker_selling_price,
             total_cost: it.total_cost
           }));
 
@@ -800,18 +904,16 @@ export default function PurchaseManager() {
               ]);
             }
 
-            // Update product master prices
             await supabase
               .from('products')
               .update({
-                offline_price: it.offline_tag_mrp,
+                offline_price: it.sticker_selling_price,
                 online_price: it.online_selling_price,
-                selling_price: it.offline_tag_mrp
+                selling_price: it.sticker_selling_price
               })
               .eq('id', it.product_id);
           }
 
-          // Build Checklist
           const checklistData: TaggingChecklistItem[] = computedStagedItems.map((it, idx) => ({
             id: `chk_${idx}_${Date.now()}`,
             product_id: it.product_id,
@@ -822,10 +924,10 @@ export default function PurchaseManager() {
             quantity: it.quantity,
             unit_cost: it.unit_cost,
             landed_cost: it.landed_cost,
-            offline_tag_mrp: it.offline_tag_mrp,
-            offline_final_price: it.offline_final_price,
+            sticker_selling_price: it.sticker_selling_price,
+            max_discount_price: it.max_discount_price,
             online_selling_price: it.online_selling_price,
-            online_mrp: it.online_mrp,
+            mrp_price: it.mrp_price,
             is_completed: false
           }));
 
@@ -847,7 +949,6 @@ export default function PurchaseManager() {
         return;
       }
 
-      // 1. Insert Purchases Table
       const { error: purErr } = await supabase.from('purchases').insert([
         {
           id: purchaseNo.trim(),
@@ -858,7 +959,7 @@ export default function PurchaseManager() {
           supplier_bill_date: supplierBillDate,
           purchase_date: purchaseDate,
           total_amount: grandTotalBillAmount,
-          transport_charges: Number(transportCharges || 0),
+          transport_charges: Number(actualTransportAmount || 0),
           tax_amount: 0,
           paid_amount: 0,
           balance_amount: grandTotalBillAmount,
@@ -868,7 +969,6 @@ export default function PurchaseManager() {
       ]);
       if (purErr) throw purErr;
 
-      // 2. Insert Purchase Items Table
       const linePayloads = computedStagedItems.map((it, idx) => ({
         id: `pi_${purchaseNo.trim()}_${Date.now()}_${idx}`,
         purchase_id: purchaseNo.trim(),
@@ -877,7 +977,7 @@ export default function PurchaseManager() {
         variant_size: it.size,
         quantity: it.quantity,
         unit_cost: it.unit_cost,
-        selling_price: it.offline_tag_mrp,
+        selling_price: it.sticker_selling_price,
         total_cost: it.total_cost
       }));
 
@@ -886,7 +986,6 @@ export default function PurchaseManager() {
 
       const productInwardColorsMap = new Map<string, Set<string>>();
 
-      // 3. Central Inventory Update (+) & Product Price Auto-sync
       for (const it of computedStagedItems) {
         if (!productInwardColorsMap.has(it.product_id)) {
           productInwardColorsMap.set(it.product_id, new Set<string>());
@@ -922,13 +1021,12 @@ export default function PurchaseManager() {
           ]);
         }
 
-        // Auto update product offline & online selling rates
         await supabase
           .from('products')
           .update({
-            offline_price: it.offline_tag_mrp,
+            offline_price: it.sticker_selling_price,
             online_price: it.online_selling_price,
-            selling_price: it.offline_tag_mrp
+            selling_price: it.sticker_selling_price
           })
           .eq('id', it.product_id);
       }
@@ -955,7 +1053,6 @@ export default function PurchaseManager() {
         }
       }
 
-      // 4. Open Sticker Tagging Checklist Modal
       const checklistData: TaggingChecklistItem[] = computedStagedItems.map((it, idx) => ({
         id: `chk_${idx}_${Date.now()}`,
         product_id: it.product_id,
@@ -966,10 +1063,10 @@ export default function PurchaseManager() {
         quantity: it.quantity,
         unit_cost: it.unit_cost,
         landed_cost: it.landed_cost,
-        offline_tag_mrp: it.offline_tag_mrp,
-        offline_final_price: it.offline_final_price,
+        sticker_selling_price: it.sticker_selling_price,
+        max_discount_price: it.max_discount_price,
         online_selling_price: it.online_selling_price,
-        online_mrp: it.online_mrp,
+        mrp_price: it.mrp_price,
         is_completed: false
       }));
 
@@ -995,9 +1092,17 @@ export default function PurchaseManager() {
     return checklistItems.filter((it) => it.is_completed).length;
   }, [checklistItems]);
 
+  const calcEffectiveTransportPercent = useMemo(() => {
+    const val = Number(calcTransportVal) || 0;
+    const cost = Number(calcCost) || 0;
+    if (calcTransportMode === 'percent') return val;
+    if (cost <= 0) return 0;
+    return (val / cost) * 100;
+  }, [calcTransportMode, calcTransportVal, calcCost]);
+
   const standaloneCalcResult = useMemo(() => {
-    return calculateSmartPricing(Number(calcCost) || 0, Number(calcTransportPercent) || 0);
-  }, [calcCost, calcTransportPercent]);
+    return calculateSmartPricing(Number(calcCost) || 0, calcEffectiveTransportPercent);
+  }, [calcCost, calcEffectiveTransportPercent]);
 
   const filteredPurchases = useMemo(() => {
     if (!searchQuery.trim()) return purchases;
@@ -1027,7 +1132,7 @@ export default function PurchaseManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Value-Based Transport Allocation • Automated Retail Markups • Label Tagging Checklist
+              Dual Transport Modes (₹ / %) • Sticker Tag Price • MRP based on Online Price
             </span>
           </div>
         </div>
@@ -1132,7 +1237,7 @@ export default function PurchaseManager() {
                           type="button"
                           onClick={() => openEditPurchaseModal(p)}
                           className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00ff9d]/20 text-[#8b9bb4] hover:text-[#00ff9d]"
-                          title="Edit Purchase & Add Products"
+                          title="Edit Purchase & Manage Line Items"
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
@@ -1191,7 +1296,7 @@ export default function PurchaseManager() {
 
             <form onSubmit={handleSavePurchase} className="p-3 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar text-xs">
               
-              {/* Master Header: Supplier, Bill No, Dates, Transport */}
+              {/* Master Header: Supplier, Bill No, Dates, Transport (Dual Mode ₹ / %) */}
               <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10 items-center">
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
@@ -1252,24 +1357,55 @@ export default function PurchaseManager() {
                   />
                 </div>
 
-                {/* Transportation Input */}
+                {/* Transportation Input with Mode Switcher (₹ or %) */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-[9.5px] font-mono text-[#ffa500] uppercase font-bold flex items-center gap-1">
-                      <Truck className="w-3 h-3 text-[#ffa500]" /> Transport (₹)
+                      <Truck className="w-3 h-3 text-[#ffa500]" /> Transport
                     </label>
-                    <span className="text-[9px] font-mono text-[#00ff9d] font-bold">
-                      +{currentTransportPercent.toFixed(1)}%
+
+                    <div className="inline-flex rounded-lg bg-[#101628] border border-white/10 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setBillTransportMode('amount')}
+                        className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold transition-all ${
+                          billTransportMode === 'amount'
+                            ? 'bg-[#ffa500] text-neutral-950 shadow'
+                            : 'text-[#8b9bb4] hover:text-white'
+                        }`}
+                      >
+                        ₹
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillTransportMode('percent')}
+                        className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold transition-all ${
+                          billTransportMode === 'percent'
+                            ? 'bg-[#ffa500] text-neutral-950 shadow'
+                            : 'text-[#8b9bb4] hover:text-white'
+                        }`}
+                      >
+                        %
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="0"
+                      value={transportInputVal}
+                      onChange={(e) => setTransportInputVal(e.target.value)}
+                      className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#ffa500] font-mono font-bold outline-none text-xs focus:border-[#ffa500]"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-mono text-[#8b9bb4]">
+                      {billTransportMode === 'amount'
+                        ? `(${currentTransportPercent.toFixed(1)}%)`
+                        : `(₹${actualTransportAmount.toFixed(0)})`}
                     </span>
                   </div>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={transportCharges}
-                    onChange={(e) => setTransportCharges(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#ffa500] font-mono font-bold outline-none text-xs focus:border-[#ffa500]"
-                  />
                 </div>
               </div>
 
@@ -1402,7 +1538,7 @@ export default function PurchaseManager() {
                             type="number"
                             min="0"
                             step="any"
-                            placeholder="Base CP Rate (₹) *"
+                            placeholder="Base CP (₹) *"
                             value={unitCost}
                             onChange={(e) => setUnitCost(e.target.value)}
                             className="w-full px-3 py-2 rounded-xl bg-[#101628] border border-white/20 text-[#00ff9d] font-bold outline-none text-xs focus:border-[#00ff9d]"
@@ -1410,24 +1546,35 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* LIVE PRICING BADGES PREVIEW */}
+                      {/* DISCRETE CAPSULES: STICKER TAG PRICE, MAX DISCOUNT PRICE, ONLINE SELLING, MRP PRICE */}
                       {Number(unitCost) > 0 && (
-                        <div className="p-2.5 rounded-xl bg-[#101628] border border-[#00d9ff]/30 grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-[11px] animate-in fade-in">
-                          <div>
-                            <span className="text-[#8b9bb4] text-[9px] block">LANDED COST:</span>
-                            <strong className="text-white text-xs">₹{liveMatrixPricing.landedCost}</strong>
+                        <div className="flex flex-wrap gap-2 pt-1 animate-in fade-in">
+                          <div className="px-3 py-1.5 rounded-full bg-[#ffa500]/15 border border-[#ffa500]/40 flex items-center gap-1.5 font-mono shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-[#ffa500]" />
+                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">STICKER TAG PRICE:</span>
+                            <span className="text-xs font-black text-[#ffa500]">₹{liveMatrixPricing.stickerSellingPrice}</span>
                           </div>
-                          <div>
-                            <span className="text-[#ffa500] text-[9px] block font-bold">STICKER TAG MRP:</span>
-                            <strong className="text-[#ffa500] text-xs">₹{liveMatrixPricing.offlineTagMrp}</strong>
+
+                          <div className="px-3 py-1.5 rounded-full bg-[#00ff9d]/15 border border-[#00ff9d]/40 flex items-center gap-1.5 font-mono shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-[#00ff9d]" />
+                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">MAX DISCOUNT PRICE:</span>
+                            <span className="text-xs font-black text-[#00ff9d]">₹{liveMatrixPricing.maxDiscountPrice}</span>
                           </div>
-                          <div>
-                            <span className="text-[#00ff9d] text-[9px] block">FINAL (10% OFF):</span>
-                            <strong className="text-[#00ff9d] text-xs">₹{liveMatrixPricing.offlineFinalPrice}</strong>
+
+                          <div className="px-3 py-1.5 rounded-full bg-[#00d9ff]/15 border border-[#00d9ff]/40 flex items-center gap-1.5 font-mono shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-[#00d9ff]" />
+                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">ONLINE PRICE:</span>
+                            <span className="text-xs font-black text-[#00d9ff]">₹{liveMatrixPricing.onlineSellingPrice}</span>
                           </div>
-                          <div>
-                            <span className="text-[#00d9ff] text-[9px] block">ONLINE PRICE:</span>
-                            <strong className="text-[#00d9ff] text-xs">₹{liveMatrixPricing.onlineSellingPrice}</strong>
+
+                          <div className="px-3 py-1.5 rounded-full bg-[#e056fd]/15 border border-[#e056fd]/40 flex items-center gap-1.5 font-mono shadow-sm">
+                            <span className="w-2 h-2 rounded-full bg-[#e056fd]" />
+                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">MRP PRICE:</span>
+                            <span className="text-xs font-black text-[#e056fd]">₹{liveMatrixPricing.mrpPrice}</span>
+                          </div>
+
+                          <div className="px-2.5 py-1.5 rounded-full bg-white/5 border border-white/10 flex items-center gap-1.5 font-mono text-[10px] text-[#8b9bb4]">
+                            <span>LC: ₹{liveMatrixPricing.landedCost}</span>
                           </div>
                         </div>
                       )}
@@ -1435,7 +1582,6 @@ export default function PurchaseManager() {
                       {/* POPUP TRIGGER BUTTON */}
                       {activeProduct ? (
                         <div className="space-y-3 pt-2 border-t border-white/5">
-                          
                           <div className="flex items-center justify-between">
                             <div>
                               <span className="text-xs font-mono font-bold text-white uppercase block">
@@ -1559,7 +1705,7 @@ export default function PurchaseManager() {
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
-                    {/* Header: Overview of items */}
+                    {/* Header */}
                     <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
                         <ReceiptText className="w-4 h-4" /> Inward Inventory Breakdown
@@ -1567,10 +1713,10 @@ export default function PurchaseManager() {
                       <span className="text-white font-bold">{totalInwardQuantity} Total Units</span>
                     </div>
 
-                    {/* Scrollable Container with Distinct Saved vs Staged Sections */}
+                    {/* Scrollable Container */}
                     <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2.5 space-y-2.5">
                       
-                      {/* 1. EXISTING SAVED ITEMS ON BILL */}
+                      {/* 1. EXISTING SAVED ITEMS ON BILL (WITH EDIT & DELETE) */}
                       {editingPurchase && existingItems.length > 0 && (
                         <div className="p-2.5 rounded-2xl bg-[#00d9ff]/5 border border-[#00d9ff]/30 space-y-1.5">
                           <div className="flex items-center justify-between text-xs font-mono">
@@ -1590,7 +1736,7 @@ export default function PurchaseManager() {
                                   <th className="py-1 px-2 text-center">Qty</th>
                                   <th className="py-1 px-2 text-right">Cost</th>
                                   <th className="py-1 px-2 text-right">Total</th>
-                                  <th className="py-1 px-1.5 text-center"></th>
+                                  <th className="py-1 px-1.5 text-center">Actions</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-white/5">
@@ -1602,15 +1748,25 @@ export default function PurchaseManager() {
                                     <td className="py-1.5 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_cost}</td>
                                     <td className="py-1.5 px-2 text-right font-mono font-bold text-white">₹{it.total_cost}</td>
                                     <td className="py-1.5 px-1.5 text-center">
-                                      <button
-                                        type="button"
-                                        disabled={deletingItemId === it.id}
-                                        onClick={() => handleDeleteExistingItem(it)}
-                                        className="p-1 text-[#ff6b6b] hover:text-white rounded hover:bg-white/10 cursor-pointer disabled:opacity-50"
-                                        title="Delete saved item from bill"
-                                      >
-                                        {deletingItemId === it.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                                      </button>
+                                      <div className="inline-flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleOpenEditItemModal(it)}
+                                          className="p-1 text-[#00d9ff] hover:text-white rounded hover:bg-white/10 cursor-pointer"
+                                          title="Edit quantity or cost price"
+                                        >
+                                          <Edit3 className="w-3 h-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={deletingItemId === it.id}
+                                          onClick={() => handleDeleteExistingItem(it)}
+                                          className="p-1 text-[#ff6b6b] hover:text-white rounded hover:bg-white/10 cursor-pointer disabled:opacity-50"
+                                          title="Delete saved item from bill"
+                                        >
+                                          {deletingItemId === it.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 ))}
@@ -1637,9 +1793,10 @@ export default function PurchaseManager() {
                                 <tr>
                                   <th className="py-1 px-2">Product & Variant</th>
                                   <th className="py-1 px-2 text-center">Qty</th>
-                                  <th className="py-1 px-2 text-right text-[#ffa500]">Landed</th>
-                                  <th className="py-1 px-2 text-center text-[#ffa500]">Tag MRP</th>
-                                  <th className="py-1 px-2 text-center text-[#00d9ff]">Online</th>
+                                  <th className="py-1 px-2 text-center text-[#ffa500]">STICKER TAG</th>
+                                  <th className="py-1 px-2 text-center text-[#00ff9d]">MAX DISC</th>
+                                  <th className="py-1 px-2 text-center text-[#00d9ff]">ONLINE</th>
+                                  <th className="py-1 px-2 text-center text-[#e056fd]">MRP</th>
                                   <th className="py-1 px-2 text-right">Total</th>
                                   <th className="py-1 px-1.5 text-center"></th>
                                 </tr>
@@ -1648,7 +1805,7 @@ export default function PurchaseManager() {
                                 {computedStagedItems.map((it, idx) => (
                                   <tr key={idx} className="hover:bg-white/[0.02]">
                                     <td className="py-1.5 px-2">
-                                      <span className="font-bold text-white block truncate max-w-[140px]">
+                                      <span className="font-bold text-white block truncate max-w-[130px]">
                                         {it.product_name}
                                       </span>
                                       <span className="text-[10px] text-[#00ff9d] font-mono">
@@ -1656,9 +1813,10 @@ export default function PurchaseManager() {
                                       </span>
                                     </td>
                                     <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
-                                    <td className="py-1.5 px-2 text-right font-mono text-[#ffa500] font-bold">₹{it.landed_cost}</td>
-                                    <td className="py-1.5 px-2 text-center font-mono font-black text-[#ffa500] bg-[#ffa500]/10 rounded">₹{it.offline_tag_mrp}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono font-black text-[#ffa500] bg-[#ffa500]/10 rounded">₹{it.sticker_selling_price}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono text-[#00ff9d] font-bold">₹{it.max_discount_price}</td>
                                     <td className="py-1.5 px-2 text-center font-mono text-[#00d9ff] font-bold">₹{it.online_selling_price}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono text-[#e056fd] font-bold">₹{it.mrp_price}</td>
                                     <td className="py-1.5 px-2 text-right font-mono font-bold text-white">
                                       ₹{it.total_cost.toLocaleString('en-IN')}
                                     </td>
@@ -1704,8 +1862,8 @@ export default function PurchaseManager() {
                           <span className="text-[#00d9ff]">₹{stagedNewlyAddedBaseTotal.toLocaleString('en-IN')}</span>
                         </div>
                         <div className="flex justify-between text-[#8b9bb4]">
-                          <span>Transport Charges:</span>
-                          <span className="text-[#ffa500]">₹{Number(transportCharges || 0).toLocaleString('en-IN')}</span>
+                          <span>Transport Allocation:</span>
+                          <span className="text-[#ffa500]">₹{Number(actualTransportAmount || 0).toLocaleString('en-IN')} ({currentTransportPercent.toFixed(1)}%)</span>
                         </div>
                         <div className="flex justify-between items-center text-xs font-bold pt-1.5 border-t border-white/5">
                           <span className="text-white">NET INVOICE VALUE:</span>
@@ -1911,7 +2069,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 5. STICKER TAGGING CHECKLIST MODAL (ONE-BY-ONE DONE SYSTEM) */}
+      {/* 5. STICKER TAGGING CHECKLIST MODAL */}
       {isChecklistModalOpen && (
         <div className="fixed inset-0 z-[100020] p-3 sm:p-5 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-4xl w-full p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 max-h-[90vh] flex flex-col">
@@ -1929,7 +2087,7 @@ export default function PurchaseManager() {
                     </span>
                   </h3>
                   <span className="text-[10px] text-[#8b9bb4]">
-                    Label meeda rate raasi product ki antinchagaane &quot;Mark Done&quot; kotti checklist check cheyandi.
+                    Sticker Tag Price raasi product ki antinchagaane &quot;Mark Done&quot; kotti checklist check cheyandi.
                   </span>
                 </div>
               </div>
@@ -1993,18 +2151,23 @@ export default function PurchaseManager() {
                   {/* Price Tag Displays to write manually on sticker */}
                   <div className="flex items-center gap-3 font-mono">
                     <div className="px-3 py-1.5 rounded-xl bg-[#ffa500]/10 border border-[#ffa500]/30 text-center">
-                      <span className="text-[8.5px] text-[#ffa500] block uppercase font-bold">STICKER TAG MRP</span>
-                      <strong className="text-sm font-black text-[#ffa500]">₹{item.offline_tag_mrp}</strong>
+                      <span className="text-[8.5px] text-[#ffa500] block uppercase font-bold">STICKER TAG PRICE</span>
+                      <strong className="text-sm font-black text-[#ffa500]">₹{item.sticker_selling_price}</strong>
                     </div>
 
                     <div className="px-2.5 py-1.5 rounded-xl bg-white/5 text-center hidden sm:block">
-                      <span className="text-[8.5px] text-[#8b9bb4] block uppercase">FINAL (10% OFF)</span>
-                      <strong className="text-xs font-bold text-white">₹{item.offline_final_price}</strong>
+                      <span className="text-[8.5px] text-[#8b9bb4] block uppercase">MAX DISCOUNT PRICE</span>
+                      <strong className="text-xs font-bold text-white">₹{item.max_discount_price}</strong>
                     </div>
 
                     <div className="px-2.5 py-1.5 rounded-xl bg-[#00d9ff]/10 text-center hidden sm:block">
                       <span className="text-[8.5px] text-[#00d9ff] block uppercase">ONLINE PRICE</span>
                       <strong className="text-xs font-bold text-[#00d9ff]">₹{item.online_selling_price}</strong>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 rounded-xl bg-[#e056fd]/10 text-center hidden sm:block">
+                      <span className="text-[8.5px] text-[#e056fd] block uppercase">MRP PRICE</span>
+                      <strong className="text-xs font-bold text-[#e056fd]">₹{item.mrp_price}</strong>
                     </div>
 
                     {/* Toggle Button */}
@@ -2046,7 +2209,7 @@ export default function PurchaseManager() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Calculator className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white uppercase">Instant Price & Margin Calculator</h3>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wide">Product Pricing Desk</h3>
               </div>
               <button
                 type="button"
@@ -2059,11 +2222,11 @@ export default function PurchaseManager() {
 
             <div className="space-y-3 font-mono text-xs">
               <div>
-                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">ITEM BASE COST (₹)</label>
+                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">Base Cost (CP)</label>
                 <input
                   type="number"
                   autoFocus
-                  placeholder="ENTER COST E.G. 100"
+                  placeholder="e.g. 100"
                   value={calcCost}
                   onChange={(e) => setCalcCost(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-bold text-sm outline-none"
@@ -2071,37 +2234,85 @@ export default function PurchaseManager() {
               </div>
 
               <div>
-                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">TRANSPORT ALLOCATION (%)</label>
-                <input
-                  type="number"
-                  placeholder="DEFAULT 10%"
-                  value={calcTransportPercent}
-                  onChange={(e) => setCalcTransportPercent(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#ffa500] font-bold text-xs outline-none"
-                />
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] text-[#8b9bb4] uppercase font-bold">Transport Overhead</label>
+                  
+                  {/* Mode Switcher: ₹ or % */}
+                  <div className="inline-flex rounded-lg bg-[#0a0e17] border border-white/10 p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setCalcTransportMode('percent')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                        calcTransportMode === 'percent'
+                          ? 'bg-[#00d9ff] text-neutral-950 shadow'
+                          : 'text-[#8b9bb4] hover:text-white'
+                      }`}
+                    >
+                      % Percent
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCalcTransportMode('amount')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                        calcTransportMode === 'amount'
+                          ? 'bg-[#00d9ff] text-neutral-950 shadow'
+                          : 'text-[#8b9bb4] hover:text-white'
+                      }`}
+                    >
+                      ₹ Amount
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="any"
+                    placeholder={calcTransportMode === 'percent' ? 'e.g. 10%' : 'e.g. ₹50'}
+                    value={calcTransportVal}
+                    onChange={(e) => setCalcTransportVal(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#ffa500] font-bold text-xs outline-none"
+                  />
+                  {calcTransportMode === 'amount' && Number(calcCost) > 0 && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[#8b9bb4]">
+                      (~{calcEffectiveTransportPercent.toFixed(1)}%)
+                    </span>
+                  )}
+                </div>
               </div>
 
-              {/* Calculated Outputs */}
-              <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2 pt-3">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#8b9bb4]">LANDED COST:</span>
-                  <span className="text-white font-bold">₹{standaloneCalcResult.landedCost}</span>
+              {/* CUSTOMER-SAFE DISCRETE CAPSULES */}
+              <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
+                <span className="text-[9.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                  Applicable Price Brackets
+                </span>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 rounded-2xl bg-[#ffa500]/10 border border-[#ffa500]/40 text-center">
+                    <span className="text-[9px] text-[#ffa500] block font-extrabold uppercase tracking-wide">STICKER TAG PRICE</span>
+                    <strong className="text-base font-black text-[#ffa500]">₹{standaloneCalcResult.stickerSellingPrice}</strong>
+                  </div>
+
+                  <div className="p-2 rounded-2xl bg-[#00ff9d]/10 border border-[#00ff9d]/40 text-center">
+                    <span className="text-[9px] text-[#00ff9d] block font-extrabold uppercase tracking-wide">MAX DISCOUNT PRICE</span>
+                    <strong className="text-base font-black text-[#00ff9d]">₹{standaloneCalcResult.maxDiscountPrice}</strong>
+                  </div>
+
+                  <div className="p-2 rounded-2xl bg-[#00d9ff]/10 border border-[#00d9ff]/40 text-center">
+                    <span className="text-[9px] text-[#00d9ff] block font-extrabold uppercase tracking-wide">ONLINE PRICE</span>
+                    <strong className="text-base font-black text-[#00d9ff]">₹{standaloneCalcResult.onlineSellingPrice}</strong>
+                  </div>
+
+                  <div className="p-2 rounded-2xl bg-[#e056fd]/10 border border-[#e056fd]/40 text-center">
+                    <span className="text-[9px] text-[#e056fd] block font-extrabold uppercase tracking-wide">MRP PRICE</span>
+                    <strong className="text-base font-black text-[#e056fd]">₹{standaloneCalcResult.mrpPrice}</strong>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#ffa500] font-bold">OFFLINE STICKER TAG MRP:</span>
-                  <span className="text-base font-black text-[#ffa500]">₹{standaloneCalcResult.offlineTagMrp}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#00ff9d]">OFFLINE FINAL (10% OFF):</span>
-                  <span className="text-white font-bold">₹{standaloneCalcResult.offlineFinalPrice}</span>
-                </div>
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#00d9ff]">ONLINE SELLING PRICE:</span>
-                  <span className="text-[#00d9ff] font-bold">₹{standaloneCalcResult.onlineSellingPrice}</span>
-                </div>
-                <div className="flex justify-between items-center text-[10px] text-[#8b9bb4] border-t border-white/5 pt-1.5">
-                  <span>ONLINE DISPLAY MRP (~30% OFF):</span>
-                  <span>₹{standaloneCalcResult.onlineMrp}</span>
+
+                <div className="flex items-center justify-end text-[10px] text-[#8b9bb4] pt-1.5 border-t border-white/5 font-mono">
+                  <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white font-bold">
+                    LC: ₹{standaloneCalcResult.landedCost}
+                  </span>
                 </div>
               </div>
             </div>
@@ -2119,7 +2330,78 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 7. SECURITY PIN PROMPT MODAL */}
+      {/* 7. EDIT SAVED PURCHASE LINE ITEM MODAL */}
+      {editingItemModal && (
+        <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-4 shadow-2xl space-y-3 font-mono">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2">
+              <div>
+                <h4 className="text-xs font-bold text-white uppercase">Edit Saved Item</h4>
+                <span className="text-[10px] text-[#00d9ff]">[{editingItemModal.product_id}] {editingItemModal.variant_color} / {editingItemModal.variant_size}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingItemModal(null)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedLineItem} className="space-y-2.5 text-xs">
+              <div>
+                <label className="text-[9.5px] text-[#8b9bb4] uppercase block mb-1">Inward Quantity</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={editItemQty}
+                  onChange={(e) => setEditItemQty(parseInt(e.target.value, 10) || 1)}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-bold outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[9.5px] text-[#8b9bb4] uppercase block mb-1">Unit Cost Price (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={editItemCost}
+                  onChange={(e) => setEditItemCost(Number(e.target.value) || 0)}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-bold outline-none"
+                />
+              </div>
+
+              <div className="flex justify-between items-center text-[10px] text-[#8b9bb4] pt-1">
+                <span>NEW TOTAL:</span>
+                <span className="text-white font-bold text-xs">₹{(editItemQty * editItemCost).toLocaleString('en-IN')}</span>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setEditingItemModal(null)}
+                  className="px-3 py-1.5 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingLineItem}
+                  className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1 shadow"
+                >
+                  {updatingLineItem ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Save Updates</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. SECURITY PIN PROMPT MODAL */}
       {isPinModalOpen && (
         <div className="fixed inset-0 z-[100000] p-3 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-4 shadow-2xl space-y-3">
@@ -2182,7 +2464,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 8. VIEW PURCHASE DETAIL MODAL */}
+      {/* 9. VIEW PURCHASE DETAIL MODAL */}
       {viewingPurchase && (
         <div className="fixed inset-0 z-[99999] p-3 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in">
           <div className="bg-[#101628] border border-white/15 rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl p-4 space-y-3">
@@ -2249,7 +2531,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 9. PRODUCT MASTER MODAL */}
+      {/* 10. PRODUCT MASTER MODAL */}
       {isProductMasterOpen && (
         <div className="relative z-[100005]">
           <ProductMasterModal
@@ -2271,7 +2553,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 10. COLOUR MASTER MODAL */}
+      {/* 11. COLOUR MASTER MODAL */}
       {isColorMasterOpen && (
         <div className="relative z-[100005]">
           <ColorMasterModal
