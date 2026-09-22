@@ -24,7 +24,8 @@ import {
   BookOpen,
   Clock,
   Globe,
-  AlertTriangle
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { AdminStaffUser } from '../types';
@@ -740,7 +741,6 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // SALE EXECUTION: EXACT SCHEMA MATCH WITH 'items' COLUMN
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -760,7 +760,6 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     try {
       const custPhoneVal = selectedCustomer.phone || selectedCustomer.mobile || undefined;
 
-      // STRICT SCHEMA OBJECT USING 'items' (NOT items_summary)
       const orderPayload: any = {
         id: invoiceNo.trim().toUpperCase(),
         customer_id: selectedCustomer.id.toUpperCase(),
@@ -778,14 +777,13 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
         payment_status: isUtrPending ? 'utr_pending' : 'paid',
         order_status: 'delivered',
         status: 'completed',
-        items: cartItems, // Matches exact 'items' jsonb column from orders schema
+        items: cartItems,
         created_at: new Date().toISOString()
       };
 
       const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
       if (orderError) throw orderError;
 
-      // Safe Line Items insert in order_items table
       try {
         const orderItemsPayload = cartItems.map((item, idx) => ({
           id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
@@ -802,7 +800,6 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
         console.warn('order_items insert skipped:', e);
       }
 
-      // Live Inventory Stock Deduction
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
@@ -848,6 +845,184 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     }
   };
 
+  // CLEAN PROFESSIONAL PRINT / SAVE AS PDF FUNCTION
+  const handlePrintReceipt = (inv: OrderRecord, itemsList: any[]) => {
+    const lineItems = itemsList.length > 0 ? itemsList : (inv.items || inv.items_summary || []);
+    const printWindow = window.open('', '_blank', 'width=850,height=900');
+    if (!printWindow) {
+      alert('Please allow popups to generate receipt PDF.');
+      return;
+    }
+
+    const itemsRowsHtml = lineItems.map((it: any, idx: number) => `
+      <tr style="border-bottom: 1px dashed #ddd;">
+        <td style="padding: 8px 4px; font-weight: bold;">
+          ${idx + 1}. ${(it.product_name || it.product_id || '').toUpperCase()}
+          <div style="font-size: 11px; color: #555; font-weight: normal; margin-top: 2px;">
+            ${(it.color || it.variant_color || '').toUpperCase()} • ${(it.size || it.variant_size || '').toUpperCase()}
+          </div>
+        </td>
+        <td style="padding: 8px 4px; text-align: center; font-weight: bold;">${it.quantity}</td>
+        <td style="padding: 8px 4px; text-align: right; color: #333;">₹${Number(it.unit_price || it.price || 0).toLocaleString('en-IN')}</td>
+        <td style="padding: 8px 4px; text-align: right; font-weight: bold;">₹${Number(it.total_price || it.total || 0).toLocaleString('en-IN')}</td>
+      </tr>
+    `).join('');
+
+    const subtotalVal = Number(inv.total_amount || inv.subtotal || inv.total || 0);
+    const discountVal = Number(inv.discount_amount || inv.discount || 0);
+    const finalVal = Number(inv.final_amount || inv.total || 0);
+
+    const invoiceHtml = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Invoice_${inv.id}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 15mm;
+            }
+            body {
+              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+              color: #111;
+              margin: 0;
+              padding: 20px;
+              background: #fff;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .invoice-box {
+              max-width: 650px;
+              margin: auto;
+              border: 1px solid #eee;
+              padding: 25px;
+              box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+            }
+            .header-table, .meta-table, .items-table, .totals-table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .title {
+              font-size: 24px;
+              font-weight: 900;
+              letter-spacing: 1.5px;
+              color: #111;
+            }
+            .subtitle {
+              font-size: 11px;
+              color: #666;
+              text-transform: uppercase;
+              letter-spacing: 1px;
+              margin-top: 3px;
+            }
+            .tag {
+              display: inline-block;
+              padding: 3px 8px;
+              border-radius: 4px;
+              font-size: 11px;
+              font-weight: bold;
+              background: #f0fdf4;
+              color: #166534;
+              border: 1px solid #bbf7d0;
+            }
+            .totals-table td {
+              padding: 4px 0;
+            }
+            @media print {
+              .no-print { display: none; }
+              .invoice-box { border: none; box-shadow: none; padding: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="invoice-box">
+            <table class="header-table">
+              <tr>
+                <td>
+                  <div class="title">KASHVI CREATIONS</div>
+                  <div class="subtitle">Premium Ethnic & Contemporary Studio</div>
+                  <div style="font-size: 11px; color: #444; margin-top: 4px;">Kakinada, Andhra Pradesh • Mobile: +91 86863 53574</div>
+                </td>
+                <td style="text-align: right; vertical-align: top;">
+                  <div style="font-size: 18px; font-weight: 900; color: #000;">TAX INVOICE</div>
+                  <div style="font-size: 13px; font-weight: bold; color: #0284c7; margin-top: 3px;">#${inv.id}</div>
+                  <div style="font-size: 11px; color: #666; margin-top: 2px;">Date: ${new Date(inv.created_at).toLocaleDateString('en-IN')}</div>
+                </td>
+              </tr>
+            </table>
+
+            <hr style="border: 0; border-top: 1.5px solid #222; margin: 15px 0;" />
+
+            <table class="meta-table" style="font-size: 12px; margin-bottom: 20px;">
+              <tr>
+                <td style="width: 50%; vertical-align: top;">
+                  <div style="font-size: 10px; color: #777; font-weight: bold; text-transform: uppercase;">Billed To:</div>
+                  <div style="font-size: 14px; font-weight: bold; margin-top: 2px;">${inv.customer_name} ${inv.customer_id ? '<span style="font-size: 11px; color: #666;">[' + inv.customer_id + ']</span>' : ''}</div>
+                  <div style="color: #444; margin-top: 2px;">Phone: ${inv.customer_phone || 'Walk-in Customer'}</div>
+                </td>
+                <td style="width: 50%; text-align: right; vertical-align: top;">
+                  <div style="font-size: 10px; color: #777; font-weight: bold; text-transform: uppercase;">Payment Details:</div>
+                  <div style="margin-top: 3px;">
+                    <span class="tag">${(inv.payment_mode || 'CASH').toUpperCase()} - ${inv.payment_status === 'utr_pending' ? 'UTR PENDING' : 'PAID'}</span>
+                  </div>
+                  ${inv.payment_ref ? `<div style="font-size: 10.5px; color: #555; margin-top: 4px;">Ref/UTR: ${inv.payment_ref}</div>` : ''}
+                </td>
+              </tr>
+            </table>
+
+            <table class="items-table" style="font-size: 12px;">
+              <thead>
+                <tr style="background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                  <th style="padding: 8px 4px; text-align: left; font-weight: 800;">ITEM DESCRIPTION</th>
+                  <th style="padding: 8px 4px; text-align: center; font-weight: 800; width: 60px;">QTY</th>
+                  <th style="padding: 8px 4px; text-align: right; font-weight: 800; width: 90px;">PRICE</th>
+                  <th style="padding: 8px 4px; text-align: right; font-weight: 800; width: 100px;">AMOUNT</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsRowsHtml}
+              </tbody>
+            </table>
+
+            <table class="totals-table" style="font-size: 12px; margin-top: 15px;">
+              <tr>
+                <td style="width: 60%;"></td>
+                <td style="width: 20%; color: #666;">Subtotal:</td>
+                <td style="width: 20%; text-align: right; font-weight: bold;">₹${subtotalVal.toLocaleString('en-IN')}</td>
+              </tr>
+              ${discountVal > 0 ? `
+                <tr>
+                  <td></td>
+                  <td style="color: #dc2626;">Discount:</td>
+                  <td style="text-align: right; color: #dc2626; font-weight: bold;">-₹${discountVal.toLocaleString('en-IN')}</td>
+                </tr>
+              ` : ''}
+              <tr style="border-top: 1.5px solid #222; font-size: 15px;">
+                <td></td>
+                <td style="font-weight: 900; padding-top: 8px;">Net Payable:</td>
+                <td style="text-align: right; font-weight: 900; color: #059669; padding-top: 8px;">₹${finalVal.toLocaleString('en-IN')}</td>
+              </tr>
+            </table>
+
+            <div style="margin-top: 35px; padding-top: 15px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 11px; color: #64748b;">
+              <strong>Thank you for choosing Kashvi Creations!</strong><br />
+              Goods once sold can be exchanged within 7 days with original invoice & tags intact.
+            </div>
+          </div>
+          <script>
+            window.onload = function() {
+              window.print();
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(invoiceHtml);
+    printWindow.document.close();
+  };
+
   const handleShareWhatsApp = (inv: OrderRecord, itemsList: any[]) => {
     const phone = (inv.customer_phone || '').replace(/\D/g, '');
     if (!phone) {
@@ -857,20 +1032,22 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
 
     const lineItems = itemsList.length > 0 ? itemsList : (inv.items || inv.items_summary || []);
     const itemsSummary = lineItems
-      .map((it: any, idx: number) => `${idx + 1}. ${(it.product_name || it.product_id).toUpperCase()} (${(it.color || it.variant_color).toUpperCase()} / ${(it.size || it.variant_size).toUpperCase()}) x ${it.quantity} = ₹${it.total_price || it.total || it.price}`)
+      .map((it: any, idx: number) => `• ${(it.product_name || it.product_id).toUpperCase()} [${(it.color || it.variant_color || '').toUpperCase()}/${(it.size || it.variant_size || '').toUpperCase()}] x${it.quantity} = ₹${it.total_price || it.total || it.price}`)
       .join('%0A');
 
-    const message = `✨ *KASHVI CREATIONS - TAX INVOICE* ✨%0A%0A` +
-      `*BILL NO:* ${inv.id.toUpperCase()}%0A` +
+    const totalAmt = Number(inv.final_amount || inv.total || 0).toLocaleString('en-IN');
+    const invoiceLink = `https://kashvifashions.in/#/invoice/${inv.id}`;
+
+    const message = `🌟 *KASHVI CREATIONS - TAX INVOICE* 🌟%0A%0A` +
+      `*INVOICE NO:* ${inv.id.toUpperCase()}%0A` +
       `*DATE:* ${new Date(inv.created_at).toLocaleDateString('en-IN')}%0A` +
-      `*CUSTOMER:* ${inv.customer_name.toUpperCase()}%0A` +
-      `*PAYMENT MODE:* ${(inv.payment_mode || 'CASH').toUpperCase()} ${inv.payment_status === 'utr_pending' ? '(UTR PENDING)' : '(PAID)'}%0A%0A` +
-      `*ITEMS PURCHASED:*%0A${itemsSummary}%0A%0A` +
-      `*SUBTOTAL:* ₹${inv.total_amount || inv.subtotal || inv.total}%0A` +
-      `*DISCOUNT:* ₹${inv.discount_amount || inv.discount || 0}%0A` +
-      `*TOTAL AMOUNT:* ₹${inv.final_amount || inv.total}%0A%0A` +
-      `THANK YOU FOR SHOPPING WITH US! VISIT AGAIN. 🙏%0A` +
-      `_KASHVI COMMAND DECK_`;
+      `*CUSTOMER:* ${inv.customer_name.toUpperCase()}%0A%0A` +
+      `*PURCHASED ITEMS:*%0A${itemsSummary}%0A%0A` +
+      `*TOTAL AMOUNT:* ₹${totalAmt}%0A` +
+      `*PAYMENT MODE:* ${(inv.payment_mode || 'CASH').toUpperCase()}%0A%0A` +
+      `📄 *VIEW & DOWNLOAD ORIGINAL INVOICE PDF:*%0A${invoiceLink}%0A%0A` +
+      `Thank you for shopping with us! Visit again. 🙏%0A` +
+      `_Kashvi Creations, Kakinada_`;
 
     window.open(`https://wa.me/91${phone}?text=${message}`, '_blank');
   };
@@ -1085,6 +1262,14 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                             title="View Invoice"
                           >
                             <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handlePrintReceipt(ord, [])}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00ff9d]/20 text-[#8b9bb4] hover:text-[#00ff9d] cursor-pointer"
+                            title="Print / Save PDF"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
@@ -2098,8 +2283,8 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                               </span>
                             </td>
                             <td className="py-2 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
-                            <td className="py-2 px-2 text-right font-mono text-[#8b9bb4]">₹{it.unit_price || it.price}</td>
-                            <td className="py-2 px-2.5 text-right font-mono font-bold text-white">₹{(it.total_price || it.total).toLocaleString('en-IN')}</td>
+                            <td className="py-2 px-2 text-right font-mono text-[#8b9bb4]">₹{Number(it.unit_price || it.price).toLocaleString('en-IN')}</td>
+                            <td className="py-2 px-2.5 text-right font-mono font-bold text-white">₹{Number(it.total_price || it.total).toLocaleString('en-IN')}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2131,11 +2316,11 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
 
                     <button
                       type="button"
-                      onClick={() => window.print()}
+                      onClick={() => handlePrintReceipt(activeBill, activeLineItems)}
                       className="py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer uppercase"
                     >
                       <Printer className="w-4 h-4" />
-                      <span>PRINT RECEIPT</span>
+                      <span>PRINT / SAVE PDF</span>
                     </button>
                   </div>
                 </div>
