@@ -40,6 +40,8 @@ interface CustomerRecord {
 
 interface ProductRecord {
   id: string;
+  code?: string;
+  product_code?: string;
   name: string;
   category?: string;
   sub_category?: string;
@@ -140,6 +142,7 @@ export default function SalesManager() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
   const [inventoryList, setInventoryList] = useState<InventoryItemRecord[]>([]);
+  const [purchaseItemsList, setPurchaseItemsList] = useState<any[]>([]);
   const [coloursList, setColoursList] = useState<ColourMasterRecord[]>([]);
   const [customersList, setCustomersList] = useState<CustomerRecord[]>([]);
   const [allSizesList, setAllSizesList] = useState<any[]>([]);
@@ -248,10 +251,11 @@ export default function SalesManager() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [orderRes, prodRes, invRes, clrRes, custRes, sizeRes, subCatRes] = await Promise.all([
+      const [orderRes, prodRes, invRes, purchRes, clrRes, custRes, sizeRes, subCatRes] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
         supabase.from('inventory').select('*'),
+        supabase.from('purchase_items').select('*'),
         supabase.from('colours').select('*'),
         supabase.from('customers').select('*').order('created_at', { ascending: false }),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
@@ -266,6 +270,7 @@ export default function SalesManager() {
         setProductsList(sorted);
       }
       if (invRes.data) setInventoryList(invRes.data);
+      if (purchRes.data) setPurchaseItemsList(purchRes.data);
       if (clrRes.data) setColoursList(clrRes.data);
       if (custRes.data) setCustomersList(custRes.data);
       if (sizeRes.data) setAllSizesList(sizeRes.data);
@@ -399,23 +404,54 @@ export default function SalesManager() {
     setIsVariantModalOpen(true);
   };
 
-  // Central Inventory Rows for Selected Product (Case & Trim Insensitive)
+  // MULTI-KEY SAFE IDENTIFIERS FOR CURRENT PRODUCT
+  const productKeySet = useMemo(() => {
+    if (!selectedProductForModal) return new Set<string>();
+    const keys = new Set<string>();
+    const p = selectedProductForModal;
+
+    if (p.id) {
+      keys.add(cleanStr(p.id));
+      keys.add(cleanStr(p.id).replace(/\s+/g, ''));
+    }
+    if (p.code) {
+      keys.add(cleanStr(p.code));
+      keys.add(cleanStr(p.code).replace(/\s+/g, ''));
+    }
+    if (p.product_code) {
+      keys.add(cleanStr(p.product_code));
+      keys.add(cleanStr(p.product_code).replace(/\s+/g, ''));
+    }
+    return keys;
+  }, [selectedProductForModal]);
+
+  // INVENTORY ROWS MATCHING CURRENT PRODUCT
   const currentProductInventory = useMemo(() => {
-    if (!selectedProductForModal) return [];
-    const targetId = cleanStr(selectedProductForModal.id);
+    if (!selectedProductForModal || productKeySet.size === 0) return [];
 
     return inventoryList.filter((inv) => {
-      const pId = cleanStr(inv.product_id);
-      return pId === targetId || pId.replace(/\s+/g, '') === targetId.replace(/\s+/g, '');
+      const invPId = cleanStr(inv.product_id);
+      return productKeySet.has(invPId) || productKeySet.has(invPId.replace(/\s+/g, ''));
     });
-  }, [selectedProductForModal, inventoryList]);
+  }, [selectedProductForModal, productKeySet, inventoryList]);
 
-  // Live Stock Finder from Central Inventory
+  // PURCHASE_ITEMS FALLBACK ROWS MATCHING CURRENT PRODUCT
+  const currentProductPurchases = useMemo(() => {
+    if (!selectedProductForModal || productKeySet.size === 0) return [];
+
+    return purchaseItemsList.filter((pi) => {
+      const piPId = cleanStr(pi.product_id);
+      return productKeySet.has(piPId) || productKeySet.has(piPId.replace(/\s+/g, ''));
+    });
+  }, [selectedProductForModal, productKeySet, purchaseItemsList]);
+
+  // LIVE STOCK FUNCTION
   const getCentralizedStock = (colorName: string, sizeName?: string): number => {
     const cTarget = cleanStr(colorName);
     const sTarget = sizeName ? cleanStr(sizeName) : null;
 
-    const matches = currentProductInventory.filter((inv) => {
+    // 1. Primary: Central Inventory Table
+    const invMatches = currentProductInventory.filter((inv) => {
       const c = cleanStr(inv.variant_color || 'STANDARD');
       if (sTarget) {
         const s = cleanStr(inv.variant_size || 'FREE SIZE');
@@ -424,19 +460,32 @@ export default function SalesManager() {
       return c === cTarget;
     });
 
-    return matches.reduce((sum, inv) => sum + Number(inv.stock_quantity ?? 0), 0);
+    if (invMatches.length > 0) {
+      return invMatches.reduce((sum, inv) => sum + Number(inv.stock_quantity ?? 0), 0);
+    }
+
+    // 2. Fallback: Purchase Items
+    const purchMatches = currentProductPurchases.filter((pi) => {
+      const c = cleanStr(pi.variant_color || pi.color || 'STANDARD');
+      if (sTarget) {
+        const s = cleanStr(pi.variant_size || pi.size || 'FREE SIZE');
+        return c === cTarget && s === sTarget;
+      }
+      return c === cTarget;
+    });
+
+    return purchMatches.reduce((sum, pi) => sum + Number(pi.quantity ?? 0), 0);
   };
 
-  // All Variant Shades Available for Selected Product
+  // ONLY SHOW ACTUAL INVENTORY/PURCHASED SHADES (NO DUMMY 200+ MASTER COLOURS)
   const allShadesForProduct = useMemo(() => {
     if (!selectedProductForModal) return [];
     const map = new Map<string, { stock: number; hex?: string; parent?: string }>();
 
-    // 1. Central Inventory Table
+    // 1. Add shades directly from inventory
     currentProductInventory.forEach((r) => {
-      const rawClr = (r.variant_color || 'STANDARD').toString().trim();
-      const clrKey = rawClr.toUpperCase();
-      if (!map.has(clrKey)) {
+      const clrKey = cleanStr(r.variant_color || 'STANDARD');
+      if (clrKey && !map.has(clrKey)) {
         const liveStock = getCentralizedStock(clrKey);
         const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
         map.set(clrKey, {
@@ -447,50 +496,52 @@ export default function SalesManager() {
       }
     });
 
-    // 2. Product Master Specifications
-    const prod = selectedProductForModal;
-    if (prod.colour) {
-      const rawColors = typeof prod.colour === 'string'
-        ? prod.colour.split(',').map((c) => c.trim().toUpperCase())
-        : [cleanStr(prod.colour)];
-      rawColors.filter(Boolean).forEach((clrKey) => {
-        if (!map.has(clrKey)) {
-          const liveStock = getCentralizedStock(clrKey);
-          const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
-          map.set(clrKey, {
-            stock: liveStock,
-            hex: matched?.hex_code || '#6d4aff',
-            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
-          });
-        }
-      });
-    }
-
-    if (prod.variants?.colors && Array.isArray(prod.variants.colors)) {
-      prod.variants.colors.forEach((c: string) => {
-        const clrKey = cleanStr(c);
-        if (!map.has(clrKey)) {
-          const liveStock = getCentralizedStock(clrKey);
-          const matched = coloursList.find((x) => cleanStr(x.name) === clrKey);
-          map.set(clrKey, {
-            stock: liveStock,
-            hex: matched?.hex_code || '#6d4aff',
-            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
-          });
-        }
-      });
-    }
-
-    // 3. Master Colours fallback
-    if (map.size === 0) {
-      coloursList.forEach((c) => {
-        const clrKey = cleanStr(c.name);
+    // 2. Add shades from purchase_items
+    currentProductPurchases.forEach((pi) => {
+      const clrKey = cleanStr(pi.variant_color || pi.color || 'STANDARD');
+      if (clrKey && !map.has(clrKey)) {
+        const liveStock = getCentralizedStock(clrKey);
+        const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
         map.set(clrKey, {
-          stock: 0,
-          hex: c.hex_code || '#6d4aff',
-          parent: c.parent_colour || c.parent_color || getBaseFamily(clrKey)
+          stock: liveStock,
+          hex: matched?.hex_code || '#6d4aff',
+          parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
         });
-      });
+      }
+    });
+
+    // 3. If zero stock records exist, show only the product master's configured colors
+    if (map.size === 0) {
+      const prod = selectedProductForModal;
+      if (prod.colour) {
+        const rawColors = typeof prod.colour === 'string'
+          ? prod.colour.split(',').map((c) => cleanStr(c))
+          : [cleanStr(prod.colour)];
+        rawColors.filter(Boolean).forEach((clrKey) => {
+          if (!map.has(clrKey)) {
+            const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
+            map.set(clrKey, {
+              stock: 0,
+              hex: matched?.hex_code || '#6d4aff',
+              parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
+            });
+          }
+        });
+      }
+
+      if (prod.variants?.colors && Array.isArray(prod.variants.colors)) {
+        prod.variants.colors.forEach((c: string) => {
+          const clrKey = cleanStr(c);
+          if (!map.has(clrKey)) {
+            const matched = coloursList.find((x) => cleanStr(x.name) === clrKey);
+            map.set(clrKey, {
+              stock: 0,
+              hex: matched?.hex_code || '#6d4aff',
+              parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
+            });
+          }
+        });
+      }
     }
 
     return Array.from(map.entries()).map(([color, data]) => ({
@@ -499,9 +550,9 @@ export default function SalesManager() {
       hex: data.hex || '#6d4aff',
       parent: (data.parent || getBaseFamily(color)).toUpperCase()
     }));
-  }, [currentProductInventory, selectedProductForModal, coloursList]);
+  }, [currentProductInventory, currentProductPurchases, selectedProductForModal, coloursList]);
 
-  // Distinct Parent Color Groups
+  // DISTINCT PARENT COLOR GROUPS (ONLY FOR ACTUAL VARIANTS)
   const parentColorFamilies = useMemo(() => {
     const map = new Map<string, { totalStock: number; sampleHex: string; shadeCount: number }>();
 
@@ -530,90 +581,64 @@ export default function SalesManager() {
     }
   }, [isVariantModalOpen, parentColorFamilies, selectedParentColor]);
 
-  // Active Sub-Shades under current parent color
+  // ACTIVE SUB-SHADES FILTERED BY CHOSEN PARENT COLOR
   const activeSubShades = useMemo(() => {
     if (!selectedParentColor) return allShadesForProduct;
     return allShadesForProduct.filter((s) => s.parent === selectedParentColor);
   }, [allShadesForProduct, selectedParentColor]);
 
-  // Sizes for Chosen Color Shade
+  // ACTUAL SIZES FOR THE SELECTED COLOR
   const modalAvailableSizes = useMemo(() => {
     if (!selectedProductForModal || !modalColor) return [];
     const chosenColor = cleanStr(modalColor);
     const map = new Map<string, number>();
 
-    // Central Inventory
+    // 1. From central inventory
     currentProductInventory
       .filter((r) => cleanStr(r.variant_color || 'STANDARD') === chosenColor)
       .forEach((r) => {
-        const rawSz = (r.variant_size || 'FREE SIZE').toString().trim();
-        const szKey = rawSz.toUpperCase();
+        const szKey = cleanStr(r.variant_size || 'FREE SIZE');
         if (!map.has(szKey)) {
           const liveStock = getCentralizedStock(chosenColor, szKey);
           map.set(szKey, liveStock);
         }
       });
 
-    // Product Master Sizes
-    const prod = selectedProductForModal;
-    if (prod.size) {
-      const rawSizes = typeof prod.size === 'string'
-        ? prod.size.split(',').map((s) => s.trim().toUpperCase())
-        : [cleanStr(prod.size)];
-      rawSizes.filter(Boolean).forEach((szKey) => {
+    // 2. From purchases
+    currentProductPurchases
+      .filter((pi) => cleanStr(pi.variant_color || pi.color || 'STANDARD') === chosenColor)
+      .forEach((pi) => {
+        const szKey = cleanStr(pi.variant_size || pi.size || 'FREE SIZE');
         if (!map.has(szKey)) {
           const liveStock = getCentralizedStock(chosenColor, szKey);
           map.set(szKey, liveStock);
         }
       });
-    }
 
-    if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
-      prod.variants.sizes.forEach((s: string) => {
-        const szKey = cleanStr(s);
-        if (!map.has(szKey)) {
-          const liveStock = getCentralizedStock(chosenColor, szKey);
-          map.set(szKey, liveStock);
-        }
-      });
-    }
-
-    // Sub-Category Sizes
-    const subCatObj = subCategoriesList.find(
-      (sc) => sc.id === prod.sub_category_id || cleanStr(sc.name) === cleanStr(prod.sub_category)
-    );
-
-    if (subCatObj) {
-      const directMatches = allSizesList.filter(
-        (sz) => sz.sub_category_id && String(sz.sub_category_id) === String(subCatObj.id)
-      );
-      if (directMatches.length > 0) {
-        directMatches.forEach((s) => {
-          const sName = cleanStr(s.name);
-          if (!map.has(sName)) {
-            const liveStock = getCentralizedStock(chosenColor, sName);
-            map.set(sName, liveStock);
-          }
-        });
-      } else if (subCatObj.size_group) {
-        const groupMatches = allSizesList.filter(
-          (sz) => cleanStr(sz.size_group) === cleanStr(subCatObj.size_group)
-        );
-        groupMatches.forEach((s) => {
-          const sName = cleanStr(s.name);
-          if (!map.has(sName)) {
-            const liveStock = getCentralizedStock(chosenColor, sName);
-            map.set(sName, liveStock);
+    // 3. Fallback: product sizes
+    if (map.size === 0) {
+      const prod = selectedProductForModal;
+      if (prod.size) {
+        const rawSizes = typeof prod.size === 'string'
+          ? prod.size.split(',').map((s) => cleanStr(s))
+          : [cleanStr(prod.size)];
+        rawSizes.filter(Boolean).forEach((szKey) => {
+          if (!map.has(szKey)) {
+            const liveStock = getCentralizedStock(chosenColor, szKey);
+            map.set(szKey, liveStock);
           }
         });
       }
-    }
 
-    if (map.size === 0 && allSizesList.length > 0) {
-      allSizesList.slice(0, 8).forEach((s) => {
-        const sName = cleanStr(s.name);
-        map.set(sName, 0);
-      });
+      if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
+        prod.variants.sizes.forEach((s: string) => {
+          const szKey = cleanStr(s);
+          if (!map.has(szKey)) {
+            const liveStock = getCentralizedStock(chosenColor, szKey);
+            map.set(szKey, liveStock);
+          }
+        });
+      }
     }
 
     if (map.size === 0) {
@@ -624,13 +649,13 @@ export default function SalesManager() {
       size,
       stock
     }));
-  }, [currentProductInventory, selectedProductForModal, modalColor, subCategoriesList, allSizesList]);
+  }, [currentProductInventory, currentProductPurchases, selectedProductForModal, modalColor]);
 
-  // Exact live stock for current color + size
+  // LIVE STOCK FOR THE CURRENTLY SELECTED VARIANT
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
     return getCentralizedStock(modalColor, modalSize);
-  }, [modalColor, modalSize, currentProductInventory]);
+  }, [modalColor, modalSize, currentProductInventory, currentProductPurchases]);
 
   const handleConfirmVariantToCart = () => {
     if (!selectedProductForModal) return;
@@ -695,7 +720,7 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // Central Sale Execution & Direct Inventory Deduction
+  // SALE EXECUTION WITH ACCURATE INVENTORY UPDATE
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -749,7 +774,7 @@ export default function SalesManager() {
         console.warn('order_items table skipped:', e);
       }
 
-      // Deduct Central Inventory Stock (Allows Negative/Zero)
+      // Live Inventory Stock Deduction
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
@@ -872,9 +897,10 @@ export default function SalesManager() {
     const q = billingProductSearch.toUpperCase().trim();
     return productsList.filter(
       (p) =>
-        p.id.toUpperCase().includes(q) ||
-        p.name.toUpperCase().includes(q) ||
-        (p.sub_category && p.sub_category.toUpperCase().includes(q))
+        cleanStr(p.id).includes(q) ||
+        cleanStr(p.code).includes(q) ||
+        cleanStr(p.name).includes(q) ||
+        (p.sub_category && cleanStr(p.sub_category).includes(q))
     );
   }, [productsList, billingProductSearch]);
 
@@ -906,7 +932,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • CENTRALISED INVENTORY • PURE SWATCH CUBES
+              SERIES: KFINV0001 • ACTUAL PURCHASED VARIANTS ONLY • MULTI-KEY LIVE STOCK
             </span>
           </div>
         </div>
@@ -999,7 +1025,7 @@ export default function SalesManager() {
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
-                          <Store className="w-3 h-3" /> WALK-IN
+                          <Store className="w-3.5 h-3.5" /> WALK-IN
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
@@ -1513,6 +1539,7 @@ export default function SalesManager() {
                     ) : (
                       filteredDeskProducts.map((p) => {
                         const price = p.offline_price || p.selling_price || p.price || 0;
+                        const displayCode = p.code || p.id;
 
                         return (
                           <div
@@ -1523,7 +1550,7 @@ export default function SalesManager() {
                             <div>
                               <div className="flex items-center justify-between">
                                 <span className="font-mono font-extrabold text-[#00ff9d] text-[11px] block group-hover:underline uppercase">
-                                  [{p.id}]
+                                  [{displayCode}]
                                 </span>
                                 <span className="font-mono font-bold text-[#00d9ff] text-[11.5px]">
                                   ₹{price}
@@ -1719,14 +1746,16 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. VARIANT SELECTION MODAL */}
+      {/* 5. VARIANT SELECTION MODAL (ONLY ACTUAL PURCHASED/INVENTORY SHADES) */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div>
-                <span className="font-mono text-xs font-bold text-[#00ff9d] uppercase">[{selectedProductForModal.id}]</span>
+                <span className="font-mono text-xs font-bold text-[#00ff9d] uppercase">
+                  [{selectedProductForModal.code || selectedProductForModal.id}]
+                </span>
                 <h3 className="text-sm font-bold text-white uppercase">{selectedProductForModal.name}</h3>
               </div>
               <button
@@ -1741,49 +1770,51 @@ export default function SalesManager() {
             <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar pr-1">
               
               {/* STEP 1: PARENT COLOR FAMILY CAPSULES */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1">
-                    <Palette className="w-3 h-3" /> 1. SELECT MAIN COLOUR:
-                  </span>
-                  {selectedParentColor && (
-                    <span className="text-[9.5px] font-mono text-[#00ff9d] font-bold">
-                      ACTIVE: {selectedParentColor}
+              {parentColorFamilies.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1">
+                      <Palette className="w-3 h-3" /> 1. SELECT MAIN COLOUR:
                     </span>
-                  )}
-                </div>
+                    {selectedParentColor && (
+                      <span className="text-[9.5px] font-mono text-[#00ff9d] font-bold">
+                        ACTIVE: {selectedParentColor}
+                      </span>
+                    )}
+                  </div>
 
-                <div className="flex flex-wrap gap-1.5">
-                  {parentColorFamilies.map((f) => {
-                    const isSelected = selectedParentColor === f.family;
-                    return (
-                      <button
-                        key={f.family}
-                        type="button"
-                        onClick={() => {
-                          setSelectedParentColor(f.family);
-                          setModalColor('');
-                          setModalSize('');
-                        }}
-                        className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-mono text-[11px] font-bold transition-all cursor-pointer border uppercase ${
-                          isSelected
-                            ? 'bg-[#6d4aff] text-white border-[#00d9ff] shadow-md shadow-[#6d4aff]/40 scale-105'
-                            : 'bg-[#0a0e17] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/20'
-                        }`}
-                      >
-                        <span
-                          className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
-                          style={{ backgroundColor: f.hex }}
-                        />
-                        <span>{f.family}</span>
-                        <span className={`text-[9px] px-1 rounded-full ${f.stock > 0 ? 'bg-[#00ff9d]/20 text-[#00ff9d] font-black' : 'bg-white/10 text-[#8b9bb4]'}`}>
-                          {f.stock > 0 ? `${f.stock}` : '0'}
-                        </span>
-                      </button>
-                    );
-                  })}
+                  <div className="flex flex-wrap gap-1.5">
+                    {parentColorFamilies.map((f) => {
+                      const isSelected = selectedParentColor === f.family;
+                      return (
+                        <button
+                          key={f.family}
+                          type="button"
+                          onClick={() => {
+                            setSelectedParentColor(f.family);
+                            setModalColor('');
+                            setModalSize('');
+                          }}
+                          className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-mono text-[11px] font-bold transition-all cursor-pointer border uppercase ${
+                            isSelected
+                              ? 'bg-[#6d4aff] text-white border-[#00d9ff] shadow-md shadow-[#6d4aff]/40 scale-105'
+                              : 'bg-[#0a0e17] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/20'
+                          }`}
+                        >
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
+                            style={{ backgroundColor: f.hex }}
+                          />
+                          <span>{f.family}</span>
+                          <span className={`text-[9px] px-1 rounded-full ${f.stock > 0 ? 'bg-[#00ff9d]/20 text-[#00ff9d] font-black' : 'bg-white/10 text-[#8b9bb4]'}`}>
+                            {f.stock > 0 ? `${f.stock}` : '0'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* STEP 2: PURE VISUAL SWATCH CUBES WITHOUT TEXT LABELS */}
               <div className="space-y-2 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
@@ -1803,8 +1834,8 @@ export default function SalesManager() {
                 </div>
 
                 {activeSubShades.length === 0 ? (
-                  <div className="p-4 text-center text-[#8b9bb4] italic text-xs uppercase">
-                    NO SHADES AVAILABLE IN THIS FAMILY.
+                  <div className="p-4 text-center text-[#ff6b6b] italic text-xs uppercase font-mono">
+                    NO PURCHASED VARIANTS FOUND FOR THIS PRODUCT.
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto custom-scrollbar p-1">
@@ -1816,12 +1847,12 @@ export default function SalesManager() {
                       return (
                         <div
                           key={s.color}
-                          title={`${s.color} — Central Stock: ${s.stock}`}
+                          title={`${s.color} — Stock: ${s.stock}`}
                           onClick={() => {
                             setModalColor(s.color);
                             setModalSize('');
                           }}
-                          className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl cursor-pointer transition-all flex flex-col items-center justify-center border shadow-md active:scale-95 group ${
+                          className={`relative w-10 h-10 rounded-xl cursor-pointer transition-all flex flex-col items-center justify-center border shadow-md active:scale-95 group ${
                             isSelected
                               ? 'border-2 border-white shadow-[0_0_15px_rgba(255,255,255,0.85)] scale-110 ring-2 ring-[#00ff9d]'
                               : 'border-white/20 hover:border-white/60 hover:scale-105'
