@@ -81,7 +81,7 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
 
 function getDynamicColorHex(colorName: string): string {
   const raw = (colorName || '').toLowerCase().trim();
-  const c = raw.split('/')[0].trim(); // Take first part if slash exists like 'TURQUOISE / FIROZI'
+  const c = raw.split('/')[0].trim();
 
   if (c.includes('red') || c.includes('rani') || c.includes('rose') || c.includes('crimson') || c.includes('maroon') || c.includes('coral') || c.includes('ruby')) return '#E30B5C';
   if (c.includes('green') || c.includes('pista') || c.includes('mint') || c.includes('olive') || c.includes('bottle') || c.includes('forest')) return '#00843D';
@@ -125,10 +125,18 @@ export default function InventoryManager() {
       const inventoryRecords = invRes.data || [];
       const purchaseRecords = purchRes.data || [];
 
+      // Build robust color hex map supporting slashes / variations
       let colorHexMap = new Map<string, string>();
       (colorRes.data || []).forEach((c: any) => {
         if (c.name && c.hex_code) {
-          colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code.trim());
+          const rawName = c.name.toLowerCase().trim();
+          colorHexMap.set(rawName, c.hex_code.trim());
+          if (rawName.includes('/')) {
+            rawName.split('/').forEach((part: string) => {
+              const p = part.trim();
+              if (p && !colorHexMap.has(p)) colorHexMap.set(p, c.hex_code.trim());
+            });
+          }
         }
       });
       setColoursList(colorRes.data || []);
@@ -196,9 +204,16 @@ export default function InventoryManager() {
         if (groupedMap.has(pId)) {
           const row = groupedMap.get(pId)!;
           const cleanColorKey = color.toLowerCase().trim();
-          const slashCleanKey = cleanColorKey.split('/')[0].trim();
-          
-          const hex = colorHexMap.get(cleanColorKey) || colorHexMap.get(slashCleanKey) || getDynamicColorHex(color);
+          const firstPart = cleanColorKey.split('/')[0].trim();
+          const secondPart = cleanColorKey.includes('/') ? cleanColorKey.split('/')[1].trim() : '';
+
+          // Check full name, first part, second part, or fallback to dynamic hex
+          const hex =
+            colorHexMap.get(cleanColorKey) ||
+            colorHexMap.get(firstPart) ||
+            (secondPart ? colorHexMap.get(secondPart) : undefined) ||
+            getDynamicColorHex(color);
+
           row.variants.push({ color, size, stock, hex });
           row.total_stock += stock;
         }
@@ -218,7 +233,9 @@ export default function InventoryManager() {
 
           colors.forEach((c) => {
             sizes.forEach((s) => {
-              const hex = colorHexMap.get(c.toLowerCase().trim()) || getDynamicColorHex(c);
+              const cleanC = c.toLowerCase().trim();
+              const firstP = cleanC.split('/')[0].trim();
+              const hex = colorHexMap.get(cleanC) || colorHexMap.get(firstP) || getDynamicColorHex(c);
               row.variants.push({ color: c, size: s, stock: 0, hex });
             });
           });
