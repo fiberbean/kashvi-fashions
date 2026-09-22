@@ -23,7 +23,8 @@ import {
   Share2,
   BookOpen,
   Clock,
-  Globe
+  Globe,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -50,6 +51,7 @@ interface ProductRecord {
   size?: string;
   variants?: any;
   offline_price?: number;
+  store_price?: number;
   online_price?: number;
   selling_price?: number;
   price?: number;
@@ -138,6 +140,15 @@ function getBaseFamily(colorName: string): string {
   return 'OTHER';
 }
 
+// POS DESK STORE RATE HELPER (STRICT PRIORITY: STORE / OFFLINE RATE)
+function getProductStorePrice(p: ProductRecord): number {
+  if (p.offline_price && Number(p.offline_price) > 0) return Number(p.offline_price);
+  if (p.store_price && Number(p.store_price) > 0) return Number(p.store_price);
+  if (p.selling_price && Number(p.selling_price) > 0) return Number(p.selling_price);
+  if (p.price && Number(p.price) > 0) return Number(p.price);
+  return 0;
+}
+
 export default function SalesManager() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
@@ -178,6 +189,7 @@ export default function SalesManager() {
   const [paymentMode, setPaymentMode] = useState<'cash' | 'upi'>('cash');
   const [utrNumber, setUtrNumber] = useState<string>('');
   const [discountAmount, setDiscountAmount] = useState<number | string>(0);
+  const [discountError, setDiscountError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   // Product Filter Search
@@ -387,16 +399,18 @@ export default function SalesManager() {
     setPaymentMode('cash');
     setUtrNumber('');
     setDiscountAmount(0);
+    setDiscountError(null);
     setBillingProductSearch('');
     setCartItems([]);
     setIsBillingModalOpen(true);
   };
 
+  // OPEN VARIANT PICKER WITH STORE PRICE PRIORITY
   const handleOpenVariantPicker = (prod: ProductRecord) => {
     setSelectedProductForModal(prod);
-    const storePrice = prod.offline_price || prod.selling_price || prod.price || 0;
+    const storePrice = getProductStorePrice(prod);
 
-    setModalRate(Number(storePrice));
+    setModalRate(storePrice);
     setSelectedParentColor('');
     setModalColor('');
     setModalSize('');
@@ -404,7 +418,6 @@ export default function SalesManager() {
     setIsVariantModalOpen(true);
   };
 
-  // MULTI-KEY SAFE IDENTIFIERS FOR CURRENT PRODUCT
   const productKeySet = useMemo(() => {
     if (!selectedProductForModal) return new Set<string>();
     const keys = new Set<string>();
@@ -425,7 +438,6 @@ export default function SalesManager() {
     return keys;
   }, [selectedProductForModal]);
 
-  // INVENTORY ROWS MATCHING CURRENT PRODUCT
   const currentProductInventory = useMemo(() => {
     if (!selectedProductForModal || productKeySet.size === 0) return [];
 
@@ -435,7 +447,6 @@ export default function SalesManager() {
     });
   }, [selectedProductForModal, productKeySet, inventoryList]);
 
-  // PURCHASE_ITEMS FALLBACK ROWS MATCHING CURRENT PRODUCT
   const currentProductPurchases = useMemo(() => {
     if (!selectedProductForModal || productKeySet.size === 0) return [];
 
@@ -445,12 +456,10 @@ export default function SalesManager() {
     });
   }, [selectedProductForModal, productKeySet, purchaseItemsList]);
 
-  // LIVE STOCK FUNCTION
   const getCentralizedStock = (colorName: string, sizeName?: string): number => {
     const cTarget = cleanStr(colorName);
     const sTarget = sizeName ? cleanStr(sizeName) : null;
 
-    // 1. Primary: Central Inventory Table
     const invMatches = currentProductInventory.filter((inv) => {
       const c = cleanStr(inv.variant_color || 'STANDARD');
       if (sTarget) {
@@ -464,7 +473,6 @@ export default function SalesManager() {
       return invMatches.reduce((sum, inv) => sum + Number(inv.stock_quantity ?? 0), 0);
     }
 
-    // 2. Fallback: Purchase Items
     const purchMatches = currentProductPurchases.filter((pi) => {
       const c = cleanStr(pi.variant_color || pi.color || 'STANDARD');
       if (sTarget) {
@@ -477,12 +485,10 @@ export default function SalesManager() {
     return purchMatches.reduce((sum, pi) => sum + Number(pi.quantity ?? 0), 0);
   };
 
-  // ONLY SHOW ACTUAL INVENTORY/PURCHASED SHADES (NO DUMMY 200+ MASTER COLOURS)
   const allShadesForProduct = useMemo(() => {
     if (!selectedProductForModal) return [];
     const map = new Map<string, { stock: number; hex?: string; parent?: string }>();
 
-    // 1. Add shades directly from inventory
     currentProductInventory.forEach((r) => {
       const clrKey = cleanStr(r.variant_color || 'STANDARD');
       if (clrKey && !map.has(clrKey)) {
@@ -496,7 +502,6 @@ export default function SalesManager() {
       }
     });
 
-    // 2. Add shades from purchase_items
     currentProductPurchases.forEach((pi) => {
       const clrKey = cleanStr(pi.variant_color || pi.color || 'STANDARD');
       if (clrKey && !map.has(clrKey)) {
@@ -510,7 +515,6 @@ export default function SalesManager() {
       }
     });
 
-    // 3. If zero stock records exist, show only the product master's configured colors
     if (map.size === 0) {
       const prod = selectedProductForModal;
       if (prod.colour) {
@@ -552,7 +556,6 @@ export default function SalesManager() {
     }));
   }, [currentProductInventory, currentProductPurchases, selectedProductForModal, coloursList]);
 
-  // DISTINCT PARENT COLOR GROUPS (ONLY FOR ACTUAL VARIANTS)
   const parentColorFamilies = useMemo(() => {
     const map = new Map<string, { totalStock: number; sampleHex: string; shadeCount: number }>();
 
@@ -581,19 +584,16 @@ export default function SalesManager() {
     }
   }, [isVariantModalOpen, parentColorFamilies, selectedParentColor]);
 
-  // ACTIVE SUB-SHADES FILTERED BY CHOSEN PARENT COLOR
   const activeSubShades = useMemo(() => {
     if (!selectedParentColor) return allShadesForProduct;
     return allShadesForProduct.filter((s) => s.parent === selectedParentColor);
   }, [allShadesForProduct, selectedParentColor]);
 
-  // ACTUAL SIZES FOR THE SELECTED COLOR
   const modalAvailableSizes = useMemo(() => {
     if (!selectedProductForModal || !modalColor) return [];
     const chosenColor = cleanStr(modalColor);
     const map = new Map<string, number>();
 
-    // 1. From central inventory
     currentProductInventory
       .filter((r) => cleanStr(r.variant_color || 'STANDARD') === chosenColor)
       .forEach((r) => {
@@ -604,7 +604,6 @@ export default function SalesManager() {
         }
       });
 
-    // 2. From purchases
     currentProductPurchases
       .filter((pi) => cleanStr(pi.variant_color || pi.color || 'STANDARD') === chosenColor)
       .forEach((pi) => {
@@ -615,7 +614,6 @@ export default function SalesManager() {
         }
       });
 
-    // 3. Fallback: product sizes
     if (map.size === 0) {
       const prod = selectedProductForModal;
       if (prod.size) {
@@ -651,7 +649,6 @@ export default function SalesManager() {
     }));
   }, [currentProductInventory, currentProductPurchases, selectedProductForModal, modalColor]);
 
-  // LIVE STOCK FOR THE CURRENTLY SELECTED VARIANT
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
     return getCentralizedStock(modalColor, modalSize);
@@ -711,16 +708,32 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.total_price, 0);
   }, [cartItems]);
 
+  // STRICT 10% DISCOUNT CAP
+  const maxAllowedDiscount = useMemo(() => {
+    return Math.floor(subTotalAmount * 0.10);
+  }, [subTotalAmount]);
+
+  const handleDiscountChange = (val: string) => {
+    const num = Number(val) || 0;
+    if (num > maxAllowedDiscount) {
+      setDiscountAmount(maxAllowedDiscount);
+      setDiscountError(`MAXIMUM 10% DISCOUNT ALLOWED (₹${maxAllowedDiscount})`);
+    } else {
+      setDiscountAmount(val);
+      setDiscountError(null);
+    }
+  };
+
   const finalPayableAmount = useMemo(() => {
-    const disc = Number(discountAmount) || 0;
+    const disc = Math.min(Number(discountAmount) || 0, maxAllowedDiscount);
     return Math.max(0, subTotalAmount - disc);
-  }, [subTotalAmount, discountAmount]);
+  }, [subTotalAmount, discountAmount, maxAllowedDiscount]);
 
   const totalCartUnits = useMemo(() => {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // SALE EXECUTION WITH ACCURATE INVENTORY UPDATE
+  // SALE EXECUTION WITH ACCURATE INVENTORY UPDATE & SUPABASE SCHEMA FALLBACK
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -732,20 +745,21 @@ export default function SalesManager() {
       return;
     }
 
+    const appliedDisc = Math.min(Number(discountAmount) || 0, maxAllowedDiscount);
     const cleanUtr = utrNumber.trim().toUpperCase();
     const isUtrPending = paymentMode === 'upi' && !cleanUtr;
 
     setSubmitting(true);
     try {
       const custPhoneVal = selectedCustomer.phone || selectedCustomer.mobile || undefined;
-      const orderPayload: OrderRecord = {
+      const orderPayload: any = {
         id: invoiceNo.trim().toUpperCase(),
         customer_id: selectedCustomer.id.toUpperCase(),
         customer_name: selectedCustomer.name.toUpperCase(),
         customer_phone: custPhoneVal,
         order_type: 'offline',
         total_amount: subTotalAmount,
-        discount_amount: Number(discountAmount) || 0,
+        discount_amount: appliedDisc,
         final_amount: finalPayableAmount,
         payment_mode: paymentMode,
         utr_number: paymentMode === 'upi' && cleanUtr ? cleanUtr : null,
@@ -754,8 +768,23 @@ export default function SalesManager() {
         created_at: new Date().toISOString()
       };
 
-      const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
-      if (orderErr) throw orderErr;
+      // 1. Attempt insert with discount_amount
+      let orderInsertRes = await supabase.from('orders').insert([orderPayload]);
+
+      // 2. Fallback: If 'discount_amount' column is missing in schema, try with 'discount'
+      if (orderInsertRes.error && orderInsertRes.error.message.includes('discount_amount')) {
+        delete orderPayload.discount_amount;
+        orderPayload.discount = appliedDisc;
+        orderInsertRes = await supabase.from('orders').insert([orderPayload]);
+
+        // 3. Fallback 2: If neither exists, insert without discount column
+        if (orderInsertRes.error && orderInsertRes.error.message.includes('discount')) {
+          delete orderPayload.discount;
+          orderInsertRes = await supabase.from('orders').insert([orderPayload]);
+        }
+      }
+
+      if (orderInsertRes.error) throw orderInsertRes.error;
 
       // Safe Line Items insert
       try {
@@ -809,7 +838,7 @@ export default function SalesManager() {
         }
       }
 
-      setCompletedInvoice(orderPayload);
+      setCompletedInvoice({ ...orderPayload, discount_amount: appliedDisc });
       setCompletedItems([...cartItems]);
       setIsBillingModalOpen(false);
       loadData();
@@ -839,7 +868,7 @@ export default function SalesManager() {
       `*PAYMENT MODE:* ${inv.payment_mode.toUpperCase()} ${inv.payment_status === 'utr_pending' ? '(UTR PENDING)' : '(PAID)'}%0A%0A` +
       `*ITEMS PURCHASED:*%0A${itemsSummary}%0A%0A` +
       `*SUBTOTAL:* ₹${inv.total_amount}%0A` +
-      `*DISCOUNT:* ₹${inv.discount_amount}%0A` +
+      `*DISCOUNT:* ₹${inv.discount_amount || 0}%0A` +
       `*TOTAL AMOUNT:* ₹${inv.final_amount}%0A%0A` +
       `THANK YOU FOR SHOPPING WITH US! VISIT AGAIN. 🙏%0A` +
       `_KASHVI COMMAND DECK_`;
@@ -932,7 +961,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • ACTUAL PURCHASED VARIANTS ONLY • MULTI-KEY LIVE STOCK
+              STORE PRICE BILLING • STRICT 10% DISCOUNT CAP • AUTOMATED INVENTORY SYNC
             </span>
           </div>
         </div>
@@ -1239,7 +1268,6 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* Top Compact Switcher */}
             <div className="p-2 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-center justify-between gap-2">
               <span className="text-[10px] font-mono text-[#8b9bb4] uppercase font-bold tracking-wider">
                 FILTER:
@@ -1274,7 +1302,6 @@ export default function SalesManager() {
               </div>
             </div>
 
-            {/* Search Bar */}
             <div className="relative shrink-0">
               <input
                 type="text"
@@ -1287,7 +1314,6 @@ export default function SalesManager() {
               <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
             </div>
 
-            {/* Customers List */}
             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
               {filteredExistingCustomers.length === 0 ? (
                 <div className="p-6 text-center text-[#8b9bb4] italic text-xs uppercase">
@@ -1417,7 +1443,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 4. MAIN SALES BILLING FORM */}
+      {/* 4. MAIN SALES BILLING FORM (WITH STORE PRICE & 10% DISCOUNT ENFORCEMENT) */}
       {isBillingModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-[100005] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
@@ -1511,7 +1537,7 @@ export default function SalesManager() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* Left Products Deck with Search & Compact Cards */}
+                {/* Left Products Deck with STORE PRICE */}
                 <div className="lg:col-span-6 space-y-2.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                   
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-b border-white/5 pb-2">
@@ -1538,7 +1564,7 @@ export default function SalesManager() {
                       </div>
                     ) : (
                       filteredDeskProducts.map((p) => {
-                        const price = p.offline_price || p.selling_price || p.price || 0;
+                        const storePrice = getProductStorePrice(p);
                         const displayCode = p.code || p.id;
 
                         return (
@@ -1553,7 +1579,7 @@ export default function SalesManager() {
                                   [{displayCode}]
                                 </span>
                                 <span className="font-mono font-bold text-[#00d9ff] text-[11.5px]">
-                                  ₹{price}
+                                  ₹{storePrice}
                                 </span>
                               </div>
                               <span className="font-bold text-white text-[11px] block truncate mt-0.5 uppercase leading-snug">
@@ -1576,7 +1602,7 @@ export default function SalesManager() {
                   </div>
                 </div>
 
-                {/* Right Cart */}
+                {/* Right Cart with 10% Discount Enforcement */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
@@ -1598,7 +1624,7 @@ export default function SalesManager() {
                             <tr>
                               <th className="py-1.5 px-2">ITEM DETAILS</th>
                               <th className="py-1.5 px-2 text-center">QTY</th>
-                              <th className="py-1.5 px-2 text-right">RATE</th>
+                              <th className="py-1.5 px-2 text-right">STORE RATE</th>
                               <th className="py-1.5 px-2 text-right">TOTAL</th>
                               <th className="py-1.5 px-1.5 text-center"></th>
                             </tr>
@@ -1698,15 +1724,30 @@ export default function SalesManager() {
                         </div>
 
                         <div className="flex justify-between items-center text-[#8b9bb4]">
-                          <span>DISCOUNT (₹):</span>
+                          <div className="flex items-center gap-1">
+                            <span>DISCOUNT (₹):</span>
+                            <span className="text-[9px] text-[#00d9ff] font-bold">
+                              (MAX 10%: ₹{maxAllowedDiscount})
+                            </span>
+                          </div>
                           <input
                             type="number"
                             min="0"
+                            max={maxAllowedDiscount}
                             value={discountAmount}
-                            onChange={(e) => setDiscountAmount(e.target.value)}
-                            className="w-20 px-2 py-0.5 rounded bg-[#0a0e17] border border-white/15 text-white font-mono text-right text-xs outline-none"
+                            onChange={(e) => handleDiscountChange(e.target.value)}
+                            className={`w-20 px-2 py-0.5 rounded bg-[#0a0e17] border font-mono text-right text-xs outline-none ${
+                              discountError ? 'border-[#ff6b6b] text-[#ff6b6b]' : 'border-white/15 text-white'
+                            }`}
                           />
                         </div>
+
+                        {discountError && (
+                          <div className="flex items-center gap-1 text-[9.5px] text-[#ff6b6b] font-bold">
+                            <AlertTriangle className="w-3 h-3" />
+                            <span>{discountError}</span>
+                          </div>
+                        )}
 
                         <div className="flex justify-between items-center text-xs font-bold pt-1.5 border-t border-white/5">
                           <span className="text-white">NET PAYABLE:</span>
@@ -1746,7 +1787,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. VARIANT SELECTION MODAL (ONLY ACTUAL PURCHASED/INVENTORY SHADES) */}
+      {/* 5. VARIANT SELECTION MODAL */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
@@ -1816,7 +1857,7 @@ export default function SalesManager() {
                 </div>
               )}
 
-              {/* STEP 2: PURE VISUAL SWATCH CUBES WITHOUT TEXT LABELS */}
+              {/* STEP 2: PURE VISUAL SWATCH CUBES */}
               <div className="space-y-2 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                 <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
                   <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase">
@@ -1916,18 +1957,18 @@ export default function SalesManager() {
                 </div>
               )}
 
-              {/* STEP 4: RATE & QUANTITY */}
+              {/* STEP 4: STORE PRICE & QUANTITY */}
               {modalColor && modalSize && (
                 <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                   <div>
-                    <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1">
-                      SELLING PRICE (₹)
+                    <label className="text-[9.5px] font-mono text-[#ffa500] uppercase block mb-1 font-bold">
+                      STORE SELLING PRICE (₹)
                     </label>
                     <input
                       type="number"
                       value={modalRate}
                       onChange={(e) => setModalRate(Number(e.target.value))}
-                      className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono font-bold text-xs outline-none"
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#ffa500] font-mono font-bold text-xs outline-none"
                     />
                   </div>
 
@@ -1951,7 +1992,6 @@ export default function SalesManager() {
 
             </div>
 
-            {/* Bottom Actions */}
             <div className="flex justify-end gap-2 pt-2 border-t border-white/10 shrink-0">
               <button
                 type="button"
@@ -2044,7 +2084,7 @@ export default function SalesManager() {
                         <tr>
                           <th className="py-2 px-2.5">ITEM & VARIANT</th>
                           <th className="py-2 px-2 text-center">QTY</th>
-                          <th className="py-2 px-2 text-right">PRICE</th>
+                          <th className="py-2 px-2 text-right">STORE RATE</th>
                           <th className="py-2 px-2.5 text-right">TOTAL</th>
                         </tr>
                       </thead>
