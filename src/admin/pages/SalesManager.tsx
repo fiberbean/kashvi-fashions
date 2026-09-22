@@ -29,7 +29,8 @@ import {
   BookOpen,
   CheckCircle2,
   Clock,
-  Globe
+  Globe,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -68,6 +69,14 @@ interface InventoryItemRecord {
   size?: string | null;
   stock_quantity?: number | null;
   quantity?: number | null;
+}
+
+interface ColourMasterRecord {
+  id?: string;
+  name: string;
+  hex_code?: string;
+  parent_colour?: string | null;
+  parent_color?: string | null;
 }
 
 interface CartItem {
@@ -111,18 +120,33 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
 }
 
-// Kevalam CUST0001, CUST0002... series matrame Offline Walk-in Customer
 function isOfflineCustomer(id: string | null | undefined): boolean {
   if (!id) return false;
   const cleanId = id.trim().toUpperCase();
   return /^CUST\d+$/.test(cleanId);
 }
 
+// Master Color Family Identification helper
+function getBaseFamily(colorName: string): string {
+  const c = colorName.trim().toUpperCase();
+  if (c.includes('GREEN') || c.includes('OLIVE') || c.includes('MINT') || c.includes('PISTA')) return 'GREEN';
+  if (c.includes('PINK') || c.includes('ROSE') || c.includes('MAGENTA') || c.includes('RANI')) return 'PINK';
+  if (c.includes('BLUE') || c.includes('NAVY') || c.includes('TEAL') || c.includes('AQUA') || c.includes('SKY')) return 'BLUE';
+  if (c.includes('RED') || c.includes('MAROON') || c.includes('CRIMSON') || c.includes('WINE')) return 'RED';
+  if (c.includes('YELLOW') || c.includes('MUSTARD') || c.includes('GOLD') || c.includes('LEMON')) return 'YELLOW';
+  if (c.includes('BLACK') || c.includes('GREY') || c.includes('GRAY') || c.includes('CHARCOAL')) return 'BLACK & GREY';
+  if (c.includes('WHITE') || c.includes('OFFWHITE') || c.includes('CREAM') || c.includes('IVORY')) return 'WHITE & CREAM';
+  if (c.includes('ORANGE') || c.includes('PEACH') || c.includes('RUST') || c.includes('CORAL')) return 'ORANGE';
+  if (c.includes('PURPLE') || c.includes('VIOLET') || c.includes('LAVENDER') || c.includes('LILAC')) return 'PURPLE';
+  if (c.includes('BROWN') || c.includes('BEIGE') || c.includes('KHAKI') || c.includes('CHESTNUT')) return 'BROWN';
+  return 'OTHER';
+}
+
 export default function SalesManager() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
   const [inventoryList, setInventoryList] = useState<InventoryItemRecord[]>([]);
-  const [coloursList, setColoursList] = useState<{ name: string; hex_code?: string }[]>([]);
+  const [coloursList, setColoursList] = useState<ColourMasterRecord[]>([]);
   const [customersList, setCustomersList] = useState<CustomerRecord[]>([]);
   const [allSizesList, setAllSizesList] = useState<any[]>([]);
   const [subCategoriesList, setSubCategoriesList] = useState<any[]>([]);
@@ -136,7 +160,7 @@ export default function SalesManager() {
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // Customer Filter Switcher: By-default 'offline'
+  // Customer Filter Switcher
   const [customerPickerType, setCustomerPickerType] = useState<'offline' | 'online'>('offline');
 
   // New Customer Form State
@@ -165,6 +189,7 @@ export default function SalesManager() {
   // 3. Variant Picker Modal State
   const [isVariantModalOpen, setIsVariantModalOpen] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductRecord | null>(null);
+  const [selectedParentColor, setSelectedParentColor] = useState<string>('');
   const [modalColor, setModalColor] = useState<string>('');
   const [modalSize, setModalSize] = useState<string>('');
   const [modalRate, setModalRate] = useState<number>(0);
@@ -180,7 +205,6 @@ export default function SalesManager() {
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
-  // Strict CUST0001 format generator
   const generateCustomerId = async () => {
     try {
       const { data } = await supabase
@@ -235,7 +259,7 @@ export default function SalesManager() {
         supabase.from('orders').select('*').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
         supabase.from('inventory').select('*'),
-        supabase.from('colours').select('name, hex_code'),
+        supabase.from('colours').select('*'),
         supabase.from('customers').select('*').order('created_at', { ascending: false }),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
         supabase.from('sub_categories').select('*')
@@ -280,7 +304,7 @@ export default function SalesManager() {
   const handleChooseExistingCustomer = () => {
     setIsCustomerPromptOpen(false);
     setCustSearchTerm('');
-    setCustomerPickerType('offline'); // by-default offline
+    setCustomerPickerType('offline');
     setIsExistingCustomerPickerOpen(true);
   };
 
@@ -376,37 +400,43 @@ export default function SalesManager() {
     const storePrice = prod.offline_price || prod.selling_price || prod.price || 0;
 
     setModalRate(Number(storePrice));
+    setSelectedParentColor('');
     setModalColor('');
     setModalSize('');
     setModalQty(1);
     setIsVariantModalOpen(true);
   };
 
+  // MULTI-KEY SAFE INVENTORY FILTERING
   const modalProductInventory = useMemo(() => {
     if (!selectedProductForModal) return [];
     const targetId = String(selectedProductForModal.id).trim().toUpperCase();
 
     return inventoryList.filter((inv) => {
       const pId = String(inv.product_id || '').trim().toUpperCase();
-      return pId === targetId;
+      return pId === targetId || pId.replace(/\s+/g, '') === targetId.replace(/\s+/g, '');
     });
   }, [selectedProductForModal, inventoryList]);
 
-  const modalAvailableColors = useMemo(() => {
+  // ALL VARIANT SHADES FOR CURRENT PRODUCT WITH REALTIME STOCK
+  const allShadesForProduct = useMemo(() => {
     if (!selectedProductForModal) return [];
-    const map = new Map<string, { stock: number; hex?: string }>();
+    const map = new Map<string, { stock: number; hex?: string; parent?: string }>();
 
+    // 1. Inventory stock rows
     modalProductInventory.forEach((r) => {
       const clr = String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase();
       const current = map.get(clr) || { stock: 0 };
-      const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr)?.hex_code;
+      const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr);
       const qty = Number(r.stock_quantity ?? r.quantity ?? 0);
       map.set(clr, {
         stock: current.stock + qty,
-        hex: matched || current.hex || '#6d4aff'
+        hex: matched?.hex_code || current.hex || '#6d4aff',
+        parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
       });
     });
 
+    // 2. Product Master colour specifications
     const prod = selectedProductForModal;
     if (prod.colour) {
       const rawColors = typeof prod.colour === 'string'
@@ -414,8 +444,12 @@ export default function SalesManager() {
         : [String(prod.colour).toUpperCase()];
       rawColors.filter(Boolean).forEach((clr) => {
         if (!map.has(clr)) {
-          const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr)?.hex_code;
-          map.set(clr, { stock: 0, hex: matched || '#6d4aff' });
+          const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr);
+          map.set(clr, {
+            stock: 0,
+            hex: matched?.hex_code || '#6d4aff',
+            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
+          });
         }
       });
     }
@@ -424,17 +458,24 @@ export default function SalesManager() {
       prod.variants.colors.forEach((c: string) => {
         const clr = String(c).trim().toUpperCase();
         if (!map.has(clr)) {
-          const matched = coloursList.find((x) => x.name.trim().toUpperCase() === clr)?.hex_code;
-          map.set(clr, { stock: 0, hex: matched || '#6d4aff' });
+          const matched = coloursList.find((x) => x.name.trim().toUpperCase() === clr);
+          map.set(clr, {
+            stock: 0,
+            hex: matched?.hex_code || '#6d4aff',
+            parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
+          });
         }
       });
     }
 
+    // 3. Fallback: master colours
     if (map.size === 0) {
       coloursList.forEach((c) => {
-        map.set(c.name.trim().toUpperCase(), {
+        const clr = c.name.trim().toUpperCase();
+        map.set(clr, {
           stock: 0,
-          hex: c.hex_code || '#6d4aff'
+          hex: c.hex_code || '#6d4aff',
+          parent: c.parent_colour || c.parent_color || getBaseFamily(clr)
         });
       });
     }
@@ -442,10 +483,49 @@ export default function SalesManager() {
     return Array.from(map.entries()).map(([color, data]) => ({
       color,
       stock: data.stock,
-      hex: data.hex
+      hex: data.hex || '#6d4aff',
+      parent: (data.parent || getBaseFamily(color)).toUpperCase()
     }));
   }, [modalProductInventory, selectedProductForModal, coloursList]);
 
+  // DISTINCT PARENT COLOR FAMILIES / CAPSULES
+  const parentColorFamilies = useMemo(() => {
+    const map = new Map<string, { totalStock: number; sampleHex: string; shadeCount: number }>();
+
+    allShadesForProduct.forEach((s) => {
+      const fam = s.parent || 'OTHER';
+      const existing = map.get(fam) || { totalStock: 0, sampleHex: s.hex, shadeCount: 0 };
+      map.set(fam, {
+        totalStock: existing.totalStock + s.stock,
+        sampleHex: existing.sampleHex || s.hex,
+        shadeCount: existing.shadeCount + 1
+      });
+    });
+
+    return Array.from(map.entries()).map(([family, data]) => ({
+      family,
+      stock: data.totalStock,
+      hex: data.sampleHex,
+      count: data.shadeCount
+    }));
+  }, [allShadesForProduct]);
+
+  // Auto-select first parent family if none selected
+  useEffect(() => {
+    if (isVariantModalOpen && parentColorFamilies.length > 0 && !selectedParentColor) {
+      // Incase stock unna family unte adi, lekapothe first family
+      const withStock = parentColorFamilies.find((f) => f.stock > 0);
+      setSelectedParentColor(withStock ? withStock.family : parentColorFamilies[0].family);
+    }
+  }, [isVariantModalOpen, parentColorFamilies, selectedParentColor]);
+
+  // SUB-SHADES FILTERED BY CURRENT SELECTED PARENT COLOR
+  const activeSubShades = useMemo(() => {
+    if (!selectedParentColor) return allShadesForProduct;
+    return allShadesForProduct.filter((s) => s.parent === selectedParentColor);
+  }, [allShadesForProduct, selectedParentColor]);
+
+  // SIZES FOR SELECTED SHADE
   const modalAvailableSizes = useMemo(() => {
     if (!selectedProductForModal || !modalColor) return [];
     const chosenColor = modalColor.trim().toUpperCase();
@@ -517,6 +597,7 @@ export default function SalesManager() {
     }));
   }, [modalProductInventory, selectedProductForModal, modalColor, subCategoriesList, allSizesList]);
 
+  // LIVE STOCK FOR THE CHOSEN COLOR + SIZE
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
     const targetColor = modalColor.trim().toUpperCase();
@@ -794,7 +875,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • CUST0001: OFFLINE • NON-CUST: ONLINE
+              SERIES: KFINV0001 • COLOR CAPSULES & SHADES • AUTO STOCK SYNC
             </span>
           </div>
         </div>
@@ -887,7 +968,7 @@ export default function SalesManager() {
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
-                          <Store className="w-3 h-3" /> WALK-IN
+                          <Store className="w-3.5 h-3.5" /> WALK-IN
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
@@ -1083,7 +1164,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2B: EXISTING CUSTOMER PICKER (BY-DEFAULT OFFLINE ONLY, TOP SWITCHER: OFFLINE / ONLINE) */}
+      {/* DIALOG 2B: EXISTING CUSTOMER PICKER */}
       {isExistingCustomerPickerOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
@@ -1607,11 +1688,13 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. VARIANT SELECTION MODAL */}
+      {/* 5. VARIANT SELECTION MODAL (TWO-TIER: PARENT COLOUR CAPSULES -> SUB-SHADES TINY CUBES) */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-xl w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            
+            {/* Top Bar */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div>
                 <span className="font-mono text-xs font-bold text-[#00ff9d] uppercase">[{selectedProductForModal.id}]</span>
                 <h3 className="text-sm font-bold text-white uppercase">{selectedProductForModal.name}</h3>
@@ -1625,109 +1708,182 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* Colours Swatches */}
-            <div className="space-y-1.5">
-              <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                1. SELECT COLOUR SHADE ({modalAvailableColors.length} AVAILABLE):
-              </span>
-              <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-0.5">
-                {modalAvailableColors.map((c) => {
-                  const isSelected = modalColor === c.color;
-                  const cardBg = c.hex || '#6d4aff';
-                  const textColor = getContrastTextColor(cardBg);
-
-                  return (
-                    <button
-                      key={c.color}
-                      type="button"
-                      onClick={() => {
-                        setModalColor(c.color);
-                        setModalSize('');
-                      }}
-                      style={isSelected ? { backgroundColor: cardBg, color: textColor } : {}}
-                      className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer border uppercase ${
-                        isSelected
-                          ? 'border-2 border-white shadow-[0_0_15px_rgba(255,255,255,0.6)] scale-105'
-                          : 'border-white/10 bg-[#0a0e17] text-[#8b9bb4] hover:text-white'
-                      }`}
-                    >
-                      <span
-                        className="w-3 h-3 rounded-full border border-white/30 shrink-0"
-                        style={{ backgroundColor: c.hex }}
-                      />
-                      <span>{c.color}</span>
-                      <span className="text-[9px] font-mono opacity-80">({c.stock})</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Sizes List */}
-            {modalColor && (
+            <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
+              
+              {/* STEP 1: MAIN PARENT COLOUR CAPSULES */}
               <div className="space-y-1.5">
-                <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                  2. SELECT SIZE FOR &quot;{modalColor}&quot;:
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1">
+                    <Palette className="w-3 h-3" /> 1. SELECT MAIN COLOUR GROUP:
+                  </span>
+                  {selectedParentColor && (
+                    <span className="text-[9.5px] font-mono text-[#00ff9d] font-bold">
+                      ACTIVE: {selectedParentColor}
+                    </span>
+                  )}
+                </div>
+
                 <div className="flex flex-wrap gap-1.5">
-                  {modalAvailableSizes.map((s) => {
-                    const isSelected = modalSize === s.size;
+                  {parentColorFamilies.map((f) => {
+                    const isSelected = selectedParentColor === f.family;
                     return (
                       <button
-                        key={s.size}
+                        key={f.family}
                         type="button"
-                        onClick={() => setModalSize(s.size)}
-                        className={`px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
+                        onClick={() => {
+                          setSelectedParentColor(f.family);
+                          setModalColor('');
+                          setModalSize('');
+                        }}
+                        className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 font-mono text-[11px] font-bold transition-all cursor-pointer border uppercase ${
                           isSelected
-                            ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
-                            : 'bg-[#0a0e17] text-white border-white/15 hover:border-[#00d9ff]'
+                            ? 'bg-[#6d4aff] text-white border-[#00d9ff] shadow-md shadow-[#6d4aff]/40 scale-105'
+                            : 'bg-[#0a0e17] text-[#8b9bb4] border-white/10 hover:text-white hover:border-white/20'
                         }`}
                       >
-                        <span>{s.size}</span>
-                        <span className={`text-[9px] ml-1 opacity-70 ${s.stock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
-                          [{s.stock}]
+                        <span
+                          className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0"
+                          style={{ backgroundColor: f.hex }}
+                        />
+                        <span>{f.family}</span>
+                        <span className={`text-[9px] px-1 rounded-full ${f.stock > 0 ? 'bg-[#00ff9d]/20 text-[#00ff9d]' : 'bg-white/10 text-[#8b9bb4]'}`}>
+                          {f.stock > 0 ? f.stock : f.count}
                         </span>
                       </button>
                     );
                   })}
                 </div>
               </div>
-            )}
 
-            {/* Rate & Qty */}
-            {modalColor && modalSize && (
-              <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
-                <div>
-                  <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1">
-                    SELLING PRICE (₹)
-                  </label>
-                  <input
-                    type="number"
-                    value={modalRate}
-                    onChange={(e) => setModalRate(Number(e.target.value))}
-                    className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono font-bold text-xs outline-none"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">QUANTITY</label>
-                    <span className={`text-[9px] font-mono ${modalCurrentStock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
-                      STOCK: {modalCurrentStock}
+              {/* STEP 2: SUB-SHADES TINY CUBES / CAPSULES */}
+              <div className="space-y-1.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase">
+                    2. CHOOSE SHADE FOR &quot;{selectedParentColor || 'ALL'}&quot; ({activeSubShades.length} SHADES):
+                  </span>
+                  {modalColor && (
+                    <span className="text-[10px] font-mono font-bold text-[#00d9ff]">
+                      SELECTED: {modalColor}
                     </span>
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    value={modalQty}
-                    onChange={(e) => setModalQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs outline-none text-center"
-                  />
+                  )}
                 </div>
-              </div>
-            )}
 
-            <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                {activeSubShades.length === 0 ? (
+                  <div className="p-3 text-center text-[#8b9bb4] italic text-xs uppercase">
+                    NO SUB-SHADES FOUND IN THIS GROUP.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-40 overflow-y-auto custom-scrollbar p-0.5">
+                    {activeSubShades.map((s) => {
+                      const isSelected = modalColor === s.color;
+                      const cardBg = s.hex || '#6d4aff';
+                      const textColor = getContrastTextColor(cardBg);
+
+                      return (
+                        <div
+                          key={s.color}
+                          onClick={() => {
+                            setModalColor(s.color);
+                            setModalSize('');
+                          }}
+                          className={`p-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 border uppercase ${
+                            isSelected
+                              ? 'border-2 border-white shadow-[0_0_12px_rgba(255,255,255,0.7)] scale-[1.02] bg-[#101628]'
+                              : 'border-white/10 bg-[#101628] hover:border-white/20'
+                          }`}
+                        >
+                          {/* Visual Tiny Cube / Swatch */}
+                          <div
+                            className="w-5 h-5 rounded-lg border border-white/30 shrink-0 shadow-sm flex items-center justify-center"
+                            style={{ backgroundColor: cardBg }}
+                          >
+                            {isSelected && <Check className="w-3 h-3" style={{ color: textColor }} />}
+                          </div>
+
+                          {/* Shade Text & Stock */}
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] font-bold text-white block truncate leading-tight">
+                              {s.color}
+                            </span>
+                            <span className={`text-[8.5px] font-mono block ${s.stock > 0 ? 'text-[#00ff9d]' : 'text-[#ff6b6b]'}`}>
+                              {s.stock > 0 ? `${s.stock} IN STOCK` : '0 STOCK'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* STEP 3: SIZE SELECTION */}
+              {modalColor && (
+                <div className="space-y-1.5">
+                  <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                    3. SELECT SIZE FOR &quot;{modalColor}&quot;:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {modalAvailableSizes.map((s) => {
+                      const isSelected = modalSize === s.size;
+                      return (
+                        <button
+                          key={s.size}
+                          type="button"
+                          onClick={() => setModalSize(s.size)}
+                          className={`px-3 py-1 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
+                            isSelected
+                              ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
+                              : 'bg-[#0a0e17] text-white border-white/15 hover:border-[#00d9ff]'
+                          }`}
+                        >
+                          <span>{s.size}</span>
+                          <span className={`text-[9px] ml-1 opacity-75 ${s.stock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
+                            [{s.stock}]
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: RATE & QUANTITY */}
+              {modalColor && modalSize && (
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
+                  <div>
+                    <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1">
+                      SELLING PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      value={modalRate}
+                      onChange={(e) => setModalRate(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-mono font-bold text-xs outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">QUANTITY</label>
+                      <span className={`text-[9px] font-mono ${modalCurrentStock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
+                        STOCK: {modalCurrentStock}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min="1"
+                      value={modalQty}
+                      onChange={(e) => setModalQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs outline-none text-center"
+                    />
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex justify-end gap-2 pt-2 border-t border-white/10 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsVariantModalOpen(false)}
@@ -1739,12 +1895,13 @@ export default function SalesManager() {
                 type="button"
                 disabled={!modalColor || !modalSize}
                 onClick={handleConfirmVariantToCart}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 uppercase"
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 uppercase shadow-md"
               >
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
                 <span>ADD TO BILL</span>
               </button>
             </div>
+
           </div>
         </div>
       )}
@@ -1797,9 +1954,7 @@ export default function SalesManager() {
                     </div>
                     <div>
                       <span className="text-[#8b9bb4] text-[9.5px] uppercase block">CUSTOMER:</span>
-                      <strong className="text-white">
-                        {activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}
-                      </strong>
+                      <strong className="text-white">{activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}</strong>
                       <span className="text-[9px] block text-[#8b9bb4]">
                         TYPE: {isCustOffline ? 'OFFLINE (CUST)' : 'ONLINE'}
                       </span>
