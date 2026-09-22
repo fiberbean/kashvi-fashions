@@ -1603,7 +1603,7 @@ export default function PurchaseManager() {
                           </div>
 
                           <div>
-                            <span className="text-[#00ff9d] text-[9px] block font-bold">MAXIMUM DISCOUNT PRICE:</span>
+                            <span className="text-[#00ff9d] text-[9px] block font-bold">MDP:</span>
                             <strong className="text-[#00ff9d] text-xs">₹{liveMatrixPricing.maxDiscountPrice}</strong>
                           </div>
 
@@ -2246,7 +2246,7 @@ export default function PurchaseManager() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Calculator className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wide">Instant Price & Margin Calculator</h3>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wide">Calculator</h3>
               </div>
               <button
                 type="button"
@@ -2325,7 +2325,7 @@ export default function PurchaseManager() {
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#00ff9d] font-bold">MAXIMUM DISCOUNT PRICE:</span>
+                  <span className="text-[#00ff9d] font-bold">MDP:</span>
                   <strong className="text-sm font-black text-[#00ff9d]">₹{standaloneCalcResult.maxDiscountPrice}</strong>
                 </div>
 
