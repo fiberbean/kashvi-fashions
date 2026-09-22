@@ -361,6 +361,7 @@ export default function InventoryManager() {
   return (
     <div className="space-y-3 font-sans text-xs select-none uppercase">
       
+      {/* 1. FILTER & SEARCH BAR */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
@@ -466,6 +467,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
+      {/* 2. INVENTORY TABLE (BIGGER CUBES WITH EXACT STOCK COUNT) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -534,23 +536,22 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
+                      {/* BIGGER COLOR CUBES (w-9 h-9) WITH STOCK COUNT */}
                       <td className="py-3 px-3">
-                        <div className="flex flex-wrap gap-1.5 max-w-[220px]">
+                        <div className="flex flex-wrap gap-2 max-w-[260px]">
                           {uniqueColors.map((uc) => {
                             const cubeBg = uc.hex || '#6d4aff';
                             const textColor = getContrastTextColor(cubeBg);
 
                             return (
-                              <span
+                              <div
                                 key={uc.color}
-                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-white/25 shadow-sm font-mono font-bold text-[10px]"
+                                className="w-9 h-9 rounded-xl border-2 border-white/30 shadow-md flex items-center justify-center font-mono font-black text-xs shrink-0 transition-transform hover:scale-110"
                                 style={{ backgroundColor: cubeBg, color: textColor }}
                                 title={`${uc.color} — Stock: ${uc.stock}`}
                               >
-                                <span className={`px-1 rounded text-[9px] font-black ${uc.stock > 0 ? 'bg-black/40 text-white' : 'bg-black/60 text-white/80'}`}>
-                                  {uc.stock}
-                                </span>
-                              </span>
+                                {uc.stock}
+                              </div>
                             );
                           })}
                         </div>
@@ -614,6 +615,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
+      {/* 3. DETAILED MATRIX & AUDIT TRAIL MODAL */}
       {selectedProductForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
