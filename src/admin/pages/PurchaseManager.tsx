@@ -26,9 +26,7 @@ import {
   Sparkles,
   Calculator,
   Tag,
-  Truck,
-  Percent,
-  CircleDollarSign
+  Truck
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import ProductMasterModal from '../components/modals/ProductMasterModal';
@@ -66,9 +64,9 @@ interface StagedMatrixItem {
   unit_cost: number;
   total_cost: number;
   landed_cost: number;
-  sticker_selling_price: number;
+  store_price: number;
   max_discount_price: number;
-  online_selling_price: number;
+  online_price: number;
   mrp_price: number;
 }
 
@@ -90,9 +88,9 @@ interface TaggingChecklistItem {
   quantity: number;
   unit_cost: number;
   landed_cost: number;
-  sticker_selling_price: number;
+  store_price: number;
   max_discount_price: number;
-  online_selling_price: number;
+  online_price: number;
   mrp_price: number;
   is_completed: boolean;
 }
@@ -124,28 +122,34 @@ const BASE_FAMILY_PALETTE: { [key: string]: string } = {
   grey: '#757575'
 };
 
+// PRICING AUTOMATION ENGINE
 function calculateSmartPricing(baseUnitCost: number, transportPercentage: number) {
   const baseCost = Number(baseUnitCost) || 0;
   const tPercent = Number(transportPercentage) || 0;
 
+  // 1. Landed Cost
   const landedCost = baseCost + (baseCost * (tPercent / 100));
 
-  const rawOfflineTag = (landedCost * 2) + ((landedCost * 2) * 0.10);
-  const stickerSellingPrice = Math.ceil(rawOfflineTag / 5) * 5;
+  // 2. Store Price (Sticker Tag MRP: Landed * 2 + 10%, round to nearest 5)
+  const rawStore = (landedCost * 2) + ((landedCost * 2) * 0.10);
+  const storePrice = Math.ceil(rawStore / 5) * 5;
 
-  const rawOfflineFinal = stickerSellingPrice - (stickerSellingPrice * 0.10);
-  const maxDiscountPrice = Math.round(rawOfflineFinal);
+  // 3. Maximum Discount Price (Store - 10% disc round figure)
+  const rawMaxDisc = storePrice - (storePrice * 0.10);
+  const maxDiscountPrice = Math.round(rawMaxDisc);
 
+  // 4. Online Price (Landed * 2 + 20%, round up to next 10)
   const rawOnline = (landedCost * 2) + ((landedCost * 2) * 0.20);
-  const onlineSellingPrice = Math.ceil(rawOnline / 10) * 10;
+  const onlinePrice = Math.ceil(rawOnline / 10) * 10;
 
-  const mrpPrice = Math.ceil((onlineSellingPrice / 0.70) / 10) * 10;
+  // 5. MRP Price (Calculated on Online Price to show ~30% discount strike-through)
+  const mrpPrice = Math.ceil((onlinePrice / 0.70) / 10) * 10;
 
   return {
     landedCost: Math.round(landedCost * 100) / 100,
-    stickerSellingPrice,
+    storePrice,
     maxDiscountPrice,
-    onlineSellingPrice,
+    onlinePrice,
     mrpPrice
   };
 }
@@ -175,7 +179,7 @@ export default function PurchaseManager() {
   const [checklistItems, setChecklistItems] = useState<TaggingChecklistItem[]>([]);
   const [currentBillReference, setCurrentBillReference] = useState<string>('');
 
-  // Standalone Quick Calculator State
+  // Standalone Quick Calculator State (Supports Amount vs Percentage)
   const [isCalculatorOpen, setIsCalculatorOpen] = useState<boolean>(false);
   const [calcCost, setCalcCost] = useState<number | string>('');
   const [calcTransportMode, setCalcTransportMode] = useState<'percent' | 'amount'>('percent');
@@ -189,7 +193,7 @@ export default function PurchaseManager() {
   const [enteredPin, setEnteredPin] = useState<string>('');
   const [pinError, setPinError] = useState<string | null>(null);
 
-  // Editing line item
+  // Editing existing saved line item
   const [editingItemModal, setEditingItemModal] = useState<any | null>(null);
   const [editItemQty, setEditItemQty] = useState<number>(1);
   const [editItemCost, setEditItemCost] = useState<number>(0);
@@ -202,6 +206,7 @@ export default function PurchaseManager() {
   const [supplierBillNo, setSupplierBillNo] = useState<string>('');
   const [supplierBillDate, setSupplierBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   
+  // Bill Transportation Mode
   const [billTransportMode, setBillTransportMode] = useState<'amount' | 'percent'>('amount');
   const [transportInputVal, setTransportInputVal] = useState<number | string>(0);
   const [notes, setNotes] = useState<string>('');
@@ -724,6 +729,7 @@ export default function PurchaseManager() {
     return (totalBillBaseAmount * val) / 100;
   }, [billTransportMode, transportInputVal, totalBillBaseAmount]);
 
+  // LIVE PRICING ENGINE RUN
   const liveMatrixPricing = useMemo(() => {
     const cost = Number(unitCost) || 0;
     return calculateSmartPricing(cost, currentTransportPercent);
@@ -764,9 +770,9 @@ export default function PurchaseManager() {
             unit_cost: cost,
             total_cost: count * cost,
             landed_cost: pricing.landedCost,
-            sticker_selling_price: pricing.stickerSellingPrice,
+            store_price: pricing.storePrice,
             max_discount_price: pricing.maxDiscountPrice,
-            online_selling_price: pricing.onlineSellingPrice,
+            online_price: pricing.onlinePrice,
             mrp_price: pricing.mrpPrice
           });
         }
@@ -796,9 +802,9 @@ export default function PurchaseManager() {
       return {
         ...it,
         landed_cost: pricing.landedCost,
-        sticker_selling_price: pricing.stickerSellingPrice,
+        store_price: pricing.storePrice,
         max_discount_price: pricing.maxDiscountPrice,
-        online_selling_price: pricing.onlineSellingPrice,
+        online_price: pricing.onlinePrice,
         mrp_price: pricing.mrpPrice
       };
     });
@@ -859,7 +865,7 @@ export default function PurchaseManager() {
             variant_size: it.size,
             quantity: it.quantity,
             unit_cost: it.unit_cost,
-            selling_price: it.sticker_selling_price,
+            selling_price: it.store_price,
             total_cost: it.total_cost
           }));
 
@@ -899,9 +905,9 @@ export default function PurchaseManager() {
             await supabase
               .from('products')
               .update({
-                offline_price: it.sticker_selling_price,
-                online_price: it.online_selling_price,
-                selling_price: it.sticker_selling_price
+                offline_price: it.store_price,
+                online_price: it.online_price,
+                selling_price: it.store_price
               })
               .eq('id', it.product_id);
           }
@@ -916,9 +922,9 @@ export default function PurchaseManager() {
             quantity: it.quantity,
             unit_cost: it.unit_cost,
             landed_cost: it.landed_cost,
-            sticker_selling_price: it.sticker_selling_price,
+            store_price: it.store_price,
             max_discount_price: it.max_discount_price,
-            online_selling_price: it.online_selling_price,
+            online_price: it.online_price,
             mrp_price: it.mrp_price,
             is_completed: false
           }));
@@ -969,7 +975,7 @@ export default function PurchaseManager() {
         variant_size: it.size,
         quantity: it.quantity,
         unit_cost: it.unit_cost,
-        selling_price: it.sticker_selling_price,
+        selling_price: it.store_price,
         total_cost: it.total_cost
       }));
 
@@ -1016,9 +1022,9 @@ export default function PurchaseManager() {
         await supabase
           .from('products')
           .update({
-            offline_price: it.sticker_selling_price,
-            online_price: it.online_selling_price,
-            selling_price: it.sticker_selling_price
+            offline_price: it.store_price,
+            online_price: it.online_price,
+            selling_price: it.store_price
           })
           .eq('id', it.product_id);
       }
@@ -1055,9 +1061,9 @@ export default function PurchaseManager() {
         quantity: it.quantity,
         unit_cost: it.unit_cost,
         landed_cost: it.landed_cost,
-        sticker_selling_price: it.sticker_selling_price,
+        store_price: it.store_price,
         max_discount_price: it.max_discount_price,
-        online_selling_price: it.online_selling_price,
+        online_price: it.online_price,
         mrp_price: it.mrp_price,
         is_completed: false
       }));
@@ -1170,7 +1176,7 @@ export default function PurchaseManager() {
         </div>
       </div>
 
-      {/* 2. Invoices History Table: ENHANCED VIEW ACCORDING TO YOUR SPECIFICATIONS */}
+      {/* 2. Invoices History Table */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -1211,7 +1217,7 @@ export default function PurchaseManager() {
 
                   return (
                     <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
-                      {/* 1. PURCHASE NO & DATE */}
+                      {/* PURCHASE NO & DATE */}
                       <td className="py-2.5 px-3">
                         <span className="font-mono font-extrabold text-[#00ff9d] text-xs block">
                           {p.id}
@@ -1221,7 +1227,7 @@ export default function PurchaseManager() {
                         </span>
                       </td>
 
-                      {/* 2. SUPPLIER BILL NO & BILL DATE */}
+                      {/* SUPPLIER BILL NO & BILL DATE */}
                       <td className="py-2.5 px-3">
                         <span className="font-mono font-bold text-[#00d9ff] block text-xs">
                           {p.supplier_bill_no || '—'}
@@ -1231,9 +1237,9 @@ export default function PurchaseManager() {
                         </span>
                       </td>
 
-                      {/* 3. FIRM NAME (HIGHLIGHTED) & PERSON NAME */}
+                      {/* FIRM NAME & PERSON NAME */}
                       <td className="py-2.5 px-3">
-                        <span className="font-extrabold text-white text-xs block tracking-wide text-shadow">
+                        <span className="font-extrabold text-white text-xs block tracking-wide">
                           {firmName}
                         </span>
                         {personName && (
@@ -1243,22 +1249,22 @@ export default function PurchaseManager() {
                         )}
                       </td>
 
-                      {/* 4. BILL VALUE (BASE ITEMS COST) */}
+                      {/* BILL VALUE */}
                       <td className="py-2.5 px-3 text-right font-mono text-white text-xs">
                         ₹{baseBillVal.toLocaleString('en-IN')}
                       </td>
 
-                      {/* 5. TRANSPORT VALUE */}
+                      {/* TRANSPORT VALUE */}
                       <td className="py-2.5 px-3 text-right font-mono text-[#ffa500] font-bold text-xs">
                         {transportVal > 0 ? `+₹${transportVal.toLocaleString('en-IN')}` : '₹0'}
                       </td>
 
-                      {/* 6. TOTAL VALUE (NET INVOICE AMOUNT) */}
+                      {/* TOTAL VALUE */}
                       <td className="py-2.5 px-3 text-right font-mono font-extrabold text-[#00ff9d] text-xs">
                         ₹{totalVal.toLocaleString('en-IN')}
                       </td>
 
-                      {/* 7. ACTIONS */}
+                      {/* ACTIONS */}
                       <td className="py-2.5 px-3 text-center">
                         <div className="inline-flex items-center gap-1">
                           <button
@@ -1449,7 +1455,7 @@ export default function PurchaseManager() {
               {/* TWO-COLUMN SPLIT PANEL */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* === LEFT COLUMN: PRODUCT SELECTION & MATRIX (Span 6) === */}
+                {/* === LEFT COLUMN: PRODUCT SELECTION & MATRIX === */}
                 <div className="lg:col-span-6 space-y-2.5">
                   
                   {/* Security PIN Lock if Editing */}
@@ -1583,35 +1589,32 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* DISCRETE CAPSULES */}
+                      {/* SCREENSHOT BOX MODEL WITH EXACT REQUESTED NAMES */}
                       {Number(unitCost) > 0 && (
-                        <div className="flex flex-wrap gap-2 pt-1 animate-in fade-in">
-                          <div className="px-3 py-1.5 rounded-full bg-[#ffa500]/15 border border-[#ffa500]/40 flex items-center gap-1.5 font-mono shadow-sm">
-                            <span className="w-2 h-2 rounded-full bg-[#ffa500]" />
-                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">STICKER TAG PRICE:</span>
-                            <span className="text-xs font-black text-[#ffa500]">₹{liveMatrixPricing.stickerSellingPrice}</span>
+                        <div className="p-2.5 rounded-xl bg-[#101628] border border-[#00d9ff]/30 grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-[11px] animate-in fade-in">
+                          <div>
+                            <span className="text-[#8b9bb4] text-[9px] block">LANDED COST:</span>
+                            <strong className="text-white text-xs">₹{liveMatrixPricing.landedCost}</strong>
                           </div>
 
-                          <div className="px-3 py-1.5 rounded-full bg-[#00ff9d]/15 border border-[#00ff9d]/40 flex items-center gap-1.5 font-mono shadow-sm">
-                            <span className="w-2 h-2 rounded-full bg-[#00ff9d]" />
-                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">MAX DISCOUNT PRICE:</span>
-                            <span className="text-xs font-black text-[#00ff9d]">₹{liveMatrixPricing.maxDiscountPrice}</span>
+                          <div>
+                            <span className="text-[#ffa500] text-[9px] block font-bold">STORE:</span>
+                            <strong className="text-[#ffa500] text-xs">₹{liveMatrixPricing.storePrice}</strong>
                           </div>
 
-                          <div className="px-3 py-1.5 rounded-full bg-[#00d9ff]/15 border border-[#00d9ff]/40 flex items-center gap-1.5 font-mono shadow-sm">
-                            <span className="w-2 h-2 rounded-full bg-[#00d9ff]" />
-                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">ONLINE PRICE:</span>
-                            <span className="text-xs font-black text-[#00d9ff]">₹{liveMatrixPricing.onlineSellingPrice}</span>
+                          <div>
+                            <span className="text-[#00ff9d] text-[9px] block font-bold">MAXIMUM DISCOUNT PRICE:</span>
+                            <strong className="text-[#00ff9d] text-xs">₹{liveMatrixPricing.maxDiscountPrice}</strong>
                           </div>
 
-                          <div className="px-3 py-1.5 rounded-full bg-[#e056fd]/15 border border-[#e056fd]/40 flex items-center gap-1.5 font-mono shadow-sm">
-                            <span className="w-2 h-2 rounded-full bg-[#e056fd]" />
-                            <span className="text-[10px] text-[#8b9bb4] uppercase font-bold">MRP PRICE:</span>
-                            <span className="text-xs font-black text-[#e056fd]">₹{liveMatrixPricing.mrpPrice}</span>
+                          <div>
+                            <span className="text-[#00d9ff] text-[9px] block font-bold">ONLINE:</span>
+                            <strong className="text-[#00d9ff] text-xs">₹{liveMatrixPricing.onlinePrice}</strong>
                           </div>
 
-                          <div className="px-2.5 py-1.5 rounded-full bg-white/5 border border-white/10 flex items-center gap-1.5 font-mono text-[10px] text-[#8b9bb4]">
-                            <span>LC: ₹{liveMatrixPricing.landedCost}</span>
+                          <div>
+                            <span className="text-[#e056fd] text-[9px] block font-bold">MRP:</span>
+                            <strong className="text-[#e056fd] text-xs">₹{liveMatrixPricing.mrpPrice}</strong>
                           </div>
                         </div>
                       )}
@@ -1738,7 +1741,7 @@ export default function PurchaseManager() {
                   )}
                 </div>
 
-                {/* === RIGHT COLUMN: UNIFIED SAVED ITEMS & NEWLY ADDED QUEUE (Span 6) === */}
+                {/* === RIGHT COLUMN: UNIFIED SAVED ITEMS & NEWLY ADDED QUEUE === */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
@@ -1753,7 +1756,7 @@ export default function PurchaseManager() {
                     {/* Scrollable Container */}
                     <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2.5 space-y-2.5">
                       
-                      {/* 1. EXISTING SAVED ITEMS ON BILL (WITH EDIT & DELETE) */}
+                      {/* 1. EXISTING SAVED ITEMS ON BILL */}
                       {editingPurchase && existingItems.length > 0 && (
                         <div className="p-2.5 rounded-2xl bg-[#00d9ff]/5 border border-[#00d9ff]/30 space-y-1.5">
                           <div className="flex items-center justify-between text-xs font-mono">
@@ -1830,7 +1833,7 @@ export default function PurchaseManager() {
                                 <tr>
                                   <th className="py-1 px-2">Product & Variant</th>
                                   <th className="py-1 px-2 text-center">Qty</th>
-                                  <th className="py-1 px-2 text-center text-[#ffa500]">STICKER TAG</th>
+                                  <th className="py-1 px-2 text-center text-[#ffa500]">STORE</th>
                                   <th className="py-1 px-2 text-center text-[#00ff9d]">MAX DISC</th>
                                   <th className="py-1 px-2 text-center text-[#00d9ff]">ONLINE</th>
                                   <th className="py-1 px-2 text-center text-[#e056fd]">MRP</th>
@@ -1850,9 +1853,9 @@ export default function PurchaseManager() {
                                       </span>
                                     </td>
                                     <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
-                                    <td className="py-1.5 px-2 text-center font-mono font-black text-[#ffa500] bg-[#ffa500]/10 rounded">₹{it.sticker_selling_price}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono font-black text-[#ffa500] bg-[#ffa500]/10 rounded">₹{it.store_price}</td>
                                     <td className="py-1.5 px-2 text-center font-mono text-[#00ff9d] font-bold">₹{it.max_discount_price}</td>
-                                    <td className="py-1.5 px-2 text-center font-mono text-[#00d9ff] font-bold">₹{it.online_selling_price}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono text-[#00d9ff] font-bold">₹{it.online_price}</td>
                                     <td className="py-1.5 px-2 text-center font-mono text-[#e056fd] font-bold">₹{it.mrp_price}</td>
                                     <td className="py-1.5 px-2 text-right font-mono font-bold text-white">
                                       ₹{it.total_cost.toLocaleString('en-IN')}
@@ -2124,7 +2127,7 @@ export default function PurchaseManager() {
                     </span>
                   </h3>
                   <span className="text-[10px] text-[#8b9bb4]">
-                    Sticker Tag Price raasi product ki antinchagaane &quot;Mark Done&quot; kotti checklist check cheyandi.
+                    Store Price raasi product ki antinchagaane &quot;Mark Done&quot; kotti checklist check cheyandi.
                   </span>
                 </div>
               </div>
@@ -2187,8 +2190,8 @@ export default function PurchaseManager() {
 
                   <div className="flex items-center gap-3 font-mono">
                     <div className="px-3 py-1.5 rounded-xl bg-[#ffa500]/10 border border-[#ffa500]/30 text-center">
-                      <span className="text-[8.5px] text-[#ffa500] block uppercase font-bold">STICKER TAG PRICE</span>
-                      <strong className="text-sm font-black text-[#ffa500]">₹{item.sticker_selling_price}</strong>
+                      <span className="text-[8.5px] text-[#ffa500] block uppercase font-bold">STORE</span>
+                      <strong className="text-sm font-black text-[#ffa500]">₹{item.store_price}</strong>
                     </div>
 
                     <div className="px-2.5 py-1.5 rounded-xl bg-white/5 text-center hidden sm:block">
@@ -2197,12 +2200,12 @@ export default function PurchaseManager() {
                     </div>
 
                     <div className="px-2.5 py-1.5 rounded-xl bg-[#00d9ff]/10 text-center hidden sm:block">
-                      <span className="text-[8.5px] text-[#00d9ff] block uppercase">ONLINE PRICE</span>
-                      <strong className="text-xs font-bold text-[#00d9ff]">₹{item.online_selling_price}</strong>
+                      <span className="text-[8.5px] text-[#00d9ff] block uppercase">ONLINE</span>
+                      <strong className="text-xs font-bold text-[#00d9ff]">₹{item.online_price}</strong>
                     </div>
 
                     <div className="px-2.5 py-1.5 rounded-xl bg-[#e056fd]/10 text-center hidden sm:block">
-                      <span className="text-[8.5px] text-[#e056fd] block uppercase">MRP PRICE</span>
+                      <span className="text-[8.5px] text-[#e056fd] block uppercase">MRP</span>
                       <strong className="text-xs font-bold text-[#e056fd]">₹{item.mrp_price}</strong>
                     </div>
 
@@ -2243,7 +2246,7 @@ export default function PurchaseManager() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Calculator className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wide">Product Pricing Desk</h3>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wide">Instant Price & Margin Calculator</h3>
               </div>
               <button
                 type="button"
@@ -2256,11 +2259,11 @@ export default function PurchaseManager() {
 
             <div className="space-y-3 font-mono text-xs">
               <div>
-                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">Base Cost (CP)</label>
+                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">Base Price</label>
                 <input
                   type="number"
                   autoFocus
-                  placeholder="e.g. 100"
+                  placeholder="e.g. 145"
                   value={calcCost}
                   onChange={(e) => setCalcCost(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-bold text-sm outline-none"
@@ -2269,7 +2272,7 @@ export default function PurchaseManager() {
 
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-[10px] text-[#8b9bb4] uppercase font-bold">Transport Overhead</label>
+                  <label className="text-[10px] text-[#8b9bb4] uppercase font-bold">Transport</label>
                   
                   <div className="inline-flex rounded-lg bg-[#0a0e17] border border-white/10 p-0.5">
                     <button
@@ -2281,7 +2284,7 @@ export default function PurchaseManager() {
                           : 'text-[#8b9bb4] hover:text-white'
                       }`}
                     >
-                      % Percent
+                      %
                     </button>
                     <button
                       type="button"
@@ -2292,7 +2295,7 @@ export default function PurchaseManager() {
                           : 'text-[#8b9bb4] hover:text-white'
                       }`}
                     >
-                      ₹ Amount
+                      ₹
                     </button>
                   </div>
                 </div>
@@ -2301,7 +2304,7 @@ export default function PurchaseManager() {
                   <input
                     type="number"
                     step="any"
-                    placeholder={calcTransportMode === 'percent' ? 'e.g. 10%' : 'e.g. ₹50'}
+                    placeholder={calcTransportMode === 'percent' ? 'e.g. 5%' : 'e.g. ₹15'}
                     value={calcTransportVal}
                     onChange={(e) => setCalcTransportVal(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#ffa500] font-bold text-xs outline-none"
@@ -2314,37 +2317,26 @@ export default function PurchaseManager() {
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
-                <span className="text-[9.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                  Applicable Price Brackets
-                </span>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="p-2 rounded-2xl bg-[#ffa500]/10 border border-[#ffa500]/40 text-center">
-                    <span className="text-[9px] text-[#ffa500] block font-extrabold uppercase tracking-wide">STICKER TAG PRICE</span>
-                    <strong className="text-base font-black text-[#ffa500]">₹{standaloneCalcResult.stickerSellingPrice}</strong>
-                  </div>
-
-                  <div className="p-2 rounded-2xl bg-[#00ff9d]/10 border border-[#00ff9d]/40 text-center">
-                    <span className="text-[9px] text-[#00ff9d] block font-extrabold uppercase tracking-wide">MAX DISCOUNT PRICE</span>
-                    <strong className="text-base font-black text-[#00ff9d]">₹{standaloneCalcResult.maxDiscountPrice}</strong>
-                  </div>
-
-                  <div className="p-2 rounded-2xl bg-[#00d9ff]/10 border border-[#00d9ff]/40 text-center">
-                    <span className="text-[9px] text-[#00d9ff] block font-extrabold uppercase tracking-wide">ONLINE PRICE</span>
-                    <strong className="text-base font-black text-[#00d9ff]">₹{standaloneCalcResult.onlineSellingPrice}</strong>
-                  </div>
-
-                  <div className="p-2 rounded-2xl bg-[#e056fd]/10 border border-[#e056fd]/40 text-center">
-                    <span className="text-[9px] text-[#e056fd] block font-extrabold uppercase tracking-wide">MRP PRICE</span>
-                    <strong className="text-base font-black text-[#e056fd]">₹{standaloneCalcResult.mrpPrice}</strong>
-                  </div>
+              {/* EXACT MATCHING BORDER BOX OUTPUT ACCORDING TO SCREENSHOT */}
+              <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#ffa500] font-bold">STORE:</span>
+                  <strong className="text-sm font-black text-[#ffa500]">₹{standaloneCalcResult.storePrice}</strong>
                 </div>
 
-                <div className="flex items-center justify-end text-[10px] text-[#8b9bb4] pt-1.5 border-t border-white/5 font-mono">
-                  <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-white font-bold">
-                    LC: ₹{standaloneCalcResult.landedCost}
-                  </span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#00ff9d] font-bold">MAXIMUM DISCOUNT PRICE:</span>
+                  <strong className="text-sm font-black text-[#00ff9d]">₹{standaloneCalcResult.maxDiscountPrice}</strong>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#00d9ff] font-bold">ONLINE:</span>
+                  <strong className="text-sm font-black text-[#00d9ff]">₹{standaloneCalcResult.onlinePrice}</strong>
+                </div>
+
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#e056fd] font-bold">MRP:</span>
+                  <strong className="text-sm font-black text-[#e056fd]">₹{standaloneCalcResult.mrpPrice}</strong>
                 </div>
               </div>
             </div>
