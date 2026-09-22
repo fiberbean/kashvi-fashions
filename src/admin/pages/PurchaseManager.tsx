@@ -130,19 +130,19 @@ function calculateSmartPricing(baseUnitCost: number, transportPercentage: number
   // 1. Landed Cost
   const landedCost = baseCost + (baseCost * (tPercent / 100));
 
-  // 2. Store Price (Sticker Tag MRP: Landed * 2 + 10%, round to nearest 5)
+  // 2. Store Price
   const rawStore = (landedCost * 2) + ((landedCost * 2) * 0.10);
   const storePrice = Math.ceil(rawStore / 5) * 5;
 
-  // 3. MDP (Maximum Discount Price: Store - 10% disc round figure)
+  // 3. MDP (Maximum Discount Price)
   const rawMaxDisc = storePrice - (storePrice * 0.10);
   const mdpPrice = Math.round(rawMaxDisc);
 
-  // 4. Online Price (Landed * 2 + 20%, round up to next 10)
+  // 4. Online Price
   const rawOnline = (landedCost * 2) + ((landedCost * 2) * 0.20);
   const onlinePrice = Math.ceil(rawOnline / 10) * 10;
 
-  // 5. MRP Price (Calculated on Online Price to show ~30% discount strike-through)
+  // 5. MRP Price
   const mrpPrice = Math.ceil((onlinePrice / 0.70) / 10) * 10;
 
   return {
@@ -179,7 +179,7 @@ export default function PurchaseManager() {
   const [checklistItems, setChecklistItems] = useState<TaggingChecklistItem[]>([]);
   const [currentBillReference, setCurrentBillReference] = useState<string>('');
 
-  // Standalone Quick Calculator State (Supports Amount vs Percentage)
+  // Standalone Quick Calculator State
   const [isCalculatorOpen, setIsCalculatorOpen] = useState<boolean>(false);
   const [calcCost, setCalcCost] = useState<number | string>('');
   const [calcTransportMode, setCalcTransportMode] = useState<'percent' | 'amount'>('percent');
@@ -206,7 +206,6 @@ export default function PurchaseManager() {
   const [supplierBillNo, setSupplierBillNo] = useState<string>('');
   const [supplierBillDate, setSupplierBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   
-  // Bill Transportation Mode
   const [billTransportMode, setBillTransportMode] = useState<'amount' | 'percent'>('amount');
   const [transportInputVal, setTransportInputVal] = useState<number | string>(0);
   const [notes, setNotes] = useState<string>('');
@@ -517,13 +516,21 @@ export default function PurchaseManager() {
       );
       const computedTotal = newItemsTotal + Number(actualTransportAmount || 0);
 
-      await supabase
+      const updatePayload: any = {
+        total_amount: computedTotal,
+        transport_charges: Number(actualTransportAmount || 0),
+        balance_amount: computedTotal
+      };
+
+      let { error: purchUpdErr } = await supabase
         .from('purchases')
-        .update({
-          total_amount: computedTotal,
-          balance_amount: computedTotal
-        })
+        .update(updatePayload)
         .eq('id', editingPurchase.id);
+
+      if (purchUpdErr && purchUpdErr.message.includes('transport_charges')) {
+        delete updatePayload.transport_charges;
+        await supabase.from('purchases').update(updatePayload).eq('id', editingPurchase.id);
+      }
 
       setEditingPurchase((prev) => (prev ? { ...prev, total_amount: computedTotal } : null));
       setPurchases((prev) =>
@@ -729,7 +736,6 @@ export default function PurchaseManager() {
     return (totalBillBaseAmount * val) / 100;
   }, [billTransportMode, transportInputVal, totalBillBaseAmount]);
 
-  // LIVE PRICING ENGINE RUN
   const liveMatrixPricing = useMemo(() => {
     const cost = Number(unitCost) || 0;
     return calculateSmartPricing(cost, currentTransportPercent);
@@ -839,22 +845,50 @@ export default function PurchaseManager() {
 
     try {
       if (editingPurchase) {
-        const { error: updateErr } = await supabase
+        const updatePayload: any = {
+          supplier_id: supplierObj?.id || null,
+          supplier_name: supplierObj?.name || 'Unknown Supplier',
+          supplier_bill_no: supplierBillNo.trim(),
+          supplier_bill_date: supplierBillDate,
+          purchase_date: purchaseDate,
+          total_amount: grandTotalBillAmount,
+          transport_charges: Number(actualTransportAmount || 0),
+          balance_amount: grandTotalBillAmount,
+          notes: notes.trim() || null
+        };
+
+        let { error: updateErr } = await supabase
           .from('purchases')
-          .update({
-            supplier_id: supplierObj?.id || null,
-            supplier_name: supplierObj?.name || 'Unknown Supplier',
-            supplier_bill_no: supplierBillNo.trim(),
-            supplier_bill_date: supplierBillDate,
-            purchase_date: purchaseDate,
-            total_amount: grandTotalBillAmount,
-            transport_charges: Number(actualTransportAmount || 0),
-            balance_amount: grandTotalBillAmount,
-            notes: notes.trim() || null
-          })
+          .update(updatePayload)
           .eq('id', editingPurchase.id);
 
+        if (updateErr && updateErr.message.includes('transport_charges')) {
+          delete updatePayload.transport_charges;
+          const retry = await supabase.from('purchases').update(updatePayload).eq('id', editingPurchase.id);
+          updateErr = retry.error;
+        }
         if (updateErr) throw updateErr;
+
+        // Auto-update existing items pricing when transport changes
+        if (existingItems.length > 0) {
+          for (const it of existingItems) {
+            const revisedPricing = calculateSmartPricing(it.unit_cost, currentTransportPercent);
+
+            await supabase
+              .from('products')
+              .update({
+                offline_price: revisedPricing.storePrice,
+                online_price: revisedPricing.onlinePrice,
+                selling_price: revisedPricing.storePrice
+              })
+              .eq('id', it.product_id);
+
+            await supabase
+              .from('purchase_items')
+              .update({ selling_price: revisedPricing.storePrice })
+              .eq('id', it.id);
+          }
+        }
 
         if (computedStagedItems.length > 0) {
           const linePayloads = computedStagedItems.map((it, idx) => ({
@@ -934,7 +968,7 @@ export default function PurchaseManager() {
           setIsModalOpen(false);
           setIsChecklistModalOpen(true);
         } else {
-          alert(`Purchase [${editingPurchase.id}] updated successfully!`);
+          alert(`Purchase [${editingPurchase.id}] updated successfully with revised transport & pricing!`);
           setIsModalOpen(false);
         }
 
@@ -947,24 +981,29 @@ export default function PurchaseManager() {
         return;
       }
 
-      const { error: purErr } = await supabase.from('purchases').insert([
-        {
-          id: purchaseNo.trim(),
-          invoice_no: purchaseNo.trim(),
-          supplier_id: supplierObj?.id || null,
-          supplier_name: supplierObj?.name || 'Unknown Supplier',
-          supplier_bill_no: supplierBillNo.trim(),
-          supplier_bill_date: supplierBillDate,
-          purchase_date: purchaseDate,
-          total_amount: grandTotalBillAmount,
-          transport_charges: Number(actualTransportAmount || 0),
-          tax_amount: 0,
-          paid_amount: 0,
-          balance_amount: grandTotalBillAmount,
-          payment_status: 'pending',
-          notes: notes.trim() || null
-        }
-      ]);
+      const insertPayload: any = {
+        id: purchaseNo.trim(),
+        invoice_no: purchaseNo.trim(),
+        supplier_id: supplierObj?.id || null,
+        supplier_name: supplierObj?.name || 'Unknown Supplier',
+        supplier_bill_no: supplierBillNo.trim(),
+        supplier_bill_date: supplierBillDate,
+        purchase_date: purchaseDate,
+        total_amount: grandTotalBillAmount,
+        transport_charges: Number(actualTransportAmount || 0),
+        tax_amount: 0,
+        paid_amount: 0,
+        balance_amount: grandTotalBillAmount,
+        payment_status: 'pending',
+        notes: notes.trim() || null
+      };
+
+      let { error: purErr } = await supabase.from('purchases').insert([insertPayload]);
+      if (purErr && purErr.message.includes('transport_charges')) {
+        delete insertPayload.transport_charges;
+        const retry = await supabase.from('purchases').insert([insertPayload]);
+        purErr = retry.error;
+      }
       if (purErr) throw purErr;
 
       const linePayloads = computedStagedItems.map((it, idx) => ({
@@ -1217,7 +1256,6 @@ export default function PurchaseManager() {
 
                   return (
                     <tr key={p.id} className="hover:bg-white/[0.02] transition-colors">
-                      {/* PURCHASE NO & DATE */}
                       <td className="py-2.5 px-3">
                         <span className="font-mono font-extrabold text-[#00ff9d] text-xs block">
                           {p.id}
@@ -1227,7 +1265,6 @@ export default function PurchaseManager() {
                         </span>
                       </td>
 
-                      {/* SUPPLIER BILL NO & BILL DATE */}
                       <td className="py-2.5 px-3">
                         <span className="font-mono font-bold text-[#00d9ff] block text-xs">
                           {p.supplier_bill_no || '—'}
@@ -1237,7 +1274,6 @@ export default function PurchaseManager() {
                         </span>
                       </td>
 
-                      {/* FIRM NAME & PERSON NAME */}
                       <td className="py-2.5 px-3">
                         <span className="font-extrabold text-white text-xs block tracking-wide">
                           {firmName}
@@ -1249,22 +1285,18 @@ export default function PurchaseManager() {
                         )}
                       </td>
 
-                      {/* BILL VALUE */}
                       <td className="py-2.5 px-3 text-right font-mono text-white text-xs">
                         ₹{baseBillVal.toLocaleString('en-IN')}
                       </td>
 
-                      {/* TRANSPORT VALUE */}
                       <td className="py-2.5 px-3 text-right font-mono text-[#ffa500] font-bold text-xs">
                         {transportVal > 0 ? `+₹${transportVal.toLocaleString('en-IN')}` : '₹0'}
                       </td>
 
-                      {/* TOTAL VALUE */}
                       <td className="py-2.5 px-3 text-right font-mono font-extrabold text-[#00ff9d] text-xs">
                         ₹{totalVal.toLocaleString('en-IN')}
                       </td>
 
-                      {/* ACTIONS */}
                       <td className="py-2.5 px-3 text-center">
                         <div className="inline-flex items-center gap-1">
                           <button
@@ -1307,7 +1339,6 @@ export default function PurchaseManager() {
         <div className="fixed inset-0 z-[9999] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
             
-            {/* Header */}
             <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between bg-[#0a0e17] sticky top-0 z-30 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#ffa500] to-[#ff6b6b] text-white flex items-center justify-center shadow-md shadow-[#ffa500]/30">
@@ -1339,7 +1370,6 @@ export default function PurchaseManager() {
 
             <form onSubmit={handleSavePurchase} className="p-3 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar text-xs">
               
-              {/* Master Header: Supplier, Bill No, Dates, Transport (Dual Mode ₹ / %) */}
               <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10 items-center">
                 <div>
                   <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
@@ -1400,7 +1430,6 @@ export default function PurchaseManager() {
                   />
                 </div>
 
-                {/* Transportation Input with Mode Switcher (₹ or %) */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-[9.5px] font-mono text-[#ffa500] uppercase font-bold flex items-center gap-1">
@@ -1452,13 +1481,10 @@ export default function PurchaseManager() {
                 </div>
               </div>
 
-              {/* TWO-COLUMN SPLIT PANEL */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* === LEFT COLUMN: PRODUCT SELECTION & MATRIX === */}
+                {/* Left Column */}
                 <div className="lg:col-span-6 space-y-2.5">
-                  
-                  {/* Security PIN Lock if Editing */}
                   {editingPurchase && !isEditProductUnlocked ? (
                     <div className="p-4 rounded-2xl bg-[#6d4aff]/10 border border-[#6d4aff]/30 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5">
@@ -1482,8 +1508,6 @@ export default function PurchaseManager() {
                     </div>
                   ) : (
                     <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-3">
-                      
-                      {/* Product Selector with Code Search */}
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
                           <Layers className="w-3.5 h-3.5" /> 1. Select Product & Cost Price
@@ -1517,8 +1541,6 @@ export default function PurchaseManager() {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
-                        
-                        {/* Searchable Product Dropdown */}
                         <div className="sm:col-span-8 relative" ref={dropdownRef}>
                           <div
                             onClick={() => setIsProductDropdownOpen(!isProductDropdownOpen)}
@@ -1575,7 +1597,6 @@ export default function PurchaseManager() {
                           )}
                         </div>
 
-                        {/* Cost Price Input */}
                         <div className="sm:col-span-4">
                           <input
                             type="number"
@@ -1589,7 +1610,6 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* SCREENSHOT BOX MODEL: STORE, MDP, ONLINE, MRP */}
                       {Number(unitCost) > 0 && (
                         <div className="p-2.5 rounded-xl bg-[#101628] border border-[#00d9ff]/30 grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-[11px] animate-in fade-in">
                           <div>
@@ -1619,7 +1639,6 @@ export default function PurchaseManager() {
                         </div>
                       )}
 
-                      {/* POPUP TRIGGER BUTTON */}
                       {activeProduct ? (
                         <div className="space-y-3 pt-2 border-t border-white/5">
                           <div className="flex items-center justify-between">
@@ -1642,7 +1661,6 @@ export default function PurchaseManager() {
                             </button>
                           </div>
 
-                          {/* 3. QUANTITY MATRIX GRID */}
                           {activeMatrixColors.length > 0 ? (
                             <div className="space-y-2 pt-1 border-t border-white/5">
                               <span className="text-[10px] font-mono font-bold text-[#00ff9d] uppercase block">
@@ -1741,11 +1759,9 @@ export default function PurchaseManager() {
                   )}
                 </div>
 
-                {/* === RIGHT COLUMN: UNIFIED SAVED ITEMS & NEWLY ADDED QUEUE === */}
+                {/* Right Column */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
-                    
-                    {/* Header */}
                     <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
                         <ReceiptText className="w-4 h-4" /> Inward Inventory Breakdown
@@ -1753,10 +1769,7 @@ export default function PurchaseManager() {
                       <span className="text-white font-bold">{totalInwardQuantity} Total Units</span>
                     </div>
 
-                    {/* Scrollable Container */}
                     <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2.5 space-y-2.5">
-                      
-                      {/* 1. EXISTING SAVED ITEMS ON BILL */}
                       {editingPurchase && existingItems.length > 0 && (
                         <div className="p-2.5 rounded-2xl bg-[#00d9ff]/5 border border-[#00d9ff]/30 space-y-1.5">
                           <div className="flex items-center justify-between text-xs font-mono">
@@ -1816,7 +1829,6 @@ export default function PurchaseManager() {
                         </div>
                       )}
 
-                      {/* 2. NEWLY ADDED QUEUE */}
                       {computedStagedItems.length > 0 && (
                         <div className="p-2.5 rounded-2xl bg-[#00ff9d]/5 border border-[#00ff9d]/30 space-y-1.5">
                           <div className="flex items-center justify-between text-xs font-mono">
@@ -1877,7 +1889,6 @@ export default function PurchaseManager() {
                         </div>
                       )}
 
-                      {/* If both are empty */}
                       {!editingPurchase && stagedItems.length === 0 && (
                         <div className="p-5 text-center text-[#8b9bb4] italic text-xs space-y-1">
                           <Layers className="w-5 h-5 mx-auto text-white/20" />
@@ -1885,10 +1896,8 @@ export default function PurchaseManager() {
                           <p className="text-[10.5px] text-white/40">Select product & shades on Left, then click &quot;Add to Matrix Queue ➔&quot;.</p>
                         </div>
                       )}
-
                     </div>
 
-                    {/* Summary & Bill Total Card */}
                     <div className="p-3 bg-[#101628] border-t border-white/10 space-y-2">
                       <div className="space-y-1 font-mono text-xs">
                         {editingPurchase && (
@@ -1913,7 +1922,6 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* Notes Input */}
                       <div>
                         <input
                           type="text"
@@ -1924,7 +1932,6 @@ export default function PurchaseManager() {
                         />
                       </div>
 
-                      {/* Action Buttons */}
                       <div className="flex items-center justify-end gap-2 pt-1">
                         <button
                           type="button"
@@ -1958,8 +1965,6 @@ export default function PurchaseManager() {
       {isShadePickerModalOpen && activeProduct && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
-            
-            {/* Popup Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div>
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
@@ -1979,7 +1984,6 @@ export default function PurchaseManager() {
               </button>
             </div>
 
-            {/* Base Color Selection Tabs */}
             <div className="space-y-2 shrink-0">
               <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
                 1. Pick Base Color Family (A-Z):
@@ -2017,7 +2021,6 @@ export default function PurchaseManager() {
               </div>
             </div>
 
-            {/* LARGE SHADE CARDS GRID */}
             <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar p-1">
               <div className="flex items-center justify-between text-xs sticky top-0 bg-[#101628] py-1 z-10">
                 <span className="font-mono text-[#8b9bb4]">
@@ -2080,7 +2083,6 @@ export default function PurchaseManager() {
               )}
             </div>
 
-            {/* Popup Bottom Actions */}
             <div className="flex items-center justify-between pt-3 border-t border-white/10 shrink-0">
               <span className="font-mono text-xs text-[#00ff9d] font-bold">
                 Selected: {activeMatrixColors.length} Shade(s)
@@ -2104,7 +2106,6 @@ export default function PurchaseManager() {
                 </button>
               </div>
             </div>
-
           </div>
         </div>
       )}
@@ -2113,7 +2114,6 @@ export default function PurchaseManager() {
       {isChecklistModalOpen && (
         <div className="fixed inset-0 z-[100020] p-3 sm:p-5 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-4xl w-full p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 max-h-[90vh] flex flex-col">
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#00ff9d] to-[#00d9ff] text-neutral-950 flex items-center justify-center font-bold shadow">
@@ -2141,7 +2141,6 @@ export default function PurchaseManager() {
               </button>
             </div>
 
-            {/* Progress Bar */}
             <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-1.5 shrink-0">
               <div className="flex justify-between items-center text-[10px] font-mono font-bold">
                 <span className="text-[#8b9bb4]">TAGGING PROGRESS:</span>
@@ -2159,7 +2158,6 @@ export default function PurchaseManager() {
               </div>
             </div>
 
-            {/* Cards List */}
             <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1">
               {checklistItems.map((item) => (
                 <div
@@ -2239,7 +2237,7 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 6. COMPACT STANDALONE QUICK PRICING CALCULATOR (WIDTH REDUCED TO max-w-xs) */}
+      {/* 6. COMPACT QUICK PRICING CALCULATOR */}
       {isCalculatorOpen && (
         <div className="fixed inset-0 z-[100030] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-xs w-full p-4 sm:p-5 shadow-2xl space-y-3">
@@ -2317,7 +2315,6 @@ export default function PurchaseManager() {
                 </div>
               </div>
 
-              {/* COMPACT BORDER BOX OUTPUT: STORE, MDP, ONLINE, MRP */}
               <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2">
                 <div className="flex justify-between items-center text-xs">
                   <span className="text-[#ffa500] font-bold text-[11px]">STORE:</span>

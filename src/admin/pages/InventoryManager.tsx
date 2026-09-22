@@ -18,7 +18,9 @@ import {
   Tag,
   Palette,
   Filter,
-  ChevronDown
+  ChevronDown,
+  Check,
+  Grid
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -33,6 +35,9 @@ interface InventoryItem {
   size: string;
   selling_price: number;
   cost_price: number;
+  landed_price?: number;
+  store_price?: number;
+  online_price?: number;
   available_stock: number;
   hex_code?: string;
 }
@@ -56,114 +61,133 @@ interface SalesHistoryItem {
   total_amount: number;
 }
 
+function getContrastTextColor(hexColor: string | null | undefined): string {
+  if (!hexColor) return '#FFFFFF';
+  let hex = hexColor.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex.split('').map((c) => c + c).join('');
+  }
+  const r = parseInt(hex.substring(0, 2), 16) || 0;
+  const g = parseInt(hex.substring(2, 4), 16) || 0;
+  const b = parseInt(hex.substring(4, 6), 16) || 0;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
+}
+
 export default function InventoryManager() {
-  const [inventoryList, setInventoryList] = useState<InventoryItem[]>([]);
+  const [inventoryList, setInventoryList] = useState<InventoryItem[]>[];
+  const [rawProducts, setRawProducts] = useState<any[]>[];
+  const [allSizesList, setAllSizesList] = useState<any[]>[];
+  const [coloursList, setColoursList] = useState<any[]>[];
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [selectedSubCatFilter, setSelectedSubCatFilter] = useState<string>('all');
   const [stockLevelFilter, setStockLevelFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  // History Modal state
+  // History & Detailed Matrix Modal state
   const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryItem | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
-  // Fast & Bulletproof Data Loader
   const loadInventory = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Products
-      const { data: prodData, error: prodErr } = await supabase
-        .from('products')
-        .select('*');
+      const [prodRes, colorRes, invRes, sizeRes] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('colours').select('name, hex_code'),
+        supabase.from('inventory').select('*'),
+        supabase.from('sizes').select('*').order('display_order', { ascending: true })
+      ]);
 
-      if (prodErr) throw prodErr;
-      const products = prodData || [];
+      const products = prodRes.data || [];
+      setRawProducts(products);
+      if (sizeRes.data) setAllSizesList(sizeRes.data);
 
-      // 2. Fetch Colours for Swatch Hexes safely
       let colorHexMap = new Map<string, string>();
-      try {
-        const { data: colorData } = await supabase
-          .from('colours')
-          .select('name, hex_code');
-        (colorData || []).forEach((c) => {
-          if (c.name) colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code || '#6d4aff');
-        });
-      } catch (err) {
-        console.warn('Colours table fetch skipped or failed:', err);
-      }
+      (colorRes.data || []).forEach((c: any) => {
+        if (c.name) colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code || '#6d4aff');
+      });
+      setColoursList(colorRes.data || []);
 
-      // 3. Fetch Inventory Records safely
-      let inventoryRecords: any[] = [];
-      try {
-        const { data: invData } = await supabase
-          .from('inventory')
-          .select('*');
-        inventoryRecords = invData || [];
-      } catch (err) {
-        console.warn('Inventory table fetch error:', err);
-      }
-
+      const inventoryRecords = invDataCall(invRes.data);
       const processedItems: InventoryItem[] = [];
 
       if (inventoryRecords.length > 0) {
-        inventoryRecords.forEach((inv) => {
+        inventoryRecords.forEach((inv: any) => {
           const prod = products.find((p) => String(p.id) === String(inv.product_id));
-          const colorName = inv.variant_color || inv.color || 'Standard';
+          const colorName = inv.variant_color || inv.color || 'STANDARD';
+          const sizeName = inv.variant_size || inv.size || 'FREE SIZE';
+          
+          const baseCost = Number(prod?.cost_price || prod?.price || 0);
+          const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
+          const store = prod?.offline_price || prod?.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
+          const online = prod?.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
+
           processedItems.push({
-            id: String(inv.id || `${inv.product_id}_${colorName}_${inv.variant_size || 'Free'}`),
+            id: String(inv.id || `${inv.product_id}_${colorName}_${sizeName}`),
             product_id: String(inv.product_id),
-            product_code: String(prod?.id || inv.product_id),
-            product_name: String(prod?.name || 'Unknown Product'),
-            category: String(prod?.category || 'Fashion'),
-            sub_category: String(prod?.sub_category || 'General'),
-            color: colorName,
-            size: String(inv.variant_size || inv.size || 'Free Size'),
-            selling_price: Number(prod?.selling_price || prod?.price || 0),
-            cost_price: Number(prod?.cost_price || 0),
+            product_code: String(prod?.code || prod?.id || inv.product_id),
+            product_name: String(prod?.name || 'UNKNOWN PRODUCT'),
+            category: String(prod?.category || 'FASHION'),
+            sub_category: String(prod?.sub_category || 'GENERAL'),
+            color: colorName.toUpperCase(),
+            size: sizeName.toUpperCase(),
+            selling_price: Number(store),
+            cost_price: baseCost,
+            landed_price: landed,
+            store_price: store,
+            online_price: online,
             available_stock: Number(inv.stock_quantity ?? inv.quantity ?? 0),
             hex_code: colorHexMap.get(colorName.toLowerCase().trim()) || '#6d4aff'
           });
         });
       }
 
-      // Fallback or products that don't have an entry in inventory yet
       products.forEach((prod) => {
-        const alreadyInInv = processedItems.some((it) => String(it.product_id) === String(prod.id));
-        if (!alreadyInInv) {
-          let sizes: string[] = ['Free Size'];
-          if (prod.size) {
-            sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim()) : prod.size;
-          }
-          let colors: string[] = ['Standard'];
-          if (prod.colour) {
-            colors = typeof prod.colour === 'string' ? prod.colour.split(',').map((c: string) => c.trim()) : prod.colour;
-          }
+        let sizes: string[] = ['FREE SIZE'];
+        if (prod.size) {
+          sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim().toUpperCase()) : prod.size;
+        }
+        let colors: string[] = ['STANDARD'];
+        if (prod.colour) {
+          colors = typeof prod.colour === 'string' ? prod.colour.split(',').map((c: string) => c.trim().toUpperCase()) : prod.colour;
+        }
 
-          colors.forEach((c) => {
-            sizes.forEach((s) => {
+        colors.forEach((c) => {
+          sizes.forEach((s) => {
+            const alreadyExists = processedItems.some(
+              (it) => String(it.product_id) === String(prod.id) && it.color === c && it.size === s
+            );
+            if (!alreadyExists) {
+              const baseCost = Number(prod.cost_price || prod.price || 0);
+              const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
+              const store = prod.offline_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
+              const online = prod.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
+
               processedItems.push({
                 id: `${prod.id}_${c}_${s}`,
                 product_id: String(prod.id),
-                product_code: String(prod.id),
-                product_name: String(prod.name),
-                category: String(prod.category || 'Fashion'),
-                sub_category: String(prod.sub_category || 'General'),
+                product_code: String(prod.code || prod.id),
+                product_name: String(prod.name || 'UNKNOWN PRODUCT'),
+                category: String(prod.category || 'FASHION'),
+                sub_category: String(prod.sub_category || 'GENERAL'),
                 color: c,
                 size: s,
-                selling_price: Number(prod.selling_price || prod.price || 0),
-                cost_price: Number(prod.cost_price || 0),
+                selling_price: Number(store),
+                cost_price: baseCost,
+                landed_price: landed,
+                store_price: store,
+                online_price: online,
                 available_stock: 0,
                 hex_code: colorHexMap.get(c.toLowerCase().trim()) || '#6d4aff'
               });
-            });
+            }
           });
-        }
+        });
       });
 
-      // Natural Sort by Product Code (KF0001, KF0002, KF0003...)
       processedItems.sort((a, b) => {
         const codeA = String(a.product_code || '');
         const codeB = String(b.product_code || '');
@@ -180,11 +204,14 @@ export default function InventoryManager() {
     }
   };
 
+  function invDataCall(data: any) {
+    return data || [];
+  }
+
   useEffect(() => {
     loadInventory();
   }, []);
 
-  // Fetch full inward & outward history when a product row is clicked
   const handleOpenProductHistory = async (item: InventoryItem) => {
     setSelectedItemForHistory(item);
     setLoadingHistory(true);
@@ -192,7 +219,6 @@ export default function InventoryManager() {
     setSalesHistory([]);
 
     try {
-      // 1. Fetch Purchase Inward History
       const { data: purItems } = await supabase
         .from('purchase_items')
         .select(`
@@ -213,7 +239,7 @@ export default function InventoryManager() {
       if (purItems && purItems.length > 0) {
         const mappedPurchases: PurchaseHistoryItem[] = purItems.map((pi: any) => ({
           purchase_id: pi.purchases?.id || '—',
-          supplier_name: pi.purchases?.supplier_name || 'Direct Inward',
+          supplier_name: pi.purchases?.supplier_name || 'DIRECT INWARD',
           supplier_bill_no: pi.purchases?.supplier_bill_no || '—',
           purchase_date: pi.purchases?.purchase_date || '—',
           quantity: Number(pi.quantity || 0),
@@ -223,7 +249,6 @@ export default function InventoryManager() {
         setPurchaseHistory(mappedPurchases);
       }
 
-      // 2. Fetch Sales Dispatch History
       const { data: saleItems } = await supabase
         .from('order_items')
         .select(`
@@ -243,7 +268,7 @@ export default function InventoryManager() {
       if (saleItems && saleItems.length > 0) {
         const mappedSales: SalesHistoryItem[] = saleItems.map((si: any) => ({
           order_id: si.orders?.id || '—',
-          customer_name: si.orders?.customer_name || 'Walk-in Customer',
+          customer_name: si.orders?.customer_name || 'WALK-IN CUSTOMER',
           sale_date: si.orders?.created_at ? new Date(si.orders.created_at).toLocaleDateString('en-IN') : '—',
           quantity: Number(si.quantity || 0),
           unit_price: Number(si.price || 0),
@@ -258,6 +283,37 @@ export default function InventoryManager() {
     }
   };
 
+  // DETAILED STOCK MATRIX FOR A CHOSEN PRODUCT ACROSS ALL SHADES & SIZES
+  const productMatrixSummary = useMemo(() => {
+    if (!selectedItemForHistory) return null;
+    const prodId = selectedItemForHistory.product_id;
+    const prodItems = inventoryList.filter((it) => String(it.product_id) === String(prodId));
+
+    const shadeMap = new Map<string, Map<string, number>>();
+    const allSizesSet = new Set<string>();
+
+    prodItems.forEach((it) => {
+      const c = it.color.toUpperCase();
+      const s = it.size.toUpperCase();
+      allSizesSet.add(s);
+
+      if (!shadeMap.has(c)) {
+        shadeMap.set(c, new Map<string, number>());
+      }
+      shadeMap.get(c)!.set(s, it.available_stock);
+    });
+
+    const sizes = Array.from(allSizesSet);
+    const shades = Array.from(shadeMap.entries()).map(([color, sizeStockMap]) => ({
+      color,
+      hex: coloursList.find((c) => c.name?.toUpperCase() === color)?.hex_code || '#6d4aff',
+      stocks: sizes.map((sz) => sizeStockMap.get(sz) || 0),
+      totalShadeStock: Array.from(sizeStockMap.values()).reduce((a, b) => a + b, 0)
+    }));
+
+    return { sizes, shades };
+  }, [selectedItemForHistory, inventoryList, coloursList]);
+
   const lowStockCount = useMemo(() => {
     return inventoryList.filter((it) => it.available_stock > 0 && it.available_stock <= 3).length;
   }, [inventoryList]);
@@ -269,7 +325,7 @@ export default function InventoryManager() {
   const distinctCategories = useMemo(() => {
     const set = new Set<string>();
     inventoryList.forEach((it) => {
-      if (it.category) set.add(it.category.trim());
+      if (it.category) set.add(it.category.trim().toUpperCase());
     });
     return Array.from(set).sort();
   }, [inventoryList]);
@@ -278,7 +334,7 @@ export default function InventoryManager() {
     const set = new Set<string>();
     inventoryList.forEach((it) => {
       if (selectedCategoryFilter === 'all' || it.category.toLowerCase() === selectedCategoryFilter.toLowerCase()) {
-        if (it.sub_category) set.add(it.sub_category.trim());
+        if (it.sub_category) set.add(it.sub_category.trim().toUpperCase());
       }
     });
     return Array.from(set).sort();
@@ -299,36 +355,37 @@ export default function InventoryManager() {
         return false;
       }
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const matchCode = item.product_code.toLowerCase().includes(q);
-        const matchName = item.product_name.toLowerCase().includes(q);
-        const matchSubCat = item.sub_category.toLowerCase().includes(q);
-        const matchColor = item.color.toLowerCase().includes(q);
-        const matchSize = item.size.toLowerCase().includes(q);
-        return matchCode || matchName || matchSubCat || matchColor || matchSize;
+        const q = searchQuery.toUpperCase().trim();
+        return (
+          item.product_code.includes(q) ||
+          item.product_name.includes(q) ||
+          item.sub_category.includes(q) ||
+          item.color.includes(q) ||
+          item.size.includes(q)
+        );
       }
       return true;
     });
 
     return list.sort((a, b) => {
-      return String(a.product_code || '').localeCompare(String(b.product_code || ''), undefined, {
-        numeric: true,
-        sensitivity: 'base'
-      });
+      const codeA = String(a.product_code || '');
+      const codeB = String(b.product_code || '');
+      const cmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      if (cmp !== 0) return cmp;
+      return a.color.localeCompare(b.color);
     });
   }, [inventoryList, selectedCategoryFilter, selectedSubCatFilter, stockLevelFilter, searchQuery]);
 
   return (
-    <div className="space-y-3 font-sans text-xs select-none">
+    <div className="space-y-3 font-sans text-xs select-none uppercase">
       
       {/* 1. FILTER & SEARCH CONTROL BAR */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
         
-        {/* Left: Filter dropdowns */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
             <Filter className="w-3.5 h-3.5 text-[#00d9ff]" />
-            <span className="text-[11px] font-bold text-[#8b9bb4] uppercase tracking-wider">Filter:</span>
+            <span className="text-[11px] font-bold text-[#8b9bb4] uppercase tracking-wider">FILTER:</span>
             
             <select
               value={selectedCategoryFilter}
@@ -336,9 +393,9 @@ export default function InventoryManager() {
                 setSelectedCategoryFilter(e.target.value);
                 setSelectedSubCatFilter('all');
               }}
-              className="bg-transparent text-white font-bold text-xs outline-none cursor-pointer pr-1"
+              className="bg-transparent text-white font-bold text-xs outline-none cursor-pointer pr-1 uppercase"
             >
-              <option value="all" className="bg-[#101628] text-white">All Categories</option>
+              <option value="all" className="bg-[#101628] text-white">ALL CATEGORIES</option>
               {distinctCategories.map((cat) => (
                 <option key={cat} value={cat} className="bg-[#101628] text-white">
                   {cat}
@@ -349,13 +406,13 @@ export default function InventoryManager() {
 
           {distinctSubCategories.length > 0 && (
             <div className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
-              <span className="text-[11px] text-[#8b9bb4] font-semibold">Sub-Cat:</span>
+              <span className="text-[11px] text-[#8b9bb4] font-semibold">SUB-CAT:</span>
               <select
                 value={selectedSubCatFilter}
                 onChange={(e) => setSelectedSubCatFilter(e.target.value)}
-                className="bg-transparent text-[#00d9ff] font-bold text-xs outline-none cursor-pointer"
+                className="bg-transparent text-[#00d9ff] font-bold text-xs outline-none cursor-pointer uppercase"
               >
-                <option value="all" className="bg-[#101628] text-white">All Sub-Categories</option>
+                <option value="all" className="bg-[#101628] text-white">ALL SUB-CATEGORIES</option>
                 {distinctSubCategories.map((sub) => (
                   <option key={sub} value={sub} className="bg-[#101628] text-white">
                     {sub}
@@ -372,17 +429,15 @@ export default function InventoryManager() {
                 setSelectedCategoryFilter('all');
                 setSelectedSubCatFilter('all');
               }}
-              className="p-1 rounded-lg hover:bg-white/10 text-[#ff6b6b] text-[11px] font-bold cursor-pointer"
+              className="p-1 rounded-lg hover:bg-white/10 text-[#ff6b6b] text-[11px] font-bold cursor-pointer uppercase"
               title="Reset Filters"
             >
-              Clear
+              CLEAR
             </button>
           )}
         </div>
 
-        {/* Right: Low & Out badges placed before Search Bar */}
         <div className="flex items-center gap-2">
-          
           <button
             type="button"
             onClick={() => setStockLevelFilter(stockLevelFilter === 'low' ? 'all' : 'low')}
@@ -392,7 +447,7 @@ export default function InventoryManager() {
                 : 'bg-[#ffa500]/10 text-[#ffa500] border-[#ffa500]/30 hover:bg-[#ffa500]/20'
             }`}
           >
-            <span>Low:</span>
+            <span>LOW:</span>
             <span className="font-extrabold">{lowStockCount}</span>
           </button>
 
@@ -405,7 +460,7 @@ export default function InventoryManager() {
                 : 'bg-[#ff6b6b]/10 text-[#ff6b6b] border-[#ff6b6b]/30 hover:bg-[#ff6b6b]/20'
             }`}
           >
-            <span>Out:</span>
+            <span>OUT:</span>
             <span className="font-extrabold">{outOfStockCount}</span>
           </button>
 
@@ -413,9 +468,9 @@ export default function InventoryManager() {
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search code, title, color, size..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff]"
+              onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+              placeholder="SEARCH CODE, TITLE, COLOR, SIZE..."
+              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff] uppercase font-mono"
             />
             <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
           </div>
@@ -431,32 +486,35 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE */}
+      {/* 2. INVENTORY TABLE (DETAILED PRICING & HIGHLIGHTED PRODUCT NAMES) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse table-fixed">
+          <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[11px] uppercase tracking-wider">
-                <th className="py-3 px-3.5 w-[30%]">Product Code & Name</th>
-                <th className="py-3 px-3 w-[20%]">Category / Sub-Category</th>
-                <th className="py-3 px-3 w-[15%]">Colour</th>
-                <th className="py-3 px-3 text-center w-[10%]">Size</th>
-                <th className="py-3 px-3.5 text-right w-[12%]">Selling Price</th>
-                <th className="py-3 px-3.5 text-center w-[13%]">Available Stock</th>
+              <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
+                <th className="py-2.5 px-3">PRODUCT CODE & NAME</th>
+                <th className="py-2.5 px-3">CATEGORY & SUB-CATEGORY</th>
+                <th className="py-2.5 px-3">COLOUR</th>
+                <th className="py-2.5 px-3 text-center">SIZE</th>
+                <th className="py-2.5 px-3 text-right">COST PRICE</th>
+                <th className="py-2.5 px-3 text-right">LANDED PRICE</th>
+                <th className="py-2.5 px-3 text-right">STORE PRICE</th>
+                <th className="py-2.5 px-3 text-right">ONLINE PRICE</th>
+                <th className="py-2.5 px-3 text-center">AVAILABLE STOCK</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 text-[13px]">
+            <tbody className="divide-y divide-white/5 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[#8b9bb4]">
+                  <td colSpan={9} className="p-8 text-center text-[#8b9bb4]">
                     <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-2" />
-                    Loading real-time inventory sorted by Product Code...
+                    LOADING REAL-TIME INVENTORY...
                   </td>
                 </tr>
               ) : filteredInventory.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-[#8b9bb4] italic text-xs">
-                    No inventory records match your criteria. Click &quot;Purchase&quot; to inward stock.
+                  <td colSpan={9} className="p-8 text-center text-[#8b9bb4] italic text-xs uppercase">
+                    NO INVENTORY RECORDS MATCH YOUR CRITERIA.
                   </td>
                 </tr>
               ) : (
@@ -469,51 +527,70 @@ export default function InventoryManager() {
                       key={item.id}
                       onClick={() => handleOpenProductHistory(item)}
                       className="hover:bg-white/[0.04] transition-all cursor-pointer group"
-                      title="Click to view complete inward & sales history"
+                      title="CLICK TO VIEW DETAILED MATRIX & VARIANT STOCK"
                     >
-                      <td className="py-3 px-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-extrabold text-[#00ff9d] text-[13px] shrink-0 group-hover:underline">
-                            [{item.product_code}]
-                          </span>
-                          <span className="font-bold text-white text-[13px] block truncate">
-                            {item.product_name}
-                          </span>
-                        </div>
+                      {/* PRODUCT CODE & HIGHLIGHTED NAME */}
+                      <td className="py-2.5 px-3">
+                        <span className="font-mono font-bold text-[#00ff9d] text-[11px] block">
+                          [{item.product_code}]
+                        </span>
+                        <span className="font-extrabold text-white text-xs block truncate mt-0.5 tracking-wide">
+                          {item.product_name}
+                        </span>
                       </td>
 
-                      <td className="py-3 px-3">
-                        <span className="font-extrabold text-white text-[13px] block capitalize truncate">
+                      {/* CATEGORY & SUB-CATEGORY */}
+                      <td className="py-2.5 px-3">
+                        <span className="font-bold text-white text-xs block">
                           {item.category}
                         </span>
-                        <span className="text-[11px] font-mono text-[#8b9bb4] block truncate">
+                        <span className="text-[10px] font-mono text-[#8b9bb4] block mt-0.5">
                           {item.sub_category}
                         </span>
                       </td>
 
-                      <td className="py-3 px-3">
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#0a0e17] border border-white/10 max-w-full">
+                      {/* COLOUR */}
+                      <td className="py-2.5 px-3">
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0a0e17] border border-white/10 max-w-full">
                           <span
-                            className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
+                            className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0 shadow"
                             style={{ backgroundColor: item.hex_code }}
                           />
-                          <span className="font-bold text-white text-[12.5px] truncate">
+                          <span className="font-bold text-white text-[11px] truncate uppercase">
                             {item.color}
                           </span>
                         </div>
                       </td>
 
-                      <td className="py-3 px-3 text-center font-mono font-black text-[#00d9ff] text-[13px]">
+                      {/* SIZE */}
+                      <td className="py-2.5 px-3 text-center font-mono font-black text-[#00d9ff] text-xs">
                         {item.size}
                       </td>
 
-                      <td className="py-3 px-3.5 text-right font-mono font-extrabold text-white text-[13.5px]">
-                        ₹{item.selling_price.toLocaleString('en-IN')}
+                      {/* COST PRICE */}
+                      <td className="py-2.5 px-3 text-right font-mono text-[#8b9bb4]">
+                        ₹{item.cost_price ? item.cost_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      <td className="py-3 px-3.5 text-center">
+                      {/* LANDED PRICE */}
+                      <td className="py-2.5 px-3 text-right font-mono text-[#ffa500]">
+                        ₹{item.landed_price ? item.landed_price.toLocaleString('en-IN') : '—'}
+                      </td>
+
+                      {/* STORE PRICE */}
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                        ₹{item.store_price ? item.store_price.toLocaleString('en-IN') : item.selling_price.toLocaleString('en-IN')}
+                      </td>
+
+                      {/* ONLINE PRICE */}
+                      <td className="py-2.5 px-3 text-right font-mono text-[#00d9ff]">
+                        ₹{item.online_price ? item.online_price.toLocaleString('en-IN') : '—'}
+                      </td>
+
+                      {/* AVAILABLE STOCK */}
+                      <td className="py-2.5 px-3 text-center">
                         <span
-                          className={`inline-flex items-center justify-center min-w-[65px] px-3 py-1 rounded-full font-mono text-xs font-black border ${
+                          className={`inline-flex items-center justify-center min-w-[55px] px-2.5 py-0.5 rounded-full font-mono text-[10.5px] font-black border ${
                             isOut
                               ? 'bg-[#ff6b6b]/15 text-[#ff6b6b] border-[#ff6b6b]/30'
                               : isLow
@@ -521,7 +598,7 @@ export default function InventoryManager() {
                               : 'bg-[#00ff9d]/15 text-[#00ff9d] border-[#00ff9d]/30'
                           }`}
                         >
-                          {item.available_stock} Units
+                          {item.available_stock} UNITS
                         </span>
                       </td>
                     </tr>
@@ -533,25 +610,22 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. PRODUCT LIFECYCLE HISTORY MODAL */}
+      {/* 3. DETAILED PRODUCT MATRIX & AUDIT TRAIL MODAL */}
       {selectedItemForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-3xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
             
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00d9ff] to-[#6d4aff] text-white flex items-center justify-center shadow">
-                  <History className="w-4 h-4 text-white" />
+                  <Grid className="w-4 h-4 text-white" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2 uppercase">
                     <span>[{selectedItemForHistory.product_code}] {selectedItemForHistory.product_name}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[10px] font-mono font-bold">
-                      {selectedItemForHistory.color} • {selectedItemForHistory.size}
-                    </span>
                   </h4>
-                  <span className="text-[10.5px] text-[#8b9bb4]">
-                    Complete Product Audit Trail: Inward Purchases & Customer Outward Dispatches
+                  <span className="text-[10px] font-mono text-[#00d9ff]">
+                    DETAILED VARIANT STOCK MATRIX (SHADES VS SIZES) • AUDIT TRAIL
                   </span>
                 </div>
               </div>
@@ -559,60 +633,88 @@ export default function InventoryManager() {
               <button
                 type="button"
                 onClick={() => setSelectedItemForHistory(null)}
-                className="p-1 rounded-xl bg-white/5 hover:bg-white/10 text-[#8b9bb4] hover:text-white cursor-pointer"
+                className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#8b9bb4] hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-[#0a0e17] border border-white/10 text-center font-mono">
-              <div>
-                <span className="text-[9px] text-[#8b9bb4] uppercase block">Selling Price</span>
-                <span className="font-extrabold text-white text-xs">₹{selectedItemForHistory.selling_price}</span>
+            {/* Matrix View Grid */}
+            {productMatrixSummary && productMatrixSummary.shades.length > 0 && (
+              <div className="space-y-1.5 shrink-0">
+                <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                  LIVE STOCK MATRIX (SHADES & SIZES BREAKDOWN):
+                </span>
+                
+                <div className="border border-white/10 rounded-2xl overflow-x-auto bg-[#0a0e17] max-h-56">
+                  <table className="w-full text-center border-collapse">
+                    <thead>
+                      <tr className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
+                        <th className="py-2 px-3 text-left">COLOUR \ SIZE</th>
+                        {productMatrixSummary.sizes.map((sz) => (
+                          <th key={sz} className="py-2 px-2 text-[#00d9ff] font-bold">{sz}</th>
+                        ))}
+                        <th className="py-2 px-3 text-right text-[#00ff9d]">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-mono text-xs">
+                      {productMatrixSummary.shades.map((sh) => (
+                        <tr key={sh.color} className="hover:bg-white/[0.02]">
+                          <td className="py-2 px-3 text-left font-bold text-white uppercase flex items-center gap-2">
+                            <span
+                              className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
+                              style={{ backgroundColor: sh.hex }}
+                            />
+                            <span>{sh.color}</span>
+                          </td>
+                          {sh.stocks.map((st, i) => (
+                            <td key={i} className={`py-2 px-2 font-bold ${st > 0 ? 'text-[#00ff9d]' : 'text-[#8b9bb4]/40'}`}>
+                              {st}
+                            </td>
+                          ))}
+                          <td className="py-2 px-3 text-right font-black text-[#00ff9d]">
+                            {sh.totalShadeStock}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div>
-                <span className="text-[9px] text-[#8b9bb4] uppercase block">Current Stock</span>
-                <span className="font-extrabold text-[#00ff9d] text-xs">{selectedItemForHistory.available_stock} Units</span>
-              </div>
-              <div>
-                <span className="text-[9px] text-[#8b9bb4] uppercase block">Sub-Category</span>
-                <span className="font-extrabold text-[#00d9ff] text-xs">{selectedItemForHistory.sub_category}</span>
-              </div>
-            </div>
+            )}
 
             <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar p-1">
               {loadingHistory ? (
                 <div className="p-8 text-center text-[#8b9bb4]">
                   <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-1.5" />
-                  Fetching lifecycle logs...
+                  FETCHING LIFECYCLE LOGS...
                 </div>
               ) : (
                 <>
                   {/* Purchase Inward Log */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
+                    <div className="flex items-center justify-between text-xs font-mono uppercase">
+                      <span className="font-bold text-[#00d9ff] flex items-center gap-1.5">
                         <ArrowDownLeft className="w-3.5 h-3.5 text-[#00d9ff]" />
-                        Purchase Inward Log (Ekkada Konnam / Supplier Bills)
+                        PURCHASE INWARD LOG ({purchaseHistory.length})
                       </span>
-                      <span className="text-[#8b9bb4]">{purchaseHistory.length} Inward Records</span>
                     </div>
 
                     <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
                       {purchaseHistory.length === 0 ? (
-                        <div className="p-4 text-center text-[#8b9bb4] italic text-xs">
-                          No direct purchase inward records tracked for this specific variant.
+                        <div className="p-4 text-center text-[#8b9bb4] italic text-xs uppercase">
+                          NO DIRECT PURCHASE INWARD RECORDS TRACKED FOR THIS VARIANT.
                         </div>
                       ) : (
-                        <table className="w-full text-left text-xs">
+                        <table className="w-full text-left text-xs uppercase">
                           <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
                             <tr>
-                              <th className="py-1.5 px-2.5">Purchase Bill</th>
-                              <th className="py-1.5 px-2.5">Supplier Name</th>
-                              <th className="py-1.5 px-2 text-center">Date</th>
-                              <th className="py-1.5 px-2 text-center">Qty</th>
-                              <th className="py-1.5 px-2 text-right">Cost (₹)</th>
-                              <th className="py-1.5 px-2.5 text-right">Total (₹)</th>
+                              <th className="py-1.5 px-2.5">PURCHASE BILL</th>
+                              <th className="py-1.5 px-2.5">SUPPLIER NAME</th>
+                              <th className="py-1.5 px-2 text-center">DATE</th>
+                              <th className="py-1.5 px-2 text-center">QTY</th>
+                              <th className="py-1.5 px-2 text-right">COST (₹)</th>
+                              <th className="py-1.5 px-2.5 text-right">TOTAL (₹)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5 font-mono">
@@ -620,7 +722,7 @@ export default function InventoryManager() {
                               <tr key={idx} className="hover:bg-white/[0.02]">
                                 <td className="py-2 px-2.5 font-bold text-[#00ff9d]">
                                   {ph.purchase_id}
-                                  <span className="block text-[9px] text-[#8b9bb4]">Bill: {ph.supplier_bill_no}</span>
+                                  <span className="block text-[9px] text-[#8b9bb4]">BILL: {ph.supplier_bill_no}</span>
                                 </td>
                                 <td className="py-2 px-2.5 font-sans font-semibold text-white">{ph.supplier_name}</td>
                                 <td className="py-2 px-2 text-center text-[#8b9bb4] text-[11px]">{ph.purchase_date}</td>
@@ -637,29 +739,28 @@ export default function InventoryManager() {
 
                   {/* Sales Dispatch Log */}
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-mono">
-                      <span className="font-bold text-[#ffa500] uppercase flex items-center gap-1.5">
+                    <div className="flex items-center justify-between text-xs font-mono uppercase">
+                      <span className="font-bold text-[#ffa500] flex items-center gap-1.5">
                         <ArrowUpRight className="w-3.5 h-3.5 text-[#ffa500]" />
-                        Sales Dispatch Log (Yevariki Ammanu / Customer Orders)
+                        SALES DISPATCH LOG ({salesHistory.length})
                       </span>
-                      <span className="text-[#8b9bb4]">{salesHistory.length} Sales Records</span>
                     </div>
 
                     <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
                       {salesHistory.length === 0 ? (
-                        <div className="p-4 text-center text-[#8b9bb4] italic text-xs">
-                          No outward customer sales recorded for this specific variant yet.
+                        <div className="p-4 text-center text-[#8b9bb4] italic text-xs uppercase">
+                          NO OUTWARD CUSTOMER SALES RECORDED FOR THIS VARIANT YET.
                         </div>
                       ) : (
-                        <table className="w-full text-left text-xs">
+                        <table className="w-full text-left text-xs uppercase">
                           <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
                             <tr>
-                              <th className="py-1.5 px-2.5">Order No</th>
-                              <th className="py-1.5 px-2.5">Customer Name</th>
-                              <th className="py-1.5 px-2 text-center">Date</th>
-                              <th className="py-1.5 px-2 text-center">Qty Sold</th>
-                              <th className="py-1.5 px-2 text-right">Price (₹)</th>
-                              <th className="py-1.5 px-2.5 text-right">Total (₹)</th>
+                              <th className="py-1.5 px-2.5">ORDER NO</th>
+                              <th className="py-1.5 px-2.5">CUSTOMER NAME</th>
+                              <th className="py-1.5 px-2 text-center">DATE</th>
+                              <th className="py-1.5 px-2 text-center">QTY SOLD</th>
+                              <th className="py-1.5 px-2 text-right">PRICE (₹)</th>
+                              <th className="py-1.5 px-2.5 text-right">TOTAL (₹)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-white/5 font-mono">
@@ -686,9 +787,9 @@ export default function InventoryManager() {
               <button
                 type="button"
                 onClick={() => setSelectedItemForHistory(null)}
-                className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer uppercase"
               >
-                Close History
+                CLOSE MATRIX & HISTORY
               </button>
             </div>
 
