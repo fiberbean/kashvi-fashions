@@ -116,20 +116,20 @@ export default function InventoryManager() {
       const latestCostMap = new Map<string, number>();
       purchaseRecords.forEach((pi: any) => {
         if (pi.product_id && pi.unit_cost) {
-          latestCostMap.set(String(pi.product_id).toUpperCase(), Number(pi.unit_cost));
+          latestCostMap.set(String(pi.product_id).toUpperCase().trim(), Number(pi.unit_cost));
         }
       });
 
       const groupedMap = new Map<string, InventoryProductRow>();
 
       products.forEach((prod) => {
-        const pId = String(prod.id);
+        const pId = String(prod.id).toUpperCase().trim();
         const code = String(prod.code || prod.id);
         const name = String(prod.name || 'UNKNOWN PRODUCT');
         const cat = String(prod.category || 'FASHION');
         const subCat = String(prod.sub_category || 'GENERAL');
 
-        const baseCost = Number(prod.cost_price || prod.price || latestCostMap.get(pId.toUpperCase()) || 0);
+        const baseCost = Number(prod.cost_price || prod.price || latestCostMap.get(pId) || 0);
         const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
         const store = prod.offline_price || prod.store_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
         const online = prod.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
@@ -149,15 +149,35 @@ export default function InventoryManager() {
         });
       });
 
+      // Map inventory records precisely
+      const variantStockMap = new Map<string, number>();
       inventoryRecords.forEach((inv: any) => {
-        const pId = String(inv.product_id);
+        const pId = String(inv.product_id).toUpperCase().trim();
+        const color = String(inv.variant_color || inv.color || 'STANDARD').toUpperCase().trim();
+        const size = String(inv.variant_size || inv.size || 'FREE SIZE').toUpperCase().trim();
+        const stock = Number(inv.stock_quantity ?? inv.quantity ?? 0);
+        const key = `${pId}___${color}___${size}`;
+        variantStockMap.set(key, (variantStockMap.get(key) || 0) + stock);
+      });
+
+      // Fallback from purchase items if any variant is missing in inventory
+      purchaseRecords.forEach((pi: any) => {
+        const pId = String(pi.product_id).toUpperCase().trim();
+        const color = String(pi.variant_color || pi.color || 'STANDARD').toUpperCase().trim();
+        const size = String(pi.variant_size || pi.size || 'FREE SIZE').toUpperCase().trim();
+        const qty = Number(pi.quantity || 0);
+        const key = `${pId}___${color}___${size}`;
+
+        if (!variantStockMap.has(key)) {
+          variantStockMap.set(key, qty);
+        }
+      });
+
+      variantStockMap.forEach((stock, key) => {
+        const [pId, color, size] = key.split('___');
         if (groupedMap.has(pId)) {
           const row = groupedMap.get(pId)!;
-          const color = String(inv.variant_color || inv.color || 'STANDARD').toUpperCase();
-          const size = String(inv.variant_size || inv.size || 'FREE SIZE').toUpperCase();
-          const stock = Number(inv.stock_quantity ?? inv.quantity ?? 0);
           const hex = colorHexMap.get(color.toLowerCase().trim()) || '#6d4aff';
-
           row.variants.push({ color, size, stock, hex });
           row.total_stock += stock;
         }
@@ -165,7 +185,7 @@ export default function InventoryManager() {
 
       groupedMap.forEach((row, pId) => {
         if (row.variants.length === 0) {
-          const prod = products.find((p) => String(p.id) === pId);
+          const prod = products.find((p) => String(p.id).toUpperCase().trim() === pId);
           let sizes = ['FREE SIZE'];
           if (prod?.size) {
             sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim().toUpperCase()) : prod.size;
@@ -467,7 +487,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE (BIGGER CUBES WITH EXACT STOCK COUNT) */}
+      {/* 2. INVENTORY TABLE */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -536,7 +556,6 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* BIGGER COLOR CUBES (w-9 h-9) WITH STOCK COUNT */}
                       <td className="py-3 px-3">
                         <div className="flex flex-wrap gap-2 max-w-[260px]">
                           {uniqueColors.map((uc) => {
