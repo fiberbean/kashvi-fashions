@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Loader2,
   Trash2,
+  Edit2,
   X,
   Check,
   Eye,
@@ -24,8 +25,7 @@ import {
   BookOpen,
   Clock,
   Globe,
-  AlertTriangle,
-  Download
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { AdminStaffUser } from '../types';
@@ -223,6 +223,17 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
   const [viewingOrder, setViewingOrder] = useState<OrderRecord | null>(null);
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
 
+  // Edit Invoice State
+  const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
+  const [editPaymentMode, setEditPaymentMode] = useState<'cash' | 'upi'>('cash');
+  const [editUtrNumber, setEditUtrNumber] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<string>('paid');
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  const activeRole = String(currentUser?.role || sessionStorage.getItem('kfmama_auth_role') || 'admin').toLowerCase().trim();
+  const canEdit = activeRole === 'admin' || activeRole === 'manager';
+  const canDelete = activeRole === 'admin';
+
   const generateCustomerId = async () => {
     try {
       const { data } = await supabase
@@ -273,8 +284,9 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
   const loadData = async () => {
     setLoading(true);
     try {
+      // Offline POS orders only for Sales Billing Desk
       const [orderRes, prodRes, invRes, purchRes, clrRes, custRes, sizeRes, subCatRes] = await Promise.all([
-        supabase.from('orders').select('*').order('created_at', { ascending: false }),
+        supabase.from('orders').select('*').like('id', 'KFINV%').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
         supabase.from('inventory').select('*'),
         supabase.from('purchase_items').select('*'),
@@ -845,7 +857,91 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     }
   };
 
-  // CLEAN PROFESSIONAL PRINT / SAVE AS PDF FUNCTION
+  const handleOpenEditOrder = (ord: OrderRecord) => {
+    setEditingOrder(ord);
+    setEditPaymentMode((ord.payment_mode === 'upi' ? 'upi' : 'cash'));
+    setEditUtrNumber(ord.payment_ref || '');
+    setEditStatus(ord.payment_status || 'paid');
+  };
+
+  const handleSaveEditedOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+    setSavingEdit(true);
+
+    try {
+      const cleanUtr = editUtrNumber.trim().toUpperCase();
+      const statusToSave = editPaymentMode === 'upi' && !cleanUtr ? 'utr_pending' : editStatus;
+
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          payment_mode: editPaymentMode,
+          payment_method: editPaymentMode.toUpperCase(),
+          payment_ref: editPaymentMode === 'upi' && cleanUtr ? cleanUtr : null,
+          payment_status: statusToSave,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingOrder.id);
+
+      if (error) throw error;
+
+      setEditingOrder(null);
+      loadData();
+    } catch (err: any) {
+      alert('Failed to update invoice: ' + err.message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteOrder = async (ord: OrderRecord) => {
+    if (!confirm(`Are you sure you want to delete invoice ${ord.id}? The sold quantities will be automatically restored back to stock.`)) {
+      return;
+    }
+
+    try {
+      let itemsToRollback: any[] = [];
+      if (ord.items && Array.isArray(ord.items)) {
+        itemsToRollback = ord.items;
+      } else {
+        const { data: dbItems } = await supabase.from('order_items').select('*').eq('order_id', ord.id);
+        itemsToRollback = dbItems || [];
+      }
+
+      for (const it of itemsToRollback) {
+        const pId = String(it.product_id || '').toUpperCase().trim();
+        const color = String(it.color || it.variant_color || 'STANDARD').toUpperCase().trim();
+        const size = String(it.size || it.variant_size || 'FREE SIZE').toUpperCase().trim();
+        const qty = Number(it.quantity || 0);
+
+        const { data: invRow } = await supabase
+          .from('inventory')
+          .select('id, stock_quantity')
+          .ilike('product_id', pId)
+          .ilike('variant_color', color)
+          .ilike('variant_size', size)
+          .maybeSingle();
+
+        if (invRow) {
+          const restoredQty = Number(invRow.stock_quantity ?? 0) + qty;
+          await supabase
+            .from('inventory')
+            .update({ stock_quantity: restoredQty, updated_at: new Date().toISOString() })
+            .eq('id', invRow.id);
+        }
+      }
+
+      await supabase.from('order_items').delete().eq('order_id', ord.id);
+      const { error } = await supabase.from('orders').delete().eq('id', ord.id);
+      if (error) throw error;
+
+      setOrders((prev) => prev.filter((o) => o.id !== ord.id));
+    } catch (err: any) {
+      alert('Failed to delete invoice: ' + err.message);
+    }
+  };
+
   const handlePrintReceipt = (inv: OrderRecord, itemsList: any[]) => {
     const lineItems = itemsList.length > 0 ? itemsList : (inv.items || inv.items_summary || []);
     const printWindow = window.open('', '_blank', 'width=850,height=900');
@@ -1254,7 +1350,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                         ₹{Number(ord.final_amount || ord.total || ord.total_amount || 0).toLocaleString('en-IN')}
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <div className="inline-flex items-center gap-1">
+                        <div className="inline-flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => handleOpenViewOrder(ord)}
@@ -1263,6 +1359,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
+                          
                           <button
                             type="button"
                             onClick={() => handlePrintReceipt(ord, [])}
@@ -1271,6 +1368,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                           >
                             <Printer className="w-3.5 h-3.5" />
                           </button>
+
                           <button
                             type="button"
                             onClick={() => handleShareWhatsApp(ord, [])}
@@ -1279,6 +1377,30 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                           >
                             <Share2 className="w-3.5 h-3.5" />
                           </button>
+
+                          {/* DIRECT ADMIN / MANAGER EDIT BUTTON */}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditOrder(ord)}
+                              className="p-1.5 rounded-lg bg-[#00d9ff]/10 hover:bg-[#00d9ff]/20 text-[#00d9ff] cursor-pointer"
+                              title="Edit Invoice"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          {/* DIRECT SUPER ADMIN DELETE BUTTON */}
+                          {canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrder(ord)}
+                              className="p-1.5 rounded-lg bg-[#ff6b6b]/15 hover:bg-[#ff6b6b]/30 text-[#ff6b6b] cursor-pointer"
+                              title="Delete Invoice"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -1289,6 +1411,102 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
           </table>
         </div>
       </div>
+
+      {/* EDIT INVOICE MODAL */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-[100020] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-[#00d9ff]" />
+                <h3 className="text-sm font-bold text-white uppercase">EDIT INVOICE #{editingOrder.id}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                className="text-[#8b9bb4] hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedOrder} className="space-y-3.5">
+              <div>
+                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                  CUSTOMER NAME
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value={editingOrder.customer_name}
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white font-mono font-bold text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                  PAYMENT MODE
+                </label>
+                <select
+                  value={editPaymentMode}
+                  onChange={(e) => setEditPaymentMode(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
+                >
+                  <option value="cash">CASH</option>
+                  <option value="upi">UPI PAYMENT</option>
+                </select>
+              </div>
+
+              {editPaymentMode === 'upi' && (
+                <div>
+                  <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                    UPI / UTR REFERENCE NO
+                  </label>
+                  <input
+                    type="text"
+                    value={editUtrNumber}
+                    onChange={(e) => setEditUtrNumber(e.target.value.toUpperCase())}
+                    placeholder="ENTER UTR NO..."
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00d9ff] font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                  PAYMENT STATUS
+                </label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
+                >
+                  <option value="paid">PAID</option>
+                  <option value="utr_pending">UTR PENDING</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setEditingOrder(null)}
+                  className="px-4 py-2 rounded-xl text-[#8b9bb4] hover:text-white text-xs font-semibold cursor-pointer uppercase"
+                >
+                  CANCEL
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50 uppercase"
+                >
+                  {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>SAVE CHANGES</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* DIALOG 1: CUSTOMER CHOICE */}
       {isCustomerPromptOpen && (
