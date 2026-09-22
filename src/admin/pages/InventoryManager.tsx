@@ -79,6 +79,22 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
 }
 
+function getDynamicColorHex(colorName: string): string {
+  const c = (colorName || '').toLowerCase().trim();
+  if (c.includes('red') || c.includes('rani') || c.includes('rose') || c.includes('crimson') || c.includes('maroon')) return '#E30B5C';
+  if (c.includes('green') || c.includes('pista') || c.includes('mint') || c.includes('olive')) return '#00843D';
+  if (c.includes('blue') || c.includes('navy') || c.includes('teal') || c.includes('aqua') || c.includes('sky')) return '#0052CC';
+  if (c.includes('yellow') || c.includes('gold') || c.includes('mustard')) return '#FFB800';
+  if (c.includes('purple') || c.includes('violet') || c.includes('lavender') || c.includes('lilac')) return '#7E57C2';
+  if (c.includes('orange') || c.includes('peach') || c.includes('rust')) return '#FF7043';
+  if (c.includes('black') || c.includes('charcoal')) return '#212121';
+  if (c.includes('white') || c.includes('cream') || c.includes('ivory') || c.includes('offwhite')) return '#F5F5F5';
+  if (c.includes('pink')) return '#FF69B4';
+  if (c.includes('brown') || c.includes('khaki') || c.includes('beige')) return '#8D6E63';
+  if (c.includes('grey') || c.includes('gray')) return '#757575';
+  return '#6d4aff';
+}
+
 export default function InventoryManager() {
   const [productRows, setProductRows] = useState<InventoryProductRow[]>([]);
   const [coloursList, setColoursList] = useState<any[]>([]);
@@ -109,7 +125,9 @@ export default function InventoryManager() {
 
       let colorHexMap = new Map<string, string>();
       (colorRes.data || []).forEach((c: any) => {
-        if (c.name) colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code || '#6d4aff');
+        if (c.name && c.hex_code) {
+          colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code.trim());
+        }
       });
       setColoursList(colorRes.data || []);
 
@@ -175,7 +193,7 @@ export default function InventoryManager() {
         const [pId, color, size] = key.split('___');
         if (groupedMap.has(pId)) {
           const row = groupedMap.get(pId)!;
-          const hex = colorHexMap.get(color.toLowerCase().trim()) || '#6d4aff';
+          const hex = colorHexMap.get(color.toLowerCase().trim()) || getDynamicColorHex(color);
           row.variants.push({ color, size, stock, hex });
           row.total_stock += stock;
         }
@@ -195,7 +213,7 @@ export default function InventoryManager() {
 
           colors.forEach((c) => {
             sizes.forEach((s) => {
-              const hex = colorHexMap.get(c.toLowerCase().trim()) || '#6d4aff';
+              const hex = colorHexMap.get(c.toLowerCase().trim()) || getDynamicColorHex(c);
               row.variants.push({ color: c, size: s, stock: 0, hex });
             });
           });
@@ -492,7 +510,8 @@ export default function InventoryManager() {
                   const uniqueColors = Array.from(new Set(row.variants.map((v) => v.color))).map((colorName) => {
                     const found = row.variants.find((v) => v.color === colorName);
                     const shadeStock = row.variants.filter((v) => v.color === colorName).reduce((sum, v) => sum + v.stock, 0);
-                    return { color: colorName, hex: found?.hex || '#6d4aff', stock: shadeStock };
+                    const dynamicHex = found?.hex && found.hex !== '#6d4aff' ? found.hex : getDynamicColorHex(colorName);
+                    return { color: colorName, hex: dynamicHex, stock: shadeStock };
                   });
 
                   const uniqueSizes = Array.from(new Set(row.variants.map((v) => v.size)));
@@ -525,7 +544,7 @@ export default function InventoryManager() {
                       <td className="py-3 px-3">
                         <div className="flex flex-wrap gap-2 max-w-[260px]">
                           {uniqueColors.map((uc) => {
-                            const cubeBg = uc.hex || '#6d4aff';
+                            const cubeBg = uc.hex;
                             const textColor = getContrastTextColor(cubeBg);
 
                             return (
@@ -600,7 +619,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. AUDIT TRAIL MODAL (WITHOUT MATRIX GRID) */}
+      {/* 3. AUDIT TRAIL MODAL */}
       {selectedProductForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -704,7 +723,7 @@ export default function InventoryManager() {
                           <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
                             <tr>
                               <th className="py-1.5 px-2.5">ORDER NO</th>
-                              <th className="py-1.5 px-2.5">CUSTOMER NAME</th>
+                              <th className="py-1.5 px-2.5">CUSTOMERNAME</th>
                               <th className="py-1.5 px-2 text-center">VARIANT</th>
                               <th className="py-1.5 px-2 text-center">DATE</th>
                               <th className="py-1.5 px-2 text-center">QTY SOLD</th>
