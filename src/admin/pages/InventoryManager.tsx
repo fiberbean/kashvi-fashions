@@ -16,7 +16,9 @@ import {
   History,
   TrendingUp,
   Tag,
-  Palette
+  Palette,
+  Filter,
+  ChevronDown
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -58,10 +60,11 @@ export default function InventoryManager() {
   const [inventoryList, setInventoryList] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [selectedSubCatFilter, setSelectedSubCatFilter] = useState<string>('all');
   const [stockLevelFilter, setStockLevelFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  // History Drawer / Modal state
+  // History Modal state
   const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryItem | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
@@ -242,17 +245,46 @@ export default function InventoryManager() {
     return inventoryList.filter((it) => it.available_stock <= 0).length;
   }, [inventoryList]);
 
+  // Extract distinct categories & sub-categories for Filter dropdowns
+  const distinctCategories = useMemo(() => {
+    const set = new Set<string>();
+    inventoryList.forEach((it) => {
+      if (it.category) set.add(it.category.trim());
+    });
+    return Array.from(set).sort();
+  }, [inventoryList]);
+
+  const distinctSubCategories = useMemo(() => {
+    const set = new Set<string>();
+    inventoryList.forEach((it) => {
+      if (selectedCategoryFilter === 'all' || it.category.toLowerCase() === selectedCategoryFilter.toLowerCase()) {
+        if (it.sub_category) set.add(it.sub_category.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [inventoryList, selectedCategoryFilter]);
+
   const filteredInventory = useMemo(() => {
     const list = inventoryList.filter((item) => {
-      if (categoryFilter !== 'all' && item.category.toLowerCase() !== categoryFilter.toLowerCase()) {
+      // Category filter
+      if (selectedCategoryFilter !== 'all' && item.category.toLowerCase() !== selectedCategoryFilter.toLowerCase()) {
         return false;
       }
+
+      // Sub-category filter
+      if (selectedSubCatFilter !== 'all' && item.sub_category.toLowerCase() !== selectedSubCatFilter.toLowerCase()) {
+        return false;
+      }
+
+      // Stock Level Filter
       if (stockLevelFilter === 'low' && !(item.available_stock > 0 && item.available_stock <= 3)) {
         return false;
       }
       if (stockLevelFilter === 'out' && item.available_stock > 0) {
         return false;
       }
+
+      // Search Query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchCode = item.product_code.toLowerCase().includes(q);
@@ -262,17 +294,18 @@ export default function InventoryManager() {
         const matchSize = item.size.toLowerCase().includes(q);
         return matchCode || matchName || matchSubCat || matchColor || matchSize;
       }
+
       return true;
     });
 
-    // Maintain Product Code Order after filtering
+    // Maintain Product Code Order
     return list.sort((a, b) => {
       return String(a.product_code || '').localeCompare(String(b.product_code || ''), undefined, {
         numeric: true,
         sensitivity: 'base'
       });
     });
-  }, [inventoryList, categoryFilter, stockLevelFilter, searchQuery]);
+  }, [inventoryList, selectedCategoryFilter, selectedSubCatFilter, stockLevelFilter, searchQuery]);
 
   return (
     <div className="space-y-3 font-sans text-xs select-none">
@@ -280,41 +313,65 @@ export default function InventoryManager() {
       {/* 1. FILTER & SEARCH CONTROL BAR */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
         
-        {/* Left: Category Tabs */}
-        <div className="flex items-center gap-1.5">
-          <div className="inline-flex p-0.5 rounded-xl bg-[#0a0e17] border border-white/10">
-            {['all', 'fashion', 'jewellery'].map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCategoryFilter(cat)}
-                className={`px-3 py-1.5 rounded-lg font-bold text-xs capitalize transition-all cursor-pointer ${
-                  categoryFilter === cat
-                    ? 'bg-[#6d4aff] text-white shadow-md'
-                    : 'text-[#8b9bb4] hover:text-white'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+        {/* Left: Clean Filter Options (Category & Sub-Category Dropdowns) */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
+            <Filter className="w-3.5 h-3.5 text-[#00d9ff]" />
+            <span className="text-[11px] font-bold text-[#8b9bb4] uppercase tracking-wider">Filter:</span>
+            
+            {/* Category Filter */}
+            <select
+              value={selectedCategoryFilter}
+              onChange={(e) => {
+                setSelectedCategoryFilter(e.target.value);
+                setSelectedSubCatFilter('all');
+              }}
+              className="bg-transparent text-white font-bold text-xs outline-none cursor-pointer pr-1"
+            >
+              <option value="all" className="bg-[#101628] text-white">All Categories</option>
+              {distinctCategories.map((cat) => (
+                <option key={cat} value={cat} className="bg-[#101628] text-white">
+                  {cat}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <div className="inline-flex p-0.5 rounded-xl bg-[#0a0e17] border border-white/10">
+          {/* Sub-Category Filter */}
+          {distinctSubCategories.length > 0 && (
+            <div className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
+              <span className="text-[11px] text-[#8b9bb4] font-semibold">Sub-Cat:</span>
+              <select
+                value={selectedSubCatFilter}
+                onChange={(e) => setSelectedSubCatFilter(e.target.value)}
+                className="bg-transparent text-[#00d9ff] font-bold text-xs outline-none cursor-pointer"
+              >
+                <option value="all" className="bg-[#101628] text-white">All Sub-Categories</option>
+                {distinctSubCategories.map((sub) => (
+                  <option key={sub} value={sub} className="bg-[#101628] text-white">
+                    {sub}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {(selectedCategoryFilter !== 'all' || selectedSubCatFilter !== 'all') && (
             <button
               type="button"
-              onClick={() => setStockLevelFilter('all')}
-              className={`px-2.5 py-1.5 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
-                stockLevelFilter === 'all'
-                  ? 'bg-white/15 text-white font-bold'
-                  : 'text-[#8b9bb4] hover:text-white'
-              }`}
+              onClick={() => {
+                setSelectedCategoryFilter('all');
+                setSelectedSubCatFilter('all');
+              }}
+              className="p-1 rounded-lg hover:bg-white/10 text-[#ff6b6b] text-[11px] font-bold cursor-pointer"
+              title="Reset Filters"
             >
-              All Levels
+              Clear
             </button>
-          </div>
+          )}
         </div>
 
-        {/* Right: Low & Out badges placed right BEFORE Search Bar */}
+        {/* Right: Low & Out indicators placed before Search Bar */}
         <div className="flex items-center gap-2">
           
           {/* Low Stock Indicator Filter Button */}
@@ -352,7 +409,7 @@ export default function InventoryManager() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search code, title, color, size..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff]"
+              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff]"
             />
             <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
           </div>
@@ -368,21 +425,21 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE (SORTED BY PRODUCT CODE) */}
+      {/* 2. INVENTORY TABLE (INCREASED FONT & COMPACT PROPORTIONAL COLUMN GAPS) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse table-fixed">
             <thead>
-              <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
-                <th className="py-2.5 px-3">Product Code & Name</th>
-                <th className="py-2.5 px-3">Category / Sub-Category</th>
-                <th className="py-2.5 px-3">Colour</th>
-                <th className="py-2.5 px-3 text-center">Size</th>
-                <th className="py-2.5 px-3 text-right">Selling Price</th>
-                <th className="py-2.5 px-3 text-center">Available Stock</th>
+              <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[11px] uppercase tracking-wider">
+                <th className="py-3 px-3.5 w-[30%]">Product Code & Name</th>
+                <th className="py-3 px-3 w-[20%]">Category / Sub-Category</th>
+                <th className="py-3 px-3 w-[15%]">Colour</th>
+                <th className="py-3 px-3 text-center w-[10%]">Size</th>
+                <th className="py-3 px-3.5 text-right w-[12%]">Selling Price</th>
+                <th className="py-3 px-3.5 text-center w-[13%]">Available Stock</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 text-xs">
+            <tbody className="divide-y divide-white/5 text-[13px]">
               {loading ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-[#8b9bb4]">
@@ -409,54 +466,54 @@ export default function InventoryManager() {
                       title="Click to view complete inward & sales history"
                     >
                       {/* Product Code & Name */}
-                      <td className="py-2.5 px-3">
+                      <td className="py-3 px-3.5">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-extrabold text-[#00ff9d] text-xs shrink-0 group-hover:underline">
+                          <span className="font-mono font-extrabold text-[#00ff9d] text-[13px] shrink-0 group-hover:underline">
                             [{item.product_code}]
                           </span>
-                          <span className="font-semibold text-white text-xs block truncate max-w-[200px]">
+                          <span className="font-bold text-white text-[13px] block truncate">
                             {item.product_name}
                           </span>
                         </div>
                       </td>
 
                       {/* Category & Sub-Category */}
-                      <td className="py-2.5 px-3">
-                        <span className="font-bold text-white text-xs block capitalize">
+                      <td className="py-3 px-3">
+                        <span className="font-extrabold text-white text-[13px] block capitalize truncate">
                           {item.category}
                         </span>
-                        <span className="text-[10px] font-mono text-[#8b9bb4] block">
+                        <span className="text-[11px] font-mono text-[#8b9bb4] block truncate">
                           {item.sub_category}
                         </span>
                       </td>
 
                       {/* Colour with swatch */}
-                      <td className="py-2.5 px-3">
-                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0a0e17] border border-white/10">
+                      <td className="py-3 px-3">
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#0a0e17] border border-white/10 max-w-full">
                           <span
-                            className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0 shadow"
+                            className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
                             style={{ backgroundColor: item.hex_code }}
                           />
-                          <span className="font-semibold text-white text-xs">
+                          <span className="font-bold text-white text-[12.5px] truncate">
                             {item.color}
                           </span>
                         </div>
                       </td>
 
                       {/* Size */}
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-[#00d9ff]">
+                      <td className="py-3 px-3 text-center font-mono font-black text-[#00d9ff] text-[13px]">
                         {item.size}
                       </td>
 
                       {/* Selling Price */}
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
+                      <td className="py-3 px-3.5 text-right font-mono font-extrabold text-white text-[13.5px]">
                         ₹{item.selling_price.toLocaleString('en-IN')}
                       </td>
 
                       {/* Available Stock with status badge */}
-                      <td className="py-2.5 px-3 text-center">
+                      <td className="py-3 px-3.5 text-center">
                         <span
-                          className={`inline-flex items-center justify-center min-w-[55px] px-2.5 py-0.5 rounded-full font-mono text-xs font-black border ${
+                          className={`inline-flex items-center justify-center min-w-[65px] px-3 py-1 rounded-full font-mono text-xs font-black border ${
                             isOut
                               ? 'bg-[#ff6b6b]/15 text-[#ff6b6b] border-[#ff6b6b]/30'
                               : isLow
@@ -490,7 +547,7 @@ export default function InventoryManager() {
                 <div>
                   <h4 className="text-sm font-bold text-white flex items-center gap-2">
                     <span>[{selectedItemForHistory.product_code}] {selectedItemForHistory.product_name}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[10px] font-mono">
+                    <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[10px] font-mono font-bold">
                       {selectedItemForHistory.color} • {selectedItemForHistory.size}
                     </span>
                   </h4>
