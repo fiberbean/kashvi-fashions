@@ -75,17 +75,16 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
 }
 
 export default function InventoryManager() {
-  const [inventoryList, setInventoryList] = useState<InventoryItem[]>[];
-  const [rawProducts, setRawProducts] = useState<any[]>[];
-  const [allSizesList, setAllSizesList] = useState<any[]>[];
-  const [coloursList, setColoursList] = useState<any[]>[];
+  const [inventoryList, setInventoryList] = useState<InventoryItem[]>([]);
+  const [rawProducts, setRawProducts] = useState<any[]>([]);
+  const [allSizesList, setAllSizesList] = useState<any[]>([]);
+  const [coloursList, setColoursList] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
   const [selectedSubCatFilter, setSelectedSubCatFilter] = useState<string>('all');
   const [stockLevelFilter, setStockLevelFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  // History & Detailed Matrix Modal state
   const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryItem | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
@@ -283,7 +282,6 @@ export default function InventoryManager() {
     }
   };
 
-  // DETAILED STOCK MATRIX FOR A CHOSEN PRODUCT ACROSS ALL SHADES & SIZES
   const productMatrixSummary = useMemo(() => {
     if (!selectedItemForHistory) return null;
     const prodId = selectedItemForHistory.product_id;
@@ -379,7 +377,6 @@ export default function InventoryManager() {
   return (
     <div className="space-y-3 font-sans text-xs select-none uppercase">
       
-      {/* 1. FILTER & SEARCH CONTROL BAR */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
         
         <div className="flex items-center gap-2">
@@ -486,7 +483,6 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE (DETAILED PRICING & HIGHLIGHTED PRODUCT NAMES) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -529,7 +525,6 @@ export default function InventoryManager() {
                       className="hover:bg-white/[0.04] transition-all cursor-pointer group"
                       title="CLICK TO VIEW DETAILED MATRIX & VARIANT STOCK"
                     >
-                      {/* PRODUCT CODE & HIGHLIGHTED NAME */}
                       <td className="py-2.5 px-3">
                         <span className="font-mono font-bold text-[#00ff9d] text-[11px] block">
                           [{item.product_code}]
@@ -539,7 +534,6 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* CATEGORY & SUB-CATEGORY */}
                       <td className="py-2.5 px-3">
                         <span className="font-bold text-white text-xs block">
                           {item.category}
@@ -549,7 +543,6 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* COLOUR */}
                       <td className="py-2.5 px-3">
                         <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0a0e17] border border-white/10 max-w-full">
                           <span
@@ -562,32 +555,26 @@ export default function InventoryManager() {
                         </div>
                       </td>
 
-                      {/* SIZE */}
                       <td className="py-2.5 px-3 text-center font-mono font-black text-[#00d9ff] text-xs">
                         {item.size}
                       </td>
 
-                      {/* COST PRICE */}
                       <td className="py-2.5 px-3 text-right font-mono text-[#8b9bb4]">
                         ₹{item.cost_price ? item.cost_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      {/* LANDED PRICE */}
                       <td className="py-2.5 px-3 text-right font-mono text-[#ffa500]">
                         ₹{item.landed_price ? item.landed_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      {/* STORE PRICE */}
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
                         ₹{item.store_price ? item.store_price.toLocaleString('en-IN') : item.selling_price.toLocaleString('en-IN')}
                       </td>
 
-                      {/* ONLINE PRICE */}
                       <td className="py-2.5 px-3 text-right font-mono text-[#00d9ff]">
                         ₹{item.online_price ? item.online_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      {/* AVAILABLE STOCK */}
                       <td className="py-2.5 px-3 text-center">
                         <span
                           className={`inline-flex items-center justify-center min-w-[55px] px-2.5 py-0.5 rounded-full font-mono text-[10.5px] font-black border ${
@@ -610,7 +597,6 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. DETAILED PRODUCT MATRIX & AUDIT TRAIL MODAL */}
       {selectedItemForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -639,7 +625,6 @@ export default function InventoryManager() {
               </button>
             </div>
 
-            {/* Matrix View Grid */}
             {productMatrixSummary && productMatrixSummary.shades.length > 0 && (
               <div className="space-y-1.5 shrink-0">
                 <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
@@ -691,7 +676,6 @@ export default function InventoryManager() {
                 </div>
               ) : (
                 <>
-                  {/* Purchase Inward Log */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs font-mono uppercase">
                       <span className="font-bold text-[#00d9ff] flex items-center gap-1.5">
@@ -737,7 +721,6 @@ export default function InventoryManager() {
                     </div>
                   </div>
 
-                  {/* Sales Dispatch Log */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs font-mono uppercase">
                       <span className="font-bold text-[#ffa500] flex items-center gap-1.5">
