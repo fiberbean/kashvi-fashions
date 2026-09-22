@@ -47,6 +47,10 @@ interface ProductRecord {
   name: string;
   category?: string;
   sub_category?: string;
+  sub_category_id?: string;
+  colour?: string;
+  size?: string;
+  variants?: any;
   offline_price?: number;
   online_price?: number;
   selling_price?: number;
@@ -56,9 +60,12 @@ interface ProductRecord {
 interface InventoryItemRecord {
   id: string;
   product_id: string;
-  variant_color: string;
-  variant_size: string;
-  stock_quantity: number;
+  variant_color?: string | null;
+  color?: string | null;
+  variant_size?: string | null;
+  size?: string | null;
+  stock_quantity?: number | null;
+  quantity?: number | null;
 }
 
 interface CartItem {
@@ -89,12 +96,27 @@ interface OrderRecord {
   created_at: string;
 }
 
+function getContrastTextColor(hexColor: string | null | undefined): string {
+  if (!hexColor) return '#FFFFFF';
+  let hex = hexColor.replace('#', '');
+  if (hex.length === 3) {
+    hex = hex.split('').map((c) => c + c).join('');
+  }
+  const r = parseInt(hex.substring(0, 2), 16) || 0;
+  const g = parseInt(hex.substring(2, 4), 16) || 0;
+  const b = parseInt(hex.substring(4, 6), 16) || 0;
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
+}
+
 export default function SalesManager() {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
   const [inventoryList, setInventoryList] = useState<InventoryItemRecord[]>([]);
   const [coloursList, setColoursList] = useState<{ name: string; hex_code?: string }[]>([]);
   const [customersList, setCustomersList] = useState<CustomerRecord[]>([]);
+  const [allSizesList, setAllSizesList] = useState<any[]>([]);
+  const [subCategoriesList, setSubCategoriesList] = useState<any[]>([]);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -125,6 +147,9 @@ export default function SalesManager() {
   const [discountAmount, setDiscountAmount] = useState<number | string>(0);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
+  // Product Filter Search in POS Desk
+  const [billingProductSearch, setBillingProductSearch] = useState<string>('');
+
   // 3. Variant Picker Modal State
   const [isVariantModalOpen, setIsVariantModalOpen] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductRecord | null>(null);
@@ -143,7 +168,6 @@ export default function SalesManager() {
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
   const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
-  // Auto Generate CUST0001 ID
   const generateCustomerId = async () => {
     try {
       const { data } = await supabase
@@ -165,7 +189,6 @@ export default function SalesManager() {
     }
   };
 
-  // Auto Generate KFINV0001 Series
   const generateBillNumber = async () => {
     try {
       const { data } = await supabase
@@ -190,12 +213,14 @@ export default function SalesManager() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [orderRes, prodRes, invRes, clrRes, custRes] = await Promise.all([
+      const [orderRes, prodRes, invRes, clrRes, custRes, sizeRes, subCatRes] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
         supabase.from('inventory').select('*'),
         supabase.from('colours').select('name, hex_code'),
-        supabase.from('customers').select('*').order('created_at', { ascending: false })
+        supabase.from('customers').select('*').order('created_at', { ascending: false }),
+        supabase.from('sizes').select('*').order('display_order', { ascending: true }),
+        supabase.from('sub_categories').select('*')
       ]);
 
       if (orderRes.data) setOrders(orderRes.data);
@@ -208,6 +233,8 @@ export default function SalesManager() {
       if (invRes.data) setInventoryList(invRes.data);
       if (clrRes.data) setColoursList(clrRes.data);
       if (custRes.data) setCustomersList(custRes.data);
+      if (sizeRes.data) setAllSizesList(sizeRes.data);
+      if (subCatRes.data) setSubCategoriesList(subCatRes.data);
     } catch (err) {
       console.error('Failed to load sales data:', err);
     } finally {
@@ -238,7 +265,6 @@ export default function SalesManager() {
     setIsExistingCustomerPickerOpen(true);
   };
 
-  // Safe Customer Registration (Handles both phone and mobile column schemas)
   const handleRegisterCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanName = newCustName.trim().toUpperCase();
@@ -252,16 +278,13 @@ export default function SalesManager() {
 
     setRegisteringCust(true);
     try {
-      // Primary payload
-      let insertPayload: any = {
+      const insertPayload = {
         id: newCustId.trim().toUpperCase(),
         name: cleanName
       };
 
-      // Try inserting with phone and mobile fallbacks
       let errorOccurred: any = null;
 
-      // Attempt 1: Try with phone column
       const res1 = await supabase.from('customers').insert([{
         ...insertPayload,
         phone: cleanPhone,
@@ -269,7 +292,6 @@ export default function SalesManager() {
       }]).select();
 
       if (res1.error) {
-        // Attempt 2: If phone column is missing, try mobile column
         const res2 = await supabase.from('customers').insert([{
           ...insertPayload,
           mobile: cleanPhone,
@@ -277,7 +299,6 @@ export default function SalesManager() {
         }]).select();
 
         if (res2.error) {
-          // Attempt 3: Try minimal insert (id and name only if other columns are strict)
           const res3 = await supabase.from('customers').insert([{
             ...insertPayload
           }]).select();
@@ -323,6 +344,7 @@ export default function SalesManager() {
     setPaymentMode('cash');
     setUtrNumber('');
     setDiscountAmount(0);
+    setBillingProductSearch('');
     setCartItems([]);
     setIsBillingModalOpen(true);
   };
@@ -338,49 +360,167 @@ export default function SalesManager() {
     setIsVariantModalOpen(true);
   };
 
+  // ROBUST INVENTORY FILTER WITH CASE-INSENSITIVE & WHITESPACE TRIM MATCHING
   const modalProductInventory = useMemo(() => {
     if (!selectedProductForModal) return [];
-    return inventoryList.filter((inv) => String(inv.product_id) === String(selectedProductForModal.id));
+    const targetId = String(selectedProductForModal.id).trim().toUpperCase();
+
+    return inventoryList.filter((inv) => {
+      const pId = String(inv.product_id || '').trim().toUpperCase();
+      return pId === targetId;
+    });
   }, [selectedProductForModal, inventoryList]);
 
+  // ALL COLOURS & SHADES LIST WITH REAL-TIME STOCK OR ZERO/NEGATIVE STOCK
   const modalAvailableColors = useMemo(() => {
+    if (!selectedProductForModal) return [];
     const map = new Map<string, { stock: number; hex?: string }>();
+
+    // 1. Inventory lo unna stock map cheyatam
     modalProductInventory.forEach((r) => {
-      const clr = (r.variant_color || 'STANDARD').toUpperCase();
-      const prev = map.get(clr) || { stock: 0 };
-      const matched = coloursList.find((c) => c.name.toUpperCase().trim() === clr.trim())?.hex_code;
+      const clr = String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase();
+      const current = map.get(clr) || { stock: 0 };
+      const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr)?.hex_code;
+      const qty = Number(r.stock_quantity ?? r.quantity ?? 0);
       map.set(clr, {
-        stock: prev.stock + (r.stock_quantity || 0),
-        hex: matched || '#6d4aff'
+        stock: current.stock + qty,
+        hex: matched || current.hex || '#6d4aff'
       });
     });
+
+    // 2. Product master lo unna specific colours add cheyatam
+    const prod = selectedProductForModal;
+    if (prod.colour) {
+      const rawColors = typeof prod.colour === 'string'
+        ? prod.colour.split(',').map((c) => c.trim().toUpperCase())
+        : [String(prod.colour).toUpperCase()];
+      rawColors.filter(Boolean).forEach((clr) => {
+        if (!map.has(clr)) {
+          const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr)?.hex_code;
+          map.set(clr, { stock: 0, hex: matched || '#6d4aff' });
+        }
+      });
+    }
+
+    if (prod.variants?.colors && Array.isArray(prod.variants.colors)) {
+      prod.variants.colors.forEach((c: string) => {
+        const clr = String(c).trim().toUpperCase();
+        if (!map.has(clr)) {
+          const matched = coloursList.find((x) => x.name.trim().toUpperCase() === clr)?.hex_code;
+          map.set(clr, { stock: 0, hex: matched || '#6d4aff' });
+        }
+      });
+    }
+
+    // 3. Incase stock lekapothe, master colours list mottham display cheyatam
+    if (map.size === 0) {
+      coloursList.forEach((c) => {
+        map.set(c.name.trim().toUpperCase(), {
+          stock: 0,
+          hex: c.hex_code || '#6d4aff'
+        });
+      });
+    }
+
     return Array.from(map.entries()).map(([color, data]) => ({
       color,
       stock: data.stock,
       hex: data.hex
     }));
-  }, [modalProductInventory, coloursList]);
+  }, [modalProductInventory, selectedProductForModal, coloursList]);
 
+  // ASSIGNED SIZES LIST (INVENTORY SIZES + SUBCATEGORY SIZES + MASTER SIZES)
   const modalAvailableSizes = useMemo(() => {
-    if (!modalColor) return [];
-    return modalProductInventory
-      .filter((r) => (r.variant_color || 'STANDARD').toUpperCase() === modalColor.toUpperCase())
-      .map((r) => ({
-        size: (r.variant_size || 'FREE SIZE').toUpperCase(),
-        stock: r.stock_quantity || 0
-      }));
-  }, [modalProductInventory, modalColor]);
+    if (!selectedProductForModal || !modalColor) return [];
+    const chosenColor = modalColor.trim().toUpperCase();
+    const map = new Map<string, number>();
 
+    // 1. Inventory lo aa colour ki unna sizes
+    modalProductInventory
+      .filter((r) => String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase() === chosenColor)
+      .forEach((r) => {
+        const sz = String(r.variant_size || r.size || 'FREE SIZE').trim().toUpperCase();
+        const prev = map.get(sz) || 0;
+        const qty = Number(r.stock_quantity ?? r.quantity ?? 0);
+        map.set(sz, prev + qty);
+      });
+
+    // 2. Product master direct sizes
+    const prod = selectedProductForModal;
+    if (prod.size) {
+      const rawSizes = typeof prod.size === 'string'
+        ? prod.size.split(',').map((s) => s.trim().toUpperCase())
+        : [String(prod.size).toUpperCase()];
+      rawSizes.filter(Boolean).forEach((sz) => {
+        if (!map.has(sz)) map.set(sz, 0);
+      });
+    }
+
+    if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
+      prod.variants.sizes.forEach((s: string) => {
+        const sz = String(s).trim().toUpperCase();
+        if (!map.has(sz)) map.set(sz, 0);
+      });
+    }
+
+    // 3. Sub-category ki link ayina assigned sizes
+    const subCatObj = subCategoriesList.find(
+      (sc) => sc.id === prod.sub_category_id || sc.name?.toUpperCase() === prod.sub_category?.toUpperCase()
+    );
+
+    if (subCatObj) {
+      const directMatches = allSizesList.filter(
+        (sz) => sz.sub_category_id && String(sz.sub_category_id) === String(subCatObj.id)
+      );
+      if (directMatches.length > 0) {
+        directMatches.forEach((s) => {
+          const sName = String(s.name).trim().toUpperCase();
+          if (!map.has(sName)) map.set(sName, 0);
+        });
+      } else if (subCatObj.size_group) {
+        const groupMatches = allSizesList.filter(
+          (sz) => (sz.size_group || '').trim().toUpperCase() === subCatObj.size_group.trim().toUpperCase()
+        );
+        groupMatches.forEach((s) => {
+          const sName = String(s.name).trim().toUpperCase();
+          if (!map.has(sName)) map.set(sName, 0);
+        });
+      }
+    }
+
+    // 4. Incase edhi lekapothe, all master sizes chupinchi fallback ivvadam
+    if (map.size === 0 && allSizesList.length > 0) {
+      allSizesList.slice(0, 8).forEach((s) => {
+        map.set(String(s.name).trim().toUpperCase(), 0);
+      });
+    }
+
+    if (map.size === 0) {
+      map.set('FREE SIZE', 0);
+    }
+
+    return Array.from(map.entries()).map(([size, stock]) => ({
+      size,
+      stock
+    }));
+  }, [modalProductInventory, selectedProductForModal, modalColor, subCategoriesList, allSizesList]);
+
+  // REALTIME STOCK CALCULATION
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
-    const match = modalProductInventory.find(
-      (r) =>
-        (r.variant_color || 'STANDARD').toUpperCase() === modalColor.toUpperCase() &&
-        (r.variant_size || 'FREE SIZE').toUpperCase() === modalSize.toUpperCase()
-    );
-    return match ? match.stock_quantity : 0;
+    const targetColor = modalColor.trim().toUpperCase();
+    const targetSize = modalSize.trim().toUpperCase();
+
+    const matchingRows = modalProductInventory.filter((r) => {
+      const c = String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase();
+      const s = String(r.variant_size || r.size || 'FREE SIZE').trim().toUpperCase();
+      return c === targetColor && s === targetSize;
+    });
+
+    return matchingRows.reduce((sum, r) => sum + Number(r.stock_quantity ?? r.quantity ?? 0), 0);
   }, [modalProductInventory, modalColor, modalSize]);
 
+  // ALLOW ADDING TO CART EVEN IF STOCK IS 0 OR NEGATIVE
   const handleConfirmVariantToCart = () => {
     if (!selectedProductForModal) return;
     if (!modalColor) {
@@ -395,10 +535,6 @@ export default function SalesManager() {
       alert('QUANTITY KANISAM 1 UNDALI.');
       return;
     }
-    if (modalQty > modalCurrentStock) {
-      alert(`STOCK SARIPODU! UNDEDI KEVALAM ${modalCurrentStock} MATRAME.`);
-      return;
-    }
 
     const matchedHex = coloursList.find((c) => c.name.toUpperCase().trim() === modalColor.toUpperCase().trim())?.hex_code;
     const cartId = `${selectedProductForModal.id}_${modalColor}_${modalSize}`.toUpperCase();
@@ -407,10 +543,6 @@ export default function SalesManager() {
     if (existingIndex >= 0) {
       const updated = [...cartItems];
       const newQty = updated[existingIndex].quantity + modalQty;
-      if (newQty > modalCurrentStock) {
-        alert(`MOTTAM STOCK (${modalCurrentStock}) MINCHI BILL CHEYALERU.`);
-        return;
-      }
       updated[existingIndex].quantity = newQty;
       updated[existingIndex].total_price = newQty * updated[existingIndex].unit_price;
       setCartItems(updated);
@@ -452,6 +584,7 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
+  // COMPLETE SALE - DIRECT NEGATIVE STOCK UPDATE
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -503,22 +636,35 @@ export default function SalesManager() {
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsPayload);
       if (itemsErr) throw itemsErr;
 
-      // 3. Deduct Stock in inventory table
+      // 3. Deduct Stock in inventory table (Allows Negative Stock e.g. 0 - 1 = -1)
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
           .select('id, stock_quantity')
-          .eq('product_id', item.product_id)
-          .eq('variant_color', item.color)
-          .eq('variant_size', item.size)
+          .ilike('product_id', item.product_id.trim())
+          .ilike('variant_color', item.color.trim())
+          .ilike('variant_size', item.size.trim())
           .maybeSingle();
 
         if (invRow) {
-          const newStock = Math.max(0, (invRow.stock_quantity || 0) - item.quantity);
+          const currentQty = Number(invRow.stock_quantity || 0);
+          const newStock = currentQty - item.quantity; // Negative allow chestundhi
           await supabase
             .from('inventory')
             .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
             .eq('id', invRow.id);
+        } else {
+          // Record lekapothe negative stock tho kothaga record insert chestam
+          await supabase.from('inventory').insert([
+            {
+              id: `inv_${item.product_id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`.toUpperCase(),
+              product_id: item.product_id.toUpperCase(),
+              variant_color: item.color.toUpperCase(),
+              variant_size: item.size.toUpperCase(),
+              stock_quantity: -item.quantity,
+              low_stock_threshold: 3
+            }
+          ]);
         }
       }
 
@@ -594,6 +740,17 @@ export default function SalesManager() {
     });
   }, [customersList, custSearchTerm]);
 
+  const filteredDeskProducts = useMemo(() => {
+    if (!billingProductSearch.trim()) return productsList;
+    const q = billingProductSearch.toUpperCase().trim();
+    return productsList.filter(
+      (p) =>
+        p.id.toUpperCase().includes(q) ||
+        p.name.toUpperCase().includes(q) ||
+        (p.sub_category && p.sub_category.toUpperCase().includes(q))
+    );
+  }, [productsList, billingProductSearch]);
+
   const filteredOrders = useMemo(() => {
     if (!searchQuery.trim()) return orders;
     const q = searchQuery.toUpperCase().trim();
@@ -622,7 +779,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • CAPITAL INPUTS • SAFE REGISTRATION • WHATSAPP INVOICES
+              SERIES: KFINV0001 • NEGATIVE STOCK ALLOWED • ZERO-STOCK BILLING SUPPORT
             </span>
           </div>
         </div>
@@ -634,7 +791,7 @@ export default function SalesManager() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
               placeholder="SEARCH BILL NO, CUSTOMER, MOBILE..."
-              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff] uppercase"
+              className="w-full pl-8 pr-3 py-1.5 bg-[#0a0e17] rounded-xl text-white text-xs outline-none border border-white/10 focus:border-[#00d9ff] uppercase font-mono"
             />
             <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
           </div>
@@ -810,7 +967,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION (ALL UPPERCASE & SAFE COLUMNS) */}
+      {/* DIALOG 2A: NEW CUSTOMER REGISTRATION */}
       {isNewCustomerModalOpen && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
@@ -1130,48 +1287,70 @@ export default function SalesManager() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* Left Products Deck */}
-                <div className="lg:col-span-6 space-y-2.5 p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
-                      <Layers className="w-3.5 h-3.5" /> SELECT PRODUCT (OPENS VARIANT POPUP)
+                {/* Left Products Deck with Dedicated Search Bar & Compact Cards */}
+                <div className="lg:col-span-6 space-y-2.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
+                  
+                  {/* Search Bar & Product Count Header */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-b border-white/5 pb-2">
+                    <span className="text-xs font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1.5 shrink-0">
+                      <Layers className="w-3.5 h-3.5" /> SELECT PRODUCT ({filteredDeskProducts.length})
                     </span>
-                    <span className="text-[10px] text-[#8b9bb4] font-mono">{productsList.length} MODELS</span>
+
+                    {/* Compact In-Desk Search Bar */}
+                    <div className="relative flex-1 max-w-xs sm:ml-auto">
+                      <input
+                        type="text"
+                        value={billingProductSearch}
+                        onChange={(e) => setBillingProductSearch(e.target.value.toUpperCase())}
+                        placeholder="SEARCH CODE (KF...) OR NAME..."
+                        className="w-full pl-7 pr-2.5 py-1 bg-[#101628] rounded-xl text-white text-[11px] outline-none border border-white/15 focus:border-[#00d9ff] uppercase font-mono"
+                      />
+                      <Search className="w-3 h-3 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[380px] overflow-y-auto custom-scrollbar p-1">
-                    {productsList.map((p) => {
-                      const price = p.offline_price || p.selling_price || p.price || 0;
+                  {/* Compact Product Grid Cards (Space Optimized) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-[360px] overflow-y-auto custom-scrollbar p-0.5">
+                    {filteredDeskProducts.length === 0 ? (
+                      <div className="col-span-full p-8 text-center text-[#8b9bb4] italic text-xs uppercase">
+                        NO PRODUCTS MATCHING YOUR SEARCH.
+                      </div>
+                    ) : (
+                      filteredDeskProducts.map((p) => {
+                        const price = p.offline_price || p.selling_price || p.price || 0;
 
-                      return (
-                        <div
-                          key={p.id}
-                          onClick={() => handleOpenVariantPicker(p)}
-                          className="p-3 rounded-2xl bg-[#101628] border border-white/10 hover:border-[#00d9ff] cursor-pointer transition-all hover:scale-[1.02] shadow-md flex flex-col justify-between group"
-                        >
-                          <div>
-                            <span className="font-mono font-extrabold text-[#00ff9d] text-xs block group-hover:underline uppercase">
-                              [{p.id}]
-                            </span>
-                            <span className="font-bold text-white text-xs block truncate mt-0.5 uppercase">
-                              {p.name}
-                            </span>
-                            <span className="text-[9.5px] font-mono text-[#8b9bb4] block uppercase">
-                              {p.sub_category || 'FASHION'}
-                            </span>
-                          </div>
+                        return (
+                          <div
+                            key={p.id}
+                            onClick={() => handleOpenVariantPicker(p)}
+                            className="p-2 rounded-xl bg-[#101628] border border-white/10 hover:border-[#00d9ff] cursor-pointer transition-all hover:scale-[1.02] shadow-sm flex flex-col justify-between group"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-extrabold text-[#00ff9d] text-[11px] block group-hover:underline uppercase">
+                                  [{p.id}]
+                                </span>
+                                <span className="font-mono font-bold text-[#00d9ff] text-[11.5px]">
+                                  ₹{price}
+                                </span>
+                              </div>
+                              <span className="font-bold text-white text-[11px] block truncate mt-0.5 uppercase leading-snug">
+                                {p.name}
+                              </span>
+                            </div>
 
-                          <div className="pt-2 mt-2 border-t border-white/5 flex items-center justify-between">
-                            <span className="font-mono font-bold text-[#00d9ff] text-xs">
-                              ₹{price}
-                            </span>
-                            <span className="text-[9px] font-bold text-white bg-white/10 px-1.5 py-0.5 rounded-md uppercase">
-                              CHOOSE
-                            </span>
+                            <div className="pt-1 mt-1 border-t border-white/5 flex items-center justify-between text-[9px] font-mono text-[#8b9bb4]">
+                              <span className="truncate max-w-[80px] uppercase">
+                                {p.sub_category || 'FASHION'}
+                              </span>
+                              <span className="text-[8.5px] font-bold text-white bg-white/10 px-1.5 py-0.2 rounded uppercase">
+                                SELECT
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -1345,7 +1524,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. VARIANT SELECTION MODAL */}
+      {/* 5. VARIANT SELECTION MODAL (SUPPORTS ZERO/NEGATIVE STOCK WITH ALL SIZES & COLOURS) */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4">
@@ -1363,17 +1542,18 @@ export default function SalesManager() {
               </button>
             </div>
 
+            {/* Colours Swatches List */}
             <div className="space-y-1.5">
               <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                1. SELECT COLOUR SHADE (IN-STOCK ONLY):
+                1. SELECT COLOUR SHADE ({modalAvailableColors.length} AVAILABLE):
               </span>
-              {modalAvailableColors.length === 0 ? (
-                <div className="p-3 rounded-xl bg-[#0a0e17] text-[#ff6b6b] text-xs font-bold uppercase">
-                  EE PRODUCT KU INVENTORY LO STOCK LEDU!
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {modalAvailableColors.map((c) => (
+              <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto custom-scrollbar p-0.5">
+                {modalAvailableColors.map((c) => {
+                  const isSelected = modalColor === c.color;
+                  const cardBg = c.hex || '#6d4aff';
+                  const textColor = getContrastTextColor(cardBg);
+
+                  return (
                     <button
                       key={c.color}
                       type="button"
@@ -1381,9 +1561,10 @@ export default function SalesManager() {
                         setModalColor(c.color);
                         setModalSize('');
                       }}
+                      style={isSelected ? { backgroundColor: cardBg, color: textColor } : {}}
                       className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer border uppercase ${
-                        modalColor === c.color
-                          ? 'border-2 border-[#FFB6C1] shadow-[0_0_15px_rgba(255,182,193,0.85)] scale-105 bg-[#0a0e17] text-white'
+                        isSelected
+                          ? 'border-2 border-white shadow-[0_0_15px_rgba(255,255,255,0.6)] scale-105'
                           : 'border-white/10 bg-[#0a0e17] text-[#8b9bb4] hover:text-white'
                       }`}
                     >
@@ -1392,41 +1573,45 @@ export default function SalesManager() {
                         style={{ backgroundColor: c.hex }}
                       />
                       <span>{c.color}</span>
-                      <span className="text-[9px] font-mono opacity-70">({c.stock})</span>
+                      <span className="text-[9px] font-mono opacity-80">({c.stock})</span>
                     </button>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
 
+            {/* Sizes List (All Assigned Sizes Enabled for Billing) */}
             {modalColor && (
               <div className="space-y-1.5">
                 <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                  2. SELECT SIZE:
+                  2. SELECT SIZE FOR &quot;{modalColor}&quot;:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
-                  {modalAvailableSizes.map((s) => (
-                    <button
-                      key={s.size}
-                      type="button"
-                      disabled={s.stock <= 0}
-                      onClick={() => setModalSize(s.size)}
-                      className={`px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
-                        modalSize === s.size
-                          ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
-                          : s.stock <= 0
-                          ? 'bg-white/5 text-white/30 border-white/5 cursor-not-allowed'
-                          : 'bg-[#0a0e17] text-white border-white/15 hover:border-[#00d9ff]'
-                      }`}
-                    >
-                      <span>{s.size}</span>
-                      <span className="text-[9px] ml-1 opacity-70">[{s.stock}]</span>
-                    </button>
-                  ))}
+                  {modalAvailableSizes.map((s) => {
+                    const isSelected = modalSize === s.size;
+                    return (
+                      <button
+                        key={s.size}
+                        type="button"
+                        onClick={() => setModalSize(s.size)}
+                        className={`px-3.5 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
+                          isSelected
+                            ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
+                            : 'bg-[#0a0e17] text-white border-white/15 hover:border-[#00d9ff]'
+                        }`}
+                      >
+                        <span>{s.size}</span>
+                        <span className={`text-[9px] ml-1 opacity-70 ${s.stock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
+                          [{s.stock}]
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
+            {/* Rate & Qty */}
             {modalColor && modalSize && (
               <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                 <div>
@@ -1444,12 +1629,13 @@ export default function SalesManager() {
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">QUANTITY</label>
-                    <span className="text-[9px] font-mono text-[#00ff9d]">AVAILABLE: {modalCurrentStock}</span>
+                    <span className={`text-[9px] font-mono ${modalCurrentStock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
+                      STOCK: {modalCurrentStock}
+                    </span>
                   </div>
                   <input
                     type="number"
                     min="1"
-                    max={modalCurrentStock}
                     value={modalQty}
                     onChange={(e) => setModalQty(Math.max(1, parseInt(e.target.value, 10) || 1))}
                     className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#00ff9d] font-mono font-bold text-xs outline-none text-center"
@@ -1551,8 +1737,8 @@ export default function SalesManager() {
                         {activeLineItems.map((it: any, idx: number) => (
                           <tr key={idx}>
                             <td className="py-2 px-2.5">
-                              <span className="font-bold text-white block">{(it.product_name || it.product_id).toUpperCase()}</span>
-                              <span className="text-[10px] text-[#00d9ff] font-mono">
+                              <span className="font-bold text-white block uppercase">{(it.product_name || it.product_id).toUpperCase()}</span>
+                              <span className="text-[10px] text-[#00d9ff] font-mono uppercase">
                                 {(it.color || it.variant_color).toUpperCase()} • {(it.size || it.variant_size).toUpperCase()}
                               </span>
                             </td>
