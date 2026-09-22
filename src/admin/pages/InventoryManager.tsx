@@ -24,22 +24,23 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
-interface InventoryItem {
-  id: string;
+interface InventoryProductRow {
   product_id: string;
   product_code: string;
   product_name: string;
   category: string;
   sub_category: string;
-  color: string;
-  size: string;
-  selling_price: number;
   cost_price: number;
-  landed_price?: number;
-  store_price?: number;
-  online_price?: number;
-  available_stock: number;
-  hex_code?: string;
+  landed_price: number;
+  store_price: number;
+  online_price: number;
+  total_stock: number;
+  variants: {
+    color: string;
+    size: string;
+    stock: number;
+    hex: string;
+  }[];
 }
 
 interface PurchaseHistoryItem {
@@ -75,9 +76,7 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
 }
 
 export default function InventoryManager() {
-  const [inventoryList, setInventoryList] = useState<InventoryItem[]>([]);
-  const [rawProducts, setRawProducts] = useState<any[]>([]);
-  const [allSizesList, setAllSizesList] = useState<any[]>([]);
+  const [productRows, setProductRows] = useState<InventoryProductRow[]>([]);
   const [coloursList, setColoursList] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -85,7 +84,8 @@ export default function InventoryManager() {
   const [selectedSubCatFilter, setSelectedSubCatFilter] = useState<string>('all');
   const [stockLevelFilter, setStockLevelFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  const [selectedItemForHistory, setSelectedItemForHistory] = useState<InventoryItem | null>(null);
+  // History & Detailed Matrix Modal state
+  const [selectedProductForHistory, setSelectedProductForHistory] = useState<InventoryProductRow | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
@@ -93,16 +93,14 @@ export default function InventoryManager() {
   const loadInventory = async () => {
     setLoading(true);
     try {
-      const [prodRes, colorRes, invRes, sizeRes] = await Promise.all([
+      const [prodRes, colorRes, invRes] = await Promise.all([
         supabase.from('products').select('*'),
         supabase.from('colours').select('name, hex_code'),
-        supabase.from('inventory').select('*'),
-        supabase.from('sizes').select('*').order('display_order', { ascending: true })
+        supabase.from('inventory').select('*')
       ]);
 
       const products = prodRes.data || [];
-      setRawProducts(products);
-      if (sizeRes.data) setAllSizesList(sizeRes.data);
+      const inventoryRecords = invRes.data || [];
 
       let colorHexMap = new Map<string, string>();
       (colorRes.data || []).forEach((c: any) => {
@@ -110,92 +108,76 @@ export default function InventoryManager() {
       });
       setColoursList(colorRes.data || []);
 
-      const inventoryRecords = invDataCall(invRes.data);
-      const processedItems: InventoryItem[] = [];
-
-      if (inventoryRecords.length > 0) {
-        inventoryRecords.forEach((inv: any) => {
-          const prod = products.find((p) => String(p.id) === String(inv.product_id));
-          const colorName = inv.variant_color || inv.color || 'STANDARD';
-          const sizeName = inv.variant_size || inv.size || 'FREE SIZE';
-          
-          const baseCost = Number(prod?.cost_price || prod?.price || 0);
-          const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
-          const store = prod?.offline_price || prod?.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
-          const online = prod?.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
-
-          processedItems.push({
-            id: String(inv.id || `${inv.product_id}_${colorName}_${sizeName}`),
-            product_id: String(inv.product_id),
-            product_code: String(prod?.code || prod?.id || inv.product_id),
-            product_name: String(prod?.name || 'UNKNOWN PRODUCT'),
-            category: String(prod?.category || 'FASHION'),
-            sub_category: String(prod?.sub_category || 'GENERAL'),
-            color: colorName.toUpperCase(),
-            size: sizeName.toUpperCase(),
-            selling_price: Number(store),
-            cost_price: baseCost,
-            landed_price: landed,
-            store_price: store,
-            online_price: online,
-            available_stock: Number(inv.stock_quantity ?? inv.quantity ?? 0),
-            hex_code: colorHexMap.get(colorName.toLowerCase().trim()) || '#6d4aff'
-          });
-        });
-      }
+      const groupedMap = new Map<string, InventoryProductRow>();
 
       products.forEach((prod) => {
-        let sizes: string[] = ['FREE SIZE'];
-        if (prod.size) {
-          sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim().toUpperCase()) : prod.size;
-        }
-        let colors: string[] = ['STANDARD'];
-        if (prod.colour) {
-          colors = typeof prod.colour === 'string' ? prod.colour.split(',').map((c: string) => c.trim().toUpperCase()) : prod.colour;
-        }
+        const pId = String(prod.id);
+        const code = String(prod.code || prod.id);
+        const name = String(prod.name || 'UNKNOWN PRODUCT');
+        const cat = String(prod.category || 'FASHION');
+        const subCat = String(prod.sub_category || 'GENERAL');
 
-        colors.forEach((c) => {
-          sizes.forEach((s) => {
-            const alreadyExists = processedItems.some(
-              (it) => String(it.product_id) === String(prod.id) && it.color === c && it.size === s
-            );
-            if (!alreadyExists) {
-              const baseCost = Number(prod.cost_price || prod.price || 0);
-              const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
-              const store = prod.offline_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
-              const online = prod.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
+        const baseCost = Number(prod.cost_price || prod.price || 0);
+        const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
+        const store = prod.offline_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
+        const online = prod.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
 
-              processedItems.push({
-                id: `${prod.id}_${c}_${s}`,
-                product_id: String(prod.id),
-                product_code: String(prod.code || prod.id),
-                product_name: String(prod.name || 'UNKNOWN PRODUCT'),
-                category: String(prod.category || 'FASHION'),
-                sub_category: String(prod.sub_category || 'GENERAL'),
-                color: c,
-                size: s,
-                selling_price: Number(store),
-                cost_price: baseCost,
-                landed_price: landed,
-                store_price: store,
-                online_price: online,
-                available_stock: 0,
-                hex_code: colorHexMap.get(c.toLowerCase().trim()) || '#6d4aff'
-              });
-            }
-          });
+        groupedMap.set(pId, {
+          product_id: pId,
+          product_code: code,
+          product_name: name,
+          category: cat,
+          sub_category: subCat,
+          cost_price: baseCost,
+          landed_price: landed,
+          store_price: store,
+          online_price: online,
+          total_stock: 0,
+          variants: []
         });
       });
 
-      processedItems.sort((a, b) => {
-        const codeA = String(a.product_code || '');
-        const codeB = String(b.product_code || '');
-        const cmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
-        if (cmp !== 0) return cmp;
-        return a.color.localeCompare(b.color);
+      // Map inventory items into product variants
+      inventoryRecords.forEach((inv: any) => {
+        const pId = String(inv.product_id);
+        if (groupedMap.has(pId)) {
+          const row = groupedMap.get(pId)!;
+          const color = String(inv.variant_color || inv.color || 'STANDARD').toUpperCase();
+          const size = String(inv.variant_size || inv.size || 'FREE SIZE').toUpperCase();
+          const stock = Number(inv.stock_quantity ?? inv.quantity ?? 0);
+          const hex = colorHexMap.get(color.toLowerCase().trim()) || '#6d4aff';
+
+          row.variants.push({ color, size, stock, hex });
+          row.total_stock += stock;
+        }
       });
 
-      setInventoryList(processedItems);
+      // Ensure products without inventory rows still show master variants or default
+      groupedMap.forEach((row, pId) => {
+        if (row.variants.length === 0) {
+          const prod = products.find((p) => String(p.id) === pId);
+          let sizes = ['FREE SIZE'];
+          if (prod?.size) {
+            sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim().toUpperCase()) : prod.size;
+          }
+          let colors = ['STANDARD'];
+          if (prod?.colour) {
+            colors = typeof prod.colour === 'string' ? prod.colour.split(',').map((c: string) => c.trim().toUpperCase()) : prod.colour;
+          }
+
+          colors.forEach((c) => {
+            sizes.forEach((s) => {
+              const hex = colorHexMap.get(c.toLowerCase().trim()) || '#6d4aff';
+              row.variants.push({ color: c, size: s, stock: 0, hex });
+            });
+          });
+        }
+      });
+
+      const rowsArray = Array.from(groupedMap.values());
+      rowsArray.sort((a, b) => a.product_code.localeCompare(b.product_code, undefined, { numeric: true, sensitivity: 'base' }));
+
+      setProductRows(rowsArray);
     } catch (err: any) {
       console.error('Failed to load inventory:', err);
     } finally {
@@ -203,16 +185,12 @@ export default function InventoryManager() {
     }
   };
 
-  function invDataCall(data: any) {
-    return data || [];
-  }
-
   useEffect(() => {
     loadInventory();
   }, []);
 
-  const handleOpenProductHistory = async (item: InventoryItem) => {
-    setSelectedItemForHistory(item);
+  const handleOpenProductHistory = async (row: InventoryProductRow) => {
+    setSelectedProductForHistory(row);
     setLoadingHistory(true);
     setPurchaseHistory([]);
     setSalesHistory([]);
@@ -224,6 +202,8 @@ export default function InventoryManager() {
           quantity,
           unit_cost,
           total_cost,
+          variant_color,
+          variant_size,
           purchases (
             id,
             supplier_name,
@@ -231,9 +211,7 @@ export default function InventoryManager() {
             purchase_date
           )
         `)
-        .eq('product_id', item.product_id)
-        .eq('variant_color', item.color)
-        .eq('variant_size', item.size);
+        .eq('product_id', row.product_id);
 
       if (purItems && purItems.length > 0) {
         const mappedPurchases: PurchaseHistoryItem[] = purItems.map((pi: any) => ({
@@ -254,15 +232,15 @@ export default function InventoryManager() {
           quantity,
           price,
           total,
+          variant_color,
+          variant_size,
           orders (
             id,
             customer_name,
             created_at
           )
         `)
-        .eq('product_id', item.product_id)
-        .eq('variant_color', item.color)
-        .eq('variant_size', item.size);
+        .eq('product_id', row.product_id);
 
       if (saleItems && saleItems.length > 0) {
         const mappedSales: SalesHistoryItem[] = saleItems.map((si: any) => ({
@@ -282,101 +260,62 @@ export default function InventoryManager() {
     }
   };
 
-  const productMatrixSummary = useMemo(() => {
-    if (!selectedItemForHistory) return null;
-    const prodId = selectedItemForHistory.product_id;
-    const prodItems = inventoryList.filter((it) => String(it.product_id) === String(prodId));
-
-    const shadeMap = new Map<string, Map<string, number>>();
-    const allSizesSet = new Set<string>();
-
-    prodItems.forEach((it) => {
-      const c = it.color.toUpperCase();
-      const s = it.size.toUpperCase();
-      allSizesSet.add(s);
-
-      if (!shadeMap.has(c)) {
-        shadeMap.set(c, new Map<string, number>());
-      }
-      shadeMap.get(c)!.set(s, it.available_stock);
-    });
-
-    const sizes = Array.from(allSizesSet);
-    const shades = Array.from(shadeMap.entries()).map(([color, sizeStockMap]) => ({
-      color,
-      hex: coloursList.find((c) => c.name?.toUpperCase() === color)?.hex_code || '#6d4aff',
-      stocks: sizes.map((sz) => sizeStockMap.get(sz) || 0),
-      totalShadeStock: Array.from(sizeStockMap.values()).reduce((a, b) => a + b, 0)
-    }));
-
-    return { sizes, shades };
-  }, [selectedItemForHistory, inventoryList, coloursList]);
-
   const lowStockCount = useMemo(() => {
-    return inventoryList.filter((it) => it.available_stock > 0 && it.available_stock <= 3).length;
-  }, [inventoryList]);
+    return productRows.filter((r) => r.total_stock > 0 && r.total_stock <= 3).length;
+  }, [productRows]);
 
   const outOfStockCount = useMemo(() => {
-    return inventoryList.filter((it) => it.available_stock <= 0).length;
-  }, [inventoryList]);
+    return productRows.filter((r) => r.total_stock <= 0).length;
+  }, [productRows]);
 
   const distinctCategories = useMemo(() => {
     const set = new Set<string>();
-    inventoryList.forEach((it) => {
-      if (it.category) set.add(it.category.trim().toUpperCase());
+    productRows.forEach((r) => {
+      if (r.category) set.add(r.category.trim().toUpperCase());
     });
     return Array.from(set).sort();
-  }, [inventoryList]);
+  }, [productRows]);
 
   const distinctSubCategories = useMemo(() => {
     const set = new Set<string>();
-    inventoryList.forEach((it) => {
-      if (selectedCategoryFilter === 'all' || it.category.toLowerCase() === selectedCategoryFilter.toLowerCase()) {
-        if (it.sub_category) set.add(it.sub_category.trim().toUpperCase());
+    productRows.forEach((r) => {
+      if (selectedCategoryFilter === 'all' || r.category.toLowerCase() === selectedCategoryFilter.toLowerCase()) {
+        if (r.sub_category) set.add(r.sub_category.trim().toUpperCase());
       }
     });
     return Array.from(set).sort();
-  }, [inventoryList, selectedCategoryFilter]);
+  }, [productRows, selectedCategoryFilter]);
 
-  const filteredInventory = useMemo(() => {
-    const list = inventoryList.filter((item) => {
-      if (selectedCategoryFilter !== 'all' && item.category.toLowerCase() !== selectedCategoryFilter.toLowerCase()) {
+  const filteredProductRows = useMemo(() => {
+    return productRows.filter((row) => {
+      if (selectedCategoryFilter !== 'all' && row.category.toLowerCase() !== selectedCategoryFilter.toLowerCase()) {
         return false;
       }
-      if (selectedSubCatFilter !== 'all' && item.sub_category.toLowerCase() !== selectedSubCatFilter.toLowerCase()) {
+      if (selectedSubCatFilter !== 'all' && row.sub_category.toLowerCase() !== selectedSubCatFilter.toLowerCase()) {
         return false;
       }
-      if (stockLevelFilter === 'low' && !(item.available_stock > 0 && item.available_stock <= 3)) {
+      if (stockLevelFilter === 'low' && !(row.total_stock > 0 && row.total_stock <= 3)) {
         return false;
       }
-      if (stockLevelFilter === 'out' && item.available_stock > 0) {
+      if (stockLevelFilter === 'out' && row.total_stock > 0) {
         return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toUpperCase().trim();
-        return (
-          item.product_code.includes(q) ||
-          item.product_name.includes(q) ||
-          item.sub_category.includes(q) ||
-          item.color.includes(q) ||
-          item.size.includes(q)
-        );
+        const matchCode = row.product_code.includes(q);
+        const matchName = row.product_name.includes(q);
+        const matchSub = row.sub_category.includes(q);
+        const matchVar = row.variants.some((v) => v.color.includes(q) || v.size.includes(q));
+        return matchCode || matchName || matchSub || matchVar;
       }
       return true;
     });
-
-    return list.sort((a, b) => {
-      const codeA = String(a.product_code || '');
-      const codeB = String(b.product_code || '');
-      const cmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
-      if (cmp !== 0) return cmp;
-      return a.color.localeCompare(b.color);
-    });
-  }, [inventoryList, selectedCategoryFilter, selectedSubCatFilter, stockLevelFilter, searchQuery]);
+  }, [productRows, selectedCategoryFilter, selectedSubCatFilter, stockLevelFilter, searchQuery]);
 
   return (
     <div className="space-y-3 font-sans text-xs select-none uppercase">
       
+      {/* 1. FILTER & SEARCH BAR */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
         
         <div className="flex items-center gap-2">
@@ -483,6 +422,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
+      {/* 2. INVENTORY TABLE (ROW-WISE PRODUCTS WITH CUBE BADGES FOR COLOURS & SIZES) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -490,13 +430,13 @@ export default function InventoryManager() {
               <tr className="border-b border-white/10 bg-[#0a0e17]/80 text-[#8b9bb4] font-mono text-[10px] uppercase tracking-wider">
                 <th className="py-2.5 px-3">PRODUCT CODE & NAME</th>
                 <th className="py-2.5 px-3">CATEGORY & SUB-CATEGORY</th>
-                <th className="py-2.5 px-3">COLOUR</th>
-                <th className="py-2.5 px-3 text-center">SIZE</th>
+                <th className="py-2.5 px-3">COLOURS & STOCK CUBES</th>
+                <th className="py-2.5 px-3">SIZES AVAILABLE</th>
                 <th className="py-2.5 px-3 text-right">COST PRICE</th>
                 <th className="py-2.5 px-3 text-right">LANDED PRICE</th>
                 <th className="py-2.5 px-3 text-right">STORE PRICE</th>
                 <th className="py-2.5 px-3 text-right">ONLINE PRICE</th>
-                <th className="py-2.5 px-3 text-center">AVAILABLE STOCK</th>
+                <th className="py-2.5 px-3 text-center">TOTAL STOCK</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-xs">
@@ -507,75 +447,119 @@ export default function InventoryManager() {
                     LOADING REAL-TIME INVENTORY...
                   </td>
                 </tr>
-              ) : filteredInventory.length === 0 ? (
+              ) : filteredProductRows.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="p-8 text-center text-[#8b9bb4] italic text-xs uppercase">
-                    NO INVENTORY RECORDS MATCH YOUR CRITERIA.
+                    NO PRODUCTS MATCH YOUR CRITERIA.
                   </td>
                 </tr>
               ) : (
-                filteredInventory.map((item) => {
-                  const isOut = item.available_stock <= 0;
-                  const isLow = item.available_stock > 0 && item.available_stock <= 3;
+                filteredProductRows.map((row) => {
+                  const isOut = row.total_stock <= 0;
+                  const isLow = row.total_stock > 0 && row.total_stock <= 3;
+
+                  // Unique distinct colors
+                  const uniqueColors = Array.from(new Set(row.variants.map((v) => v.color))).map((colorName) => {
+                    const found = row.variants.find((v) => v.color === colorName);
+                    const shadeStock = row.variants.filter((v) => v.color === colorName).reduce((sum, v) => sum + v.stock, 0);
+                    return { color: colorName, hex: found?.hex || '#6d4aff', stock: shadeStock };
+                  });
+
+                  // Unique distinct sizes
+                  const uniqueSizes = Array.from(new Set(row.variants.map((v) => v.size)));
 
                   return (
                     <tr
-                      key={item.id}
-                      onClick={() => handleOpenProductHistory(item)}
+                      key={row.product_id}
+                      onClick={() => handleOpenProductHistory(row)}
                       className="hover:bg-white/[0.04] transition-all cursor-pointer group"
-                      title="CLICK TO VIEW DETAILED MATRIX & VARIANT STOCK"
+                      title="CLICK TO VIEW DETAILED MATRIX & AUDIT TRAIL"
                     >
-                      <td className="py-2.5 px-3">
+                      {/* PRODUCT CODE & HIGHLIGHTED NAME */}
+                      <td className="py-3 px-3">
                         <span className="font-mono font-bold text-[#00ff9d] text-[11px] block">
-                          [{item.product_code}]
+                          [{row.product_code}]
                         </span>
                         <span className="font-extrabold text-white text-xs block truncate mt-0.5 tracking-wide">
-                          {item.product_name}
+                          {row.product_name}
                         </span>
                       </td>
 
-                      <td className="py-2.5 px-3">
+                      {/* CATEGORY & SUB-CATEGORY */}
+                      <td className="py-3 px-3">
                         <span className="font-bold text-white text-xs block">
-                          {item.category}
+                          {row.category}
                         </span>
                         <span className="text-[10px] font-mono text-[#8b9bb4] block mt-0.5">
-                          {item.sub_category}
+                          {row.sub_category}
                         </span>
                       </td>
 
-                      <td className="py-2.5 px-3">
-                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-[#0a0e17] border border-white/10 max-w-full">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0 shadow"
-                            style={{ backgroundColor: item.hex_code }}
-                          />
-                          <span className="font-bold text-white text-[11px] truncate uppercase">
-                            {item.color}
-                          </span>
+                      {/* COLOURS CUBE BADGES */}
+                      <td className="py-3 px-3">
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {uniqueColors.map((uc) => (
+                            <span
+                              key={uc.color}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#0a0e17] border border-white/15 text-[10.5px] font-mono font-bold uppercase"
+                              title={`${uc.color} — Stock: ${uc.stock}`}
+                            >
+                              <span
+                                className="w-2.5 h-2.5 rounded-full border border-white/40 shrink-0 shadow"
+                                style={{ backgroundColor: uc.hex }}
+                              />
+                              <span className="text-white truncate max-w-[70px]">{uc.color}</span>
+                              <span className={`px-1 rounded text-[9px] font-black ${uc.stock > 0 ? 'bg-[#00ff9d]/20 text-[#00ff9d]' : 'bg-white/10 text-[#8b9bb4]'}`}>
+                                {uc.stock}
+                              </span>
+                            </span>
+                          ))}
                         </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-center font-mono font-black text-[#00d9ff] text-xs">
-                        {item.size}
+                      {/* SIZES BADGES */}
+                      <td className="py-3 px-3">
+                        <div className="flex flex-wrap gap-1">
+                          {uniqueSizes.map((sz) => {
+                            const szStock = row.variants.filter((v) => v.size === sz).reduce((sum, v) => sum + v.stock, 0);
+                            return (
+                              <span
+                                key={sz}
+                                className={`px-2 py-0.5 rounded font-mono text-[10.5px] font-black border uppercase ${
+                                  szStock > 0
+                                    ? 'bg-[#00d9ff]/10 text-[#00d9ff] border-[#00d9ff]/30'
+                                    : 'bg-white/5 text-[#8b9bb4] border-white/10'
+                                }`}
+                              >
+                                {sz}
+                              </span>
+                            );
+                          })}
+                        </div>
                       </td>
 
-                      <td className="py-2.5 px-3 text-right font-mono text-[#8b9bb4]">
-                        ₹{item.cost_price ? item.cost_price.toLocaleString('en-IN') : '—'}
+                      {/* COST PRICE */}
+                      <td className="py-3 px-3 text-right font-mono text-[#8b9bb4]">
+                        ₹{row.cost_price ? row.cost_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      <td className="py-2.5 px-3 text-right font-mono text-[#ffa500]">
-                        ₹{item.landed_price ? item.landed_price.toLocaleString('en-IN') : '—'}
+                      {/* LANDED PRICE */}
+                      <td className="py-3 px-3 text-right font-mono text-[#ffa500]">
+                        ₹{row.landed_price ? row.landed_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-white">
-                        ₹{item.store_price ? item.store_price.toLocaleString('en-IN') : item.selling_price.toLocaleString('en-IN')}
+                      {/* STORE PRICE */}
+                      <td className="py-3 px-3 text-right font-mono font-bold text-white">
+                        ₹{row.store_price ? row.store_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      <td className="py-2.5 px-3 text-right font-mono text-[#00d9ff]">
-                        ₹{item.online_price ? item.online_price.toLocaleString('en-IN') : '—'}
+                      {/* ONLINE PRICE */}
+                      <td className="py-3 px-3 text-right font-mono text-[#00d9ff]">
+                        ₹{row.online_price ? row.online_price.toLocaleString('en-IN') : '—'}
                       </td>
 
-                      <td className="py-2.5 px-3 text-center">
+                      {/* TOTAL STOCK */}
+                      <td className="py-3 px-3 text-center">
                         <span
                           className={`inline-flex items-center justify-center min-w-[55px] px-2.5 py-0.5 rounded-full font-mono text-[10.5px] font-black border ${
                             isOut
@@ -585,7 +569,7 @@ export default function InventoryManager() {
                               : 'bg-[#00ff9d]/15 text-[#00ff9d] border-[#00ff9d]/30'
                           }`}
                         >
-                          {item.available_stock} UNITS
+                          {row.total_stock} UNITS
                         </span>
                       </td>
                     </tr>
@@ -597,7 +581,8 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {selectedItemForHistory && (
+      {/* 3. DETAILED MATRIX & AUDIT TRAIL MODAL */}
+      {selectedProductForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
             
@@ -608,7 +593,7 @@ export default function InventoryManager() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-white flex items-center gap-2 uppercase">
-                    <span>[{selectedItemForHistory.product_code}] {selectedItemForHistory.product_name}</span>
+                    <span>[{selectedProductForHistory.product_code}] {selectedProductForHistory.product_name}</span>
                   </h4>
                   <span className="text-[10px] font-mono text-[#00d9ff]">
                     DETAILED VARIANT STOCK MATRIX (SHADES VS SIZES) • AUDIT TRAIL
@@ -618,55 +603,12 @@ export default function InventoryManager() {
 
               <button
                 type="button"
-                onClick={() => setSelectedItemForHistory(null)}
+                onClick={() => setSelectedProductForHistory(null)}
                 className="p-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#8b9bb4] hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-
-            {productMatrixSummary && productMatrixSummary.shades.length > 0 && (
-              <div className="space-y-1.5 shrink-0">
-                <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                  LIVE STOCK MATRIX (SHADES & SIZES BREAKDOWN):
-                </span>
-                
-                <div className="border border-white/10 rounded-2xl overflow-x-auto bg-[#0a0e17] max-h-56">
-                  <table className="w-full text-center border-collapse">
-                    <thead>
-                      <tr className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
-                        <th className="py-2 px-3 text-left">COLOUR \ SIZE</th>
-                        {productMatrixSummary.sizes.map((sz) => (
-                          <th key={sz} className="py-2 px-2 text-[#00d9ff] font-bold">{sz}</th>
-                        ))}
-                        <th className="py-2 px-3 text-right text-[#00ff9d]">TOTAL</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5 font-mono text-xs">
-                      {productMatrixSummary.shades.map((sh) => (
-                        <tr key={sh.color} className="hover:bg-white/[0.02]">
-                          <td className="py-2 px-3 text-left font-bold text-white uppercase flex items-center gap-2">
-                            <span
-                              className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
-                              style={{ backgroundColor: sh.hex }}
-                            />
-                            <span>{sh.color}</span>
-                          </td>
-                          {sh.stocks.map((st, i) => (
-                            <td key={i} className={`py-2 px-2 font-bold ${st > 0 ? 'text-[#00ff9d]' : 'text-[#8b9bb4]/40'}`}>
-                              {st}
-                            </td>
-                          ))}
-                          <td className="py-2 px-3 text-right font-black text-[#00ff9d]">
-                            {sh.totalShadeStock}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
 
             <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar p-1">
               {loadingHistory ? (
@@ -687,7 +629,7 @@ export default function InventoryManager() {
                     <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
                       {purchaseHistory.length === 0 ? (
                         <div className="p-4 text-center text-[#8b9bb4] italic text-xs uppercase">
-                          NO DIRECT PURCHASE INWARD RECORDS TRACKED FOR THIS VARIANT.
+                          NO DIRECT PURCHASE INWARD RECORDS TRACKED FOR THIS PRODUCT.
                         </div>
                       ) : (
                         <table className="w-full text-left text-xs uppercase">
@@ -732,7 +674,7 @@ export default function InventoryManager() {
                     <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
                       {salesHistory.length === 0 ? (
                         <div className="p-4 text-center text-[#8b9bb4] italic text-xs uppercase">
-                          NO OUTWARD CUSTOMER SALES RECORDED FOR THIS VARIANT YET.
+                          NO OUTWARD CUSTOMER SALES RECORDED FOR THIS PRODUCT YET.
                         </div>
                       ) : (
                         <table className="w-full text-left text-xs uppercase">
@@ -769,10 +711,10 @@ export default function InventoryManager() {
             <div className="pt-3 border-t border-white/10 flex justify-end shrink-0">
               <button
                 type="button"
-                onClick={() => setSelectedItemForHistory(null)}
+                onClick={() => setSelectedProductForHistory(null)}
                 className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer uppercase"
               >
-                CLOSE MATRIX & HISTORY
+                CLOSE HISTORY
               </button>
             </div>
 
