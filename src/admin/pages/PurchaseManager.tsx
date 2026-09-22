@@ -65,7 +65,7 @@ interface StagedMatrixItem {
   total_cost: number;
   landed_cost: number;
   store_price: number;
-  max_discount_price: number;
+  mdp_price: number;
   online_price: number;
   mrp_price: number;
 }
@@ -89,7 +89,7 @@ interface TaggingChecklistItem {
   unit_cost: number;
   landed_cost: number;
   store_price: number;
-  max_discount_price: number;
+  mdp_price: number;
   online_price: number;
   mrp_price: number;
   is_completed: boolean;
@@ -134,9 +134,9 @@ function calculateSmartPricing(baseUnitCost: number, transportPercentage: number
   const rawStore = (landedCost * 2) + ((landedCost * 2) * 0.10);
   const storePrice = Math.ceil(rawStore / 5) * 5;
 
-  // 3. Maximum Discount Price (Store - 10% disc round figure)
+  // 3. MDP (Maximum Discount Price: Store - 10% disc round figure)
   const rawMaxDisc = storePrice - (storePrice * 0.10);
-  const maxDiscountPrice = Math.round(rawMaxDisc);
+  const mdpPrice = Math.round(rawMaxDisc);
 
   // 4. Online Price (Landed * 2 + 20%, round up to next 10)
   const rawOnline = (landedCost * 2) + ((landedCost * 2) * 0.20);
@@ -148,7 +148,7 @@ function calculateSmartPricing(baseUnitCost: number, transportPercentage: number
   return {
     landedCost: Math.round(landedCost * 100) / 100,
     storePrice,
-    maxDiscountPrice,
+    mdpPrice,
     onlinePrice,
     mrpPrice
   };
@@ -771,7 +771,7 @@ export default function PurchaseManager() {
             total_cost: count * cost,
             landed_cost: pricing.landedCost,
             store_price: pricing.storePrice,
-            max_discount_price: pricing.maxDiscountPrice,
+            mdp_price: pricing.mdpPrice,
             online_price: pricing.onlinePrice,
             mrp_price: pricing.mrpPrice
           });
@@ -803,7 +803,7 @@ export default function PurchaseManager() {
         ...it,
         landed_cost: pricing.landedCost,
         store_price: pricing.storePrice,
-        max_discount_price: pricing.maxDiscountPrice,
+        mdp_price: pricing.mdpPrice,
         online_price: pricing.onlinePrice,
         mrp_price: pricing.mrpPrice
       };
@@ -923,7 +923,7 @@ export default function PurchaseManager() {
             unit_cost: it.unit_cost,
             landed_cost: it.landed_cost,
             store_price: it.store_price,
-            max_discount_price: it.max_discount_price,
+            mdp_price: it.mdp_price,
             online_price: it.online_price,
             mrp_price: it.mrp_price,
             is_completed: false
@@ -1062,7 +1062,7 @@ export default function PurchaseManager() {
         unit_cost: it.unit_cost,
         landed_cost: it.landed_cost,
         store_price: it.store_price,
-        max_discount_price: it.max_discount_price,
+        mdp_price: it.mdp_price,
         online_price: it.online_price,
         mrp_price: it.mrp_price,
         is_completed: false
@@ -1130,7 +1130,7 @@ export default function PurchaseManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              Dual Transport Modes (₹ / %) • Sticker Tag Price • MRP based on Online Price
+              Dual Transport Modes (₹ / %) • STORE • MDP • ONLINE • MRP
             </span>
           </div>
         </div>
@@ -1589,7 +1589,7 @@ export default function PurchaseManager() {
                         </div>
                       </div>
 
-                      {/* SCREENSHOT BOX MODEL WITH EXACT REQUESTED NAMES */}
+                      {/* SCREENSHOT BOX MODEL: STORE, MDP, ONLINE, MRP */}
                       {Number(unitCost) > 0 && (
                         <div className="p-2.5 rounded-xl bg-[#101628] border border-[#00d9ff]/30 grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-[11px] animate-in fade-in">
                           <div>
@@ -1604,7 +1604,7 @@ export default function PurchaseManager() {
 
                           <div>
                             <span className="text-[#00ff9d] text-[9px] block font-bold">MDP:</span>
-                            <strong className="text-[#00ff9d] text-xs">₹{liveMatrixPricing.maxDiscountPrice}</strong>
+                            <strong className="text-[#00ff9d] text-xs">₹{liveMatrixPricing.mdpPrice}</strong>
                           </div>
 
                           <div>
@@ -1834,7 +1834,7 @@ export default function PurchaseManager() {
                                   <th className="py-1 px-2">Product & Variant</th>
                                   <th className="py-1 px-2 text-center">Qty</th>
                                   <th className="py-1 px-2 text-center text-[#ffa500]">STORE</th>
-                                  <th className="py-1 px-2 text-center text-[#00ff9d]">MAX DISC</th>
+                                  <th className="py-1 px-2 text-center text-[#00ff9d]">MDP</th>
                                   <th className="py-1 px-2 text-center text-[#00d9ff]">ONLINE</th>
                                   <th className="py-1 px-2 text-center text-[#e056fd]">MRP</th>
                                   <th className="py-1 px-2 text-right">Total</th>
@@ -1854,7 +1854,7 @@ export default function PurchaseManager() {
                                     </td>
                                     <td className="py-1.5 px-2 text-center font-bold text-[#00ff9d]">{it.quantity}</td>
                                     <td className="py-1.5 px-2 text-center font-mono font-black text-[#ffa500] bg-[#ffa500]/10 rounded">₹{it.store_price}</td>
-                                    <td className="py-1.5 px-2 text-center font-mono text-[#00ff9d] font-bold">₹{it.max_discount_price}</td>
+                                    <td className="py-1.5 px-2 text-center font-mono text-[#00ff9d] font-bold">₹{it.mdp_price}</td>
                                     <td className="py-1.5 px-2 text-center font-mono text-[#00d9ff] font-bold">₹{it.online_price}</td>
                                     <td className="py-1.5 px-2 text-center font-mono text-[#e056fd] font-bold">₹{it.mrp_price}</td>
                                     <td className="py-1.5 px-2 text-right font-mono font-bold text-white">
@@ -2195,8 +2195,8 @@ export default function PurchaseManager() {
                     </div>
 
                     <div className="px-2.5 py-1.5 rounded-xl bg-white/5 text-center hidden sm:block">
-                      <span className="text-[8.5px] text-[#8b9bb4] block uppercase">MAX DISCOUNT PRICE</span>
-                      <strong className="text-xs font-bold text-white">₹{item.max_discount_price}</strong>
+                      <span className="text-[8.5px] text-[#8b9bb4] block uppercase">MDP</span>
+                      <strong className="text-xs font-bold text-white">₹{item.mdp_price}</strong>
                     </div>
 
                     <div className="px-2.5 py-1.5 rounded-xl bg-[#00d9ff]/10 text-center hidden sm:block">
@@ -2239,14 +2239,14 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 6. STANDALONE QUICK PRICING CALCULATOR MODAL */}
+      {/* 6. COMPACT STANDALONE QUICK PRICING CALCULATOR (WIDTH REDUCED TO max-w-xs) */}
       {isCalculatorOpen && (
         <div className="fixed inset-0 z-[100030] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-xs w-full p-4 sm:p-5 shadow-2xl space-y-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
               <div className="flex items-center gap-2">
                 <Calculator className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white uppercase tracking-wide">Calculator</h3>
+                <h3 className="text-xs font-extrabold text-white uppercase tracking-wider">Calculator</h3>
               </div>
               <button
                 type="button"
@@ -2257,28 +2257,28 @@ export default function PurchaseManager() {
               </button>
             </div>
 
-            <div className="space-y-3 font-mono text-xs">
+            <div className="space-y-2.5 font-mono text-xs">
               <div>
-                <label className="text-[10px] text-[#8b9bb4] uppercase block mb-1 font-bold">Base Price</label>
+                <label className="text-[9.5px] text-[#8b9bb4] uppercase block mb-1 font-bold">BASE PRICE</label>
                 <input
                   type="number"
                   autoFocus
                   placeholder="e.g. 145"
                   value={calcCost}
                   onChange={(e) => setCalcCost(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-bold text-sm outline-none"
+                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00ff9d] font-bold text-xs outline-none"
                 />
               </div>
 
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <label className="text-[10px] text-[#8b9bb4] uppercase font-bold">Transport</label>
+                  <label className="text-[9.5px] text-[#8b9bb4] uppercase font-bold">TRANSPORT</label>
                   
                   <div className="inline-flex rounded-lg bg-[#0a0e17] border border-white/10 p-0.5">
                     <button
                       type="button"
                       onClick={() => setCalcTransportMode('percent')}
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                      className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all ${
                         calcTransportMode === 'percent'
                           ? 'bg-[#00d9ff] text-neutral-950 shadow'
                           : 'text-[#8b9bb4] hover:text-white'
@@ -2289,7 +2289,7 @@ export default function PurchaseManager() {
                     <button
                       type="button"
                       onClick={() => setCalcTransportMode('amount')}
-                      className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold transition-all ${
+                      className={`px-2 py-0.5 rounded text-[9.5px] font-mono font-bold transition-all ${
                         calcTransportMode === 'amount'
                           ? 'bg-[#00d9ff] text-neutral-950 shadow'
                           : 'text-[#8b9bb4] hover:text-white'
@@ -2304,38 +2304,38 @@ export default function PurchaseManager() {
                   <input
                     type="number"
                     step="any"
-                    placeholder={calcTransportMode === 'percent' ? 'e.g. 5%' : 'e.g. ₹15'}
+                    placeholder={calcTransportMode === 'percent' ? 'e.g. 10%' : 'e.g. 15'}
                     value={calcTransportVal}
                     onChange={(e) => setCalcTransportVal(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#ffa500] font-bold text-xs outline-none"
+                    className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#ffa500] font-bold text-xs outline-none"
                   />
                   {calcTransportMode === 'amount' && Number(calcCost) > 0 && (
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[#8b9bb4]">
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] text-[#8b9bb4]">
                       (~{calcEffectiveTransportPercent.toFixed(1)}%)
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* EXACT MATCHING BORDER BOX OUTPUT ACCORDING TO SCREENSHOT */}
-              <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2.5">
+              {/* COMPACT BORDER BOX OUTPUT: STORE, MDP, ONLINE, MRP */}
+              <div className="p-3 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#ffa500] font-bold">STORE:</span>
+                  <span className="text-[#ffa500] font-bold text-[11px]">STORE:</span>
                   <strong className="text-sm font-black text-[#ffa500]">₹{standaloneCalcResult.storePrice}</strong>
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#00ff9d] font-bold">MDP:</span>
-                  <strong className="text-sm font-black text-[#00ff9d]">₹{standaloneCalcResult.maxDiscountPrice}</strong>
+                  <span className="text-[#00ff9d] font-bold text-[11px]">MDP:</span>
+                  <strong className="text-sm font-black text-[#00ff9d]">₹{standaloneCalcResult.mdpPrice}</strong>
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#00d9ff] font-bold">ONLINE:</span>
+                  <span className="text-[#00d9ff] font-bold text-[11px]">ONLINE:</span>
                   <strong className="text-sm font-black text-[#00d9ff]">₹{standaloneCalcResult.onlinePrice}</strong>
                 </div>
 
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#e056fd] font-bold">MRP:</span>
+                  <span className="text-[#e056fd] font-bold text-[11px]">MRP:</span>
                   <strong className="text-sm font-black text-[#e056fd]">₹{standaloneCalcResult.mrpPrice}</strong>
                 </div>
               </div>
