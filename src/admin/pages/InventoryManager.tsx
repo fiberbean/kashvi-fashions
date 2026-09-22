@@ -84,7 +84,6 @@ export default function InventoryManager() {
   const [selectedSubCatFilter, setSelectedSubCatFilter] = useState<string>('all');
   const [stockLevelFilter, setStockLevelFilter] = useState<'all' | 'low' | 'out'>('all');
 
-  // History & Detailed Matrix Modal state
   const [selectedProductForHistory, setSelectedProductForHistory] = useState<InventoryProductRow | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
@@ -93,20 +92,30 @@ export default function InventoryManager() {
   const loadInventory = async () => {
     setLoading(true);
     try {
-      const [prodRes, colorRes, invRes] = await Promise.all([
+      const [prodRes, colorRes, invRes, purchRes] = await Promise.all([
         supabase.from('products').select('*'),
         supabase.from('colours').select('name, hex_code'),
-        supabase.from('inventory').select('*')
+        supabase.from('inventory').select('*'),
+        supabase.from('purchase_items').select('*')
       ]);
 
       const products = prodRes.data || [];
       const inventoryRecords = invRes.data || [];
+      const purchaseRecords = purchRes.data || [];
 
       let colorHexMap = new Map<string, string>();
       (colorRes.data || []).forEach((c: any) => {
         if (c.name) colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code || '#6d4aff');
       });
       setColoursList(colorRes.data || []);
+
+      // Map latest purchase unit cost per product as fallback for cost price
+      const latestCostMap = new Map<string, number>();
+      purchaseRecords.forEach((pi: any) => {
+        if (pi.product_id && pi.unit_cost) {
+          latestCostMap.set(String(pi.product_id).toUpperCase(), Number(pi.unit_cost));
+        }
+      });
 
       const groupedMap = new Map<string, InventoryProductRow>();
 
@@ -117,9 +126,10 @@ export default function InventoryManager() {
         const cat = String(prod.category || 'FASHION');
         const subCat = String(prod.sub_category || 'GENERAL');
 
-        const baseCost = Number(prod.cost_price || prod.price || 0);
+        // Cost price resolution: products table cost_price/price -> purchase_items latest cost
+        const baseCost = Number(prod.cost_price || prod.price || latestCostMap.get(pId.toUpperCase()) || 0);
         const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
-        const store = prod.offline_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
+        const store = prod.offline_price || prod.store_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
         const online = prod.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
 
         groupedMap.set(pId, {
@@ -137,7 +147,6 @@ export default function InventoryManager() {
         });
       });
 
-      // Map inventory items into product variants
       inventoryRecords.forEach((inv: any) => {
         const pId = String(inv.product_id);
         if (groupedMap.has(pId)) {
@@ -152,7 +161,6 @@ export default function InventoryManager() {
         }
       });
 
-      // Ensure products without inventory rows still show master variants or default
       groupedMap.forEach((row, pId) => {
         if (row.variants.length === 0) {
           const prod = products.find((p) => String(p.id) === pId);
@@ -458,7 +466,7 @@ export default function InventoryManager() {
                   const isOut = row.total_stock <= 0;
                   const isLow = row.total_stock > 0 && row.total_stock <= 3;
 
-                  // Unique distinct colors
+                  // Unique distinct colors with stock counts
                   const uniqueColors = Array.from(new Set(row.variants.map((v) => v.color))).map((colorName) => {
                     const found = row.variants.find((v) => v.color === colorName);
                     const shadeStock = row.variants.filter((v) => v.color === colorName).reduce((sum, v) => sum + v.stock, 0);
@@ -495,25 +503,26 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* COLOURS CUBE BADGES */}
+                      {/* COLOURS CUBE BADGES (NO NAMES, ONLY SMALL CUBES WITH COUNT) */}
                       <td className="py-3 px-3">
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {uniqueColors.map((uc) => (
-                            <span
-                              key={uc.color}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#0a0e17] border border-white/15 text-[10.5px] font-mono font-bold uppercase"
-                              title={`${uc.color} — Stock: ${uc.stock}`}
-                            >
+                        <div className="flex flex-wrap gap-1.5 max-w-[220px]">
+                          {uniqueColors.map((uc) => {
+                            const badgeBg = uc.hex || '#6d4aff';
+                            const badgeTextColor = getContrastTextColor(badgeBg);
+
+                            return (
                               <span
-                                className="w-2.5 h-2.5 rounded-full border border-white/40 shrink-0 shadow"
-                                style={{ backgroundColor: uc.hex }}
-                              />
-                              <span className="text-white truncate max-w-[70px]">{uc.color}</span>
-                              <span className={`px-1 rounded text-[9px] font-black ${uc.stock > 0 ? 'bg-[#00ff9d]/20 text-[#00ff9d]' : 'bg-white/10 text-[#8b9bb4]'}`}>
-                                {uc.stock}
+                                key={uc.color}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg border border-white/20 shadow-sm"
+                                style={{ backgroundColor: badgeBg }}
+                                title={`${uc.color} — Stock: ${uc.stock}`}
+                              >
+                                <span className={`px-1 rounded text-[9px] font-mono font-black ${uc.stock > 0 ? 'bg-black/30 text-white' : 'bg-black/50 text-white/70'}`}>
+                                  {uc.stock}
+                                </span>
                               </span>
-                            </span>
-                          ))}
+                            );
+                          })}
                         </div>
                       </td>
 
@@ -540,22 +549,22 @@ export default function InventoryManager() {
 
                       {/* COST PRICE */}
                       <td className="py-3 px-3 text-right font-mono text-[#8b9bb4]">
-                        ₹{row.cost_price ? row.cost_price.toLocaleString('en-IN') : '—'}
+                        {row.cost_price ? `₹${row.cost_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
                       {/* LANDED PRICE */}
                       <td className="py-3 px-3 text-right font-mono text-[#ffa500]">
-                        ₹{row.landed_price ? row.landed_price.toLocaleString('en-IN') : '—'}
+                        {row.landed_price ? `₹${row.landed_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
                       {/* STORE PRICE */}
                       <td className="py-3 px-3 text-right font-mono font-bold text-white">
-                        ₹{row.store_price ? row.store_price.toLocaleString('en-IN') : '—'}
+                        {row.store_price ? `₹${row.store_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
                       {/* ONLINE PRICE */}
                       <td className="py-3 px-3 text-right font-mono text-[#00d9ff]">
-                        ₹{row.online_price ? row.online_price.toLocaleString('en-IN') : '—'}
+                        {row.online_price ? `₹${row.online_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
                       {/* TOTAL STOCK */}
