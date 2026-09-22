@@ -23,6 +23,11 @@ import {
   Grid
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { AdminStaffUser } from '../types';
+
+interface InventoryManagerProps {
+  currentUser?: AdminStaffUser | null;
+}
 
 interface InventoryProductRow {
   product_id: string;
@@ -97,7 +102,7 @@ function getDynamicColorHex(colorName: string): string {
   return '#6d4aff';
 }
 
-export default function InventoryManager() {
+export default function InventoryManager({ currentUser }: InventoryManagerProps) {
   const [productRows, setProductRows] = useState<InventoryProductRow[]>([]);
   const [coloursList, setColoursList] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -110,6 +115,8 @@ export default function InventoryManager() {
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   const loadInventory = async () => {
     setLoading(true);
@@ -125,7 +132,6 @@ export default function InventoryManager() {
       const inventoryRecords = invRes.data || [];
       const purchaseRecords = purchRes.data || [];
 
-      // Build robust color hex map supporting slashes / variations
       let colorHexMap = new Map<string, string>();
       (colorRes.data || []).forEach((c: any) => {
         if (c.name && c.hex_code) {
@@ -207,7 +213,6 @@ export default function InventoryManager() {
           const firstPart = cleanColorKey.split('/')[0].trim();
           const secondPart = cleanColorKey.includes('/') ? cleanColorKey.split('/')[1].trim() : '';
 
-          // Check full name, first part, second part, or fallback to dynamic hex
           const hex =
             colorHexMap.get(cleanColorKey) ||
             colorHexMap.get(firstPart) ||
@@ -258,6 +263,11 @@ export default function InventoryManager() {
   }, []);
 
   const handleOpenProductHistory = async (row: InventoryProductRow) => {
+    // RESTRICTION: Inventory audit modal is strictly for Super Admin
+    if (!isAdmin) {
+      return;
+    }
+
     setSelectedProductForHistory(row);
     setLoadingHistory(true);
     setPurchaseHistory([]);
@@ -542,8 +552,8 @@ export default function InventoryManager() {
                     <tr
                       key={row.product_id}
                       onClick={() => handleOpenProductHistory(row)}
-                      className="hover:bg-white/[0.04] transition-all cursor-pointer group"
-                      title="CLICK TO VIEW AUDIT TRAIL"
+                      className={`hover:bg-white/[0.04] transition-all group ${isAdmin ? 'cursor-pointer' : 'cursor-default'}`}
+                      title={isAdmin ? "CLICK TO VIEW AUDIT TRAIL" : "INVENTORY DETAILS"}
                     >
                       <td className="py-3 px-3">
                         <span className="font-mono font-bold text-[#00ff9d] text-[11px] block">
@@ -641,8 +651,8 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. AUDIT TRAIL MODAL */}
-      {selectedProductForHistory && (
+      {/* 3. AUDIT TRAIL MODAL (SUPER ADMIN ONLY) */}
+      {isAdmin && selectedProductForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
             
@@ -656,7 +666,7 @@ export default function InventoryManager() {
                     <span>[{selectedProductForHistory.product_code}] {selectedProductForHistory.product_name}</span>
                   </h4>
                   <span className="text-[10px] font-mono text-[#00d9ff]">
-                    PURCHASE INWARD & SALES DISPATCH AUDIT TRAIL
+                    PURCHASE INWARD & SALES DISPATCH AUDIT TRAIL (SUPER ADMIN ACCESS)
                   </span>
                 </div>
               </div>

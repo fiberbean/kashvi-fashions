@@ -307,7 +307,7 @@ export default function AdminApp() {
           )}
 
           {currentView === 'inventory' && (
-            <InventoryManager />
+            <InventoryManager currentUser={currentUser} />
           )}
 
           {currentView === 'product_master' && (
@@ -315,12 +315,11 @@ export default function AdminApp() {
           )}
 
           {currentView === 'purchase' && (
-            <PurchaseManager />
+            <PurchaseManager currentUser={currentUser} />
           )}
 
-          {/* RENDER SALES MANAGER */}
           {currentView === 'sales' && (
-            <SalesManager />
+            <SalesManager currentUser={currentUser} />
           )}
 
           {currentView === 'expenses' && (
