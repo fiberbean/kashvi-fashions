@@ -9,6 +9,7 @@ import {
   X,
   Check,
   Eye,
+  Layers,
   Palette,
   Banknote,
   QrCode,
@@ -1792,7 +1793,7 @@ export default function SalesManager() {
                   </span>
                   {modalColor ? (
                     <span className="text-[11px] font-mono font-black text-[#00d9ff] bg-[#00d9ff]/10 px-2 py-0.5 rounded-lg border border-[#00d9ff]/30">
-                      SHADE: {modalColor} ({activeSubShades.find(s => s.color === modalColor)?.stock || 0} PCS)
+                      SHADE: {modalColor} ({activeSubShades.find(s => cleanStr(s.color) === cleanStr(modalColor))?.stock || 0} PCS)
                     </span>
                   ) : (
                     <span className="text-[9.5px] font-mono text-[#8b9bb4] italic">
@@ -1808,7 +1809,7 @@ export default function SalesManager() {
                 ) : (
                   <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto custom-scrollbar p-1">
                     {activeSubShades.map((s) => {
-                      const isSelected = modalColor === s.color;
+                      const isSelected = cleanStr(modalColor) === cleanStr(s.color);
                       const cardBg = s.hex || '#6d4aff';
                       const textColor = getContrastTextColor(cardBg);
 
@@ -1861,7 +1862,7 @@ export default function SalesManager() {
 
                   <div className="flex flex-wrap gap-1.5">
                     {modalAvailableSizes.map((s) => {
-                      const isSelected = modalSize === s.size;
+                      const isSelected = cleanStr(modalSize) === cleanStr(s.size);
                       return (
                         <button
                           key={s.size}
@@ -2021,7 +2022,7 @@ export default function SalesManager() {
                           <tr key={idx}>
                             <td className="py-2 px-2.5">
                               <span className="font-bold text-white block uppercase">{(it.product_name || it.product_id).toUpperCase()}</span>
-                              <span className="text-[10px] text-[#00d9ff] font-mono uppercase">
+                              <span className="text-[10px] text-[#00d9ff] font-mono">
                                 {(it.color || it.variant_color).toUpperCase()} • {(it.size || it.variant_size).toUpperCase()}
                               </span>
                             </td>
