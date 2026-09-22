@@ -1,129 +1,168 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Crown, Sparkles } from 'lucide-react';
 
 const JEWELLERY_FIXED_BANNERS = [
   {
     id: 1,
     title: 'Certified Antique Temple Sets',
-    tagline: '22K Gold Heritage Craftsmanship with Natural Rubies & Pearls',
-    badge: 'Imperial Vault',
     image: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=1000&q=80',
     link: '/category/jewellery?sub=temple',
     colSpan: 'md:col-span-8',
-    height: 'h-[360px] md:h-[440px]',
+    height: 'h-[370px] md:h-[460px]',
+    lightsCount: 3,
   },
   {
     id: 2,
     title: 'Polki & Kundan Chokers',
-    tagline: 'Regal Wedding Masterpieces',
-    badge: 'Bridal Pick',
     image: 'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=800&q=80',
     link: '/category/jewellery?sub=choker-sets',
     colSpan: 'md:col-span-4',
-    height: 'h-[210px]',
+    height: 'h-[220px]',
+    lightsCount: 2,
   },
   {
     id: 3,
     title: 'Heirloom Bangles & Kadas',
-    tagline: 'Timeless Carved Filigree Work',
-    badge: 'Artisanal',
     image: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&q=80',
     link: '/category/jewellery?sub=bangles',
     colSpan: 'md:col-span-4',
-    height: 'h-[210px]',
+    height: 'h-[220px]',
+    lightsCount: 2,
   },
 ];
 
 export default function JewelleryUnevenBanners() {
+  const mainBanner = JEWELLERY_FIXED_BANNERS[0];
+  const sideBanners = JEWELLERY_FIXED_BANNERS.slice(1);
+
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-6 pb-12">
-      {/* Section Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <span className="text-[10px] sm:text-xs uppercase tracking-[0.25em] text-[#b38728] font-bold block mb-1">
-            Royal Vault Showcase
-          </span>
-          <h3 className="text-xl sm:text-2xl font-serif font-bold text-[#0b3b2c] tracking-tight">
-            Imperial Heirloom Jewellery
-          </h3>
-        </div>
+    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-10 pb-12 select-none relative z-10">
+      {/* Royal Hoardings Grid (No Top Header Text) */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-stretch">
+        
+        {/* 1. Large Main Hoarding Board */}
         <Link
-          to="/category/jewellery"
-          className="text-xs font-bold text-neutral-700 hover:text-[#0b3b2c] flex items-center gap-1 transition-colors uppercase tracking-wider group"
+          to={mainBanner.link}
+          className={`${mainBanner.colSpan} relative rounded-xl bg-[#030a08] border-[4px] border-[#946e20] hover:border-[#e5c07b] shadow-[0_25px_60px_rgba(0,0,0,0.98),0_0_20px_rgba(229,192,123,0.15)] group ${mainBanner.height} flex flex-col p-2.5 pt-3 transition-all duration-300 block cursor-pointer`}
         >
-          <span>View Vault</span>
-          <ArrowUpRight className="w-4 h-4 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-        </Link>
-      </div>
+          {/* Top Brass Beam / Truss Bar */}
+          <div className="absolute -top-3.5 inset-x-6 h-2 bg-gradient-to-r from-[#785918] via-[#e5c07b] to-[#785918] rounded-t-xs shadow-md z-30" />
 
-      {/* Fixed Royal Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* Large Feature Banner */}
-        <div className={`${JEWELLERY_FIXED_BANNERS[0].colSpan} relative rounded-3xl overflow-hidden border border-[#0b3b2c]/20 shadow-xs group bg-[#061e17] ${JEWELLERY_FIXED_BANNERS[0].height}`}>
-          <img
-            src={JEWELLERY_FIXED_BANNERS[0].image}
-            alt={JEWELLERY_FIXED_BANNERS[0].title}
-            className="w-full h-full object-cover opacity-90 transition-transform duration-700 ease-out group-hover:scale-105"
-            loading="lazy"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#061e17]/95 via-[#061e17]/40 to-transparent flex flex-col justify-end p-6 md:p-8">
-            <span className="inline-flex items-center gap-1.5 self-start text-[9px] uppercase tracking-[0.25em] font-extrabold px-3 py-1 rounded-full bg-[#0b3b2c] border border-[#e5c07b]/40 text-[#e5c07b] shadow-xs mb-2">
-              <Crown className="w-2.5 h-2.5" />
-              {JEWELLERY_FIXED_BANNERS[0].badge}
-            </span>
-            <h4 className="text-xl sm:text-3xl font-serif font-bold text-white drop-shadow-sm">
-              {JEWELLERY_FIXED_BANNERS[0].title}
-            </h4>
-            <p className="text-xs sm:text-sm text-[#e5c07b]/90 mt-1 max-w-md font-light">
-              {JEWELLERY_FIXED_BANNERS[0].tagline}
-            </p>
-            <div className="mt-4">
-              <Link
-                to={JEWELLERY_FIXED_BANNERS[0].link}
-                className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-[#e5c07b] text-[#0b3b2c] text-xs font-bold uppercase tracking-wider hover:bg-white transition-all shadow-md active:scale-95"
-              >
-                <span>Explore Antique Vault</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Stacked Fixed Tiles */}
-        <div className="md:col-span-4 flex flex-col gap-4">
-          {JEWELLERY_FIXED_BANNERS.slice(1).map((banner) => (
-            <div
-              key={banner.id}
-              className={`relative rounded-3xl overflow-hidden border border-[#0b3b2c]/20 shadow-xs group bg-[#061e17] ${banner.height}`}
-            >
-              <img
-                src={banner.image}
-                alt={banner.title}
-                className="w-full h-full object-cover opacity-90 transition-transform duration-700 ease-out group-hover:scale-105"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#061e17]/90 via-[#061e17]/30 to-transparent flex flex-col justify-end p-5">
-                <span className="inline-block self-start text-[8px] uppercase tracking-[0.2em] font-bold px-2 py-0.5 rounded-full bg-[#0b3b2c] border border-[#e5c07b]/30 text-[#e5c07b] mb-1.5 shadow-xs">
-                  {banner.badge}
-                </span>
-                <h4 className="text-base sm:text-lg font-serif font-bold text-white leading-tight drop-shadow-sm">
-                  {banner.title}
-                </h4>
-                <p className="text-[11px] text-neutral-300 line-clamp-1 mt-0.5">
-                  {banner.tagline}
-                </p>
-                <div className="mt-2.5">
-                  <Link
-                    to={banner.link}
-                    className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#e5c07b] hover:text-white uppercase tracking-wider group-hover:underline"
-                  >
-                    <span>View Collection</span>
-                    <ArrowUpRight className="w-3 h-3" />
-                  </Link>
+          {/* Polished Gold Overhead Spotlights */}
+          <div className="absolute -top-9 inset-x-0 flex justify-around px-16 z-40 pointer-events-none">
+            {[...Array(mainBanner.lightsCount)].map((_, i) => (
+              <div key={i} className="flex flex-col items-center">
+                {/* Curved Brass Arm */}
+                <div className="w-1.5 h-6 bg-gradient-to-b from-[#e5c07b] via-[#b38728] to-[#5a4110] rounded-t-full shadow-inner" />
+                {/* Gold Lamp Hood */}
+                <div className="w-8 h-4 rounded-t-sm bg-[#120e06] border border-[#e5c07b] shadow-[0_4px_12px_rgba(0,0,0,0.9)] flex items-center justify-center -mt-0.5">
+                  {/* Warm Glowing Bulb */}
+                  <div className="w-5 h-2 rounded-full bg-white shadow-[0_0_15px_#fff,0_0_25px_#fde68a,0_0_35px_#e5c07b]" />
                 </div>
               </div>
+            ))}
+          </div>
+
+          {/* Golden Volumetric Light Cones */}
+          <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden rounded-md">
+            <div
+              className="absolute -top-2 left-[5%] w-[40%] h-[95%] bg-gradient-to-b from-[#fde68a]/35 via-[#e5c07b]/10 to-transparent blur-xl"
+              style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }}
+            />
+            <div
+              className="absolute -top-2 left-1/2 -translate-x-1/2 w-[45%] h-[100%] bg-gradient-to-b from-[#fde68a]/40 via-[#e5c07b]/12 to-transparent blur-xl"
+              style={{ clipPath: 'polygon(38% 0%, 62% 0%, 100% 100%, 0% 100%)' }}
+            />
+            <div
+              className="absolute -top-2 right-[5%] w-[40%] h-[95%] bg-gradient-to-b from-[#fde68a]/35 via-[#e5c07b]/10 to-transparent blur-xl"
+              style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }}
+            />
+          </div>
+
+          {/* Stretched Royal Canvas (Pure Image without text) */}
+          <div className="w-full h-full rounded-xs overflow-hidden bg-[#020617] relative border border-[#e5c07b]/30 shadow-inner z-10">
+            <img
+              src={mainBanner.image}
+              alt={mainBanner.title}
+              className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-100 group-hover:brightness-105 contrast-105"
+              loading="lazy"
+            />
+
+            {/* Corner 24K Gold Fasteners */}
+            <div className="absolute top-2 left-2 w-3 h-3 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+              <div className="w-1 h-0.5 bg-[#3d2c0b] rotate-45" />
             </div>
+            <div className="absolute top-2 right-2 w-3 h-3 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+              <div className="w-1 h-0.5 bg-[#3d2c0b] -rotate-45" />
+            </div>
+            <div className="absolute bottom-2 left-2 w-3 h-3 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+              <div className="w-1 h-0.5 bg-[#3d2c0b] -rotate-45" />
+            </div>
+            <div className="absolute bottom-2 right-2 w-3 h-3 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+              <div className="w-1 h-0.5 bg-[#3d2c0b] rotate-45" />
+            </div>
+          </div>
+        </Link>
+
+        {/* 2. Side Stacked Hoarding Boards */}
+        <div className="md:col-span-4 flex flex-col gap-8 justify-between">
+          {sideBanners.map((banner) => (
+            <Link
+              key={banner.id}
+              to={banner.link}
+              className={`relative rounded-xl bg-[#030a08] border-[4px] border-[#946e20] hover:border-[#e5c07b] shadow-[0_20px_45px_rgba(0,0,0,0.98),0_0_15px_rgba(229,192,123,0.12)] group ${banner.height} flex flex-col p-2.5 pt-3 transition-all duration-300 block cursor-pointer`}
+            >
+              {/* Top Brass Beam */}
+              <div className="absolute -top-3.5 inset-x-5 h-2 bg-gradient-to-r from-[#785918] via-[#e5c07b] to-[#785918] rounded-t-xs shadow-md z-30" />
+
+              {/* Spotlights */}
+              <div className="absolute -top-9 inset-x-0 flex justify-around px-8 z-40 pointer-events-none">
+                {[...Array(banner.lightsCount)].map((_, i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <div className="w-1.5 h-6 bg-gradient-to-b from-[#e5c07b] via-[#b38728] to-[#5a4110] rounded-t-full shadow-inner" />
+                    <div className="w-7 h-4 rounded-t-sm bg-[#120e06] border border-[#e5c07b] shadow-[0_4px_10px_rgba(0,0,0,0.9)] flex items-center justify-center -mt-0.5">
+                      <div className="w-4 h-2 rounded-full bg-white shadow-[0_0_15px_#fff,0_0_22px_#fde68a,0_0_30px_#e5c07b]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Light Cones */}
+              <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden rounded-md">
+                <div
+                  className="absolute -top-2 left-[10%] w-[50%] h-[95%] bg-gradient-to-b from-[#fde68a]/35 via-[#e5c07b]/10 to-transparent blur-xl"
+                  style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }}
+                />
+                <div
+                  className="absolute -top-2 right-[10%] w-[50%] h-[95%] bg-gradient-to-b from-[#fde68a]/35 via-[#e5c07b]/10 to-transparent blur-xl"
+                  style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }}
+                />
+              </div>
+
+              {/* Stretched Inner Canvas (Pure Image) */}
+              <div className="w-full h-full rounded-xs overflow-hidden bg-[#020617] relative border border-[#e5c07b]/30 shadow-inner z-10">
+                <img
+                  src={banner.image}
+                  alt={banner.title}
+                  className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105 filter brightness-100 group-hover:brightness-105 contrast-105"
+                  loading="lazy"
+                />
+
+                {/* Corner Fasteners */}
+                <div className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+                  <div className="w-1 h-0.5 bg-[#3d2c0b] rotate-45" />
+                </div>
+                <div className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+                  <div className="w-1 h-0.5 bg-[#3d2c0b] -rotate-45" />
+                </div>
+                <div className="absolute bottom-2 left-2 w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+                  <div className="w-1 h-0.5 bg-[#3d2c0b] -rotate-45" />
+                </div>
+                <div className="absolute bottom-2 right-2 w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] border border-[#5a4110] shadow-md z-30 flex items-center justify-center">
+                  <div className="w-1 h-0.5 bg-[#3d2c0b] rotate-45" />
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
       </div>
