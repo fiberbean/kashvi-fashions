@@ -23,7 +23,8 @@ import {
   User,
   Phone,
   Tag,
-  AlertTriangle
+  AlertTriangle,
+  ChevronDown
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -187,10 +188,9 @@ export default function SalesManager() {
   };
 
   const activeProduct = useMemo(() => {
-    return productsList.find((p) => p.id === selectedProductId);
+    return productsList.find((p) => String(p.id) === String(selectedProductId));
   }, [productsList, selectedProductId]);
 
-  // Sync rate when product or pricing mode (Offline / Online) changes
   useEffect(() => {
     if (!activeProduct) {
       setItemRate(0);
@@ -205,13 +205,11 @@ export default function SalesManager() {
     }
   }, [activeProduct, orderType]);
 
-  // Filtered inventory rows available for the selected product
   const productInventoryRows = useMemo(() => {
     if (!activeProduct) return [];
     return inventoryList.filter((inv) => String(inv.product_id) === String(activeProduct.id));
   }, [activeProduct, inventoryList]);
 
-  // Distinct available colors for this product
   const availableColorsForProduct = useMemo(() => {
     const map = new Map<string, { totalStock: number; hex?: string }>();
     productInventoryRows.forEach((r) => {
@@ -230,7 +228,6 @@ export default function SalesManager() {
     }));
   }, [productInventoryRows, coloursList]);
 
-  // Distinct available sizes for this product & chosen color
   const availableSizesForSelection = useMemo(() => {
     if (!selectedColor) return [];
     return productInventoryRows
@@ -241,7 +238,6 @@ export default function SalesManager() {
       }));
   }, [productInventoryRows, selectedColor]);
 
-  // Real-time stock for the exact variant chosen
   const currentVariantStock = useMemo(() => {
     if (!selectedColor || !selectedSize) return 0;
     const match = productInventoryRows.find(
@@ -273,24 +269,23 @@ export default function SalesManager() {
       return;
     }
     if (sellQuantity <= 0) {
-      alert('Quantity 1 లేదా అంతకంటే ఎక్కువ ఉండాలి.');
+      alert('Quantity కనీసం 1 ఉండాలి.');
       return;
     }
     if (sellQuantity > currentVariantStock) {
-      alert(`స్టాక్ సరిపోదు! అందుబాటులో ఉన్నది కేవలం ${currentVariantStock} యూనిట్లు మాత్రమే.`);
+      alert(`స్టాక్ సరిపోదు! అందుబాటులో ఉన్నది ${currentVariantStock} మాత్రమే.`);
       return;
     }
 
     const matchedHex = coloursList.find((c) => c.name.toLowerCase().trim() === selectedColor.toLowerCase().trim())?.hex_code;
     const cartId = `${activeProduct.id}_${selectedColor}_${selectedSize}`;
 
-    // If already in cart, update quantity
     const existingIndex = cartItems.findIndex((c) => c.cart_id === cartId);
     if (existingIndex >= 0) {
       const updated = [...cartItems];
       const newQty = updated[existingIndex].quantity + sellQuantity;
       if (newQty > currentVariantStock) {
-        alert(`ఈ ఐటమ్ ఇప్పటికే కార్ట్‌లో ఉంది. మొత్తం స్టాక్ (${currentVariantStock}) మించి బిల్ చేయలేరు.`);
+        alert(`మొత్తం అందుబాటులో ఉన్న స్టాక్ (${currentVariantStock}) మించి బిల్ చేయలేరు.`);
         return;
       }
       updated[existingIndex].quantity = newQty;
@@ -314,7 +309,6 @@ export default function SalesManager() {
       ]);
     }
 
-    // Reset selection for next item
     setSelectedColor('');
     setSelectedSize('');
     setSellQuantity(1);
@@ -337,7 +331,6 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // Complete Order & Deduct Stock from Supabase
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cartItems.length === 0) {
@@ -347,7 +340,6 @@ export default function SalesManager() {
 
     setSubmitting(true);
     try {
-      // 1. Insert into orders table
       const orderPayload = {
         id: invoiceNo.trim(),
         customer_name: customerName.trim() || 'Walk-in Customer',
@@ -364,7 +356,6 @@ export default function SalesManager() {
       const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
       if (orderErr) throw orderErr;
 
-      // 2. Insert line items into order_items
       const orderItemsPayload = cartItems.map((item, idx) => ({
         id: `oi_${invoiceNo}_${Date.now()}_${idx}`,
         order_id: invoiceNo.trim(),
@@ -379,7 +370,6 @@ export default function SalesManager() {
       const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsPayload);
       if (itemsErr) throw itemsErr;
 
-      // 3. Deduct stock quantity in inventory table
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
@@ -478,9 +468,12 @@ export default function SalesManager() {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
 
+          {/* New Sale / POS Button */}
           <button
             type="button"
-            onClick={openNewBillingDesk}
+            onClick={() => {
+              openNewBillingDesk();
+            }}
             className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] hover:opacity-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-[#00d9ff]/30 cursor-pointer active:scale-95"
           >
             <Plus className="w-3.5 h-3.5 text-white stroke-[3]" />
@@ -572,9 +565,9 @@ export default function SalesManager() {
         </div>
       </div>
 
-      {/* 3. POS BILLING DESK MODAL (TWO-COLUMN SPLIT) */}
+      {/* 3. POS BILLING DESK MODAL (HIGHEST Z-INDEX & FIXED CLEARANCE) */}
       {isBillingModalOpen && (
-        <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
+        <div className="fixed inset-0 z-[100005] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
             
             {/* Header */}
@@ -586,7 +579,7 @@ export default function SalesManager() {
                 <div>
                   <h3 className="text-sm font-extrabold text-white flex items-center gap-2">
                     <span>POS Billing Workspace</span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono">
+                    <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono font-bold">
                       LIVE INVOICE: {invoiceNo}
                     </span>
                   </h3>

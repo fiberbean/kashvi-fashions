@@ -11,6 +11,7 @@ import OrdersManager from './admin/components/OrdersManager';
 import ProductMasterManager from './admin/pages/ProductMasterManager';
 import InventoryManager from './admin/pages/InventoryManager';
 import PurchaseManager from './admin/pages/PurchaseManager';
+import SalesManager from './admin/pages/SalesManager';
 import CategoryMasterModal from './admin/components/modals/CategoryMasterModal';
 import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterModal';
 import ColorMasterModal from './admin/components/modals/ColorMasterModal';
@@ -317,16 +318,9 @@ export default function AdminApp() {
             <PurchaseManager />
           )}
 
+          {/* RENDER SALES MANAGER */}
           {currentView === 'sales' && (
-            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-[#00d9ff]/10 text-[#00d9ff] border border-[#00d9ff]/20 flex items-center justify-center mx-auto shadow-lg">
-                <TrendingUp className="w-7 h-7" />
-              </div>
-              <h2 className="text-lg font-bold text-white">Sales Management Deck</h2>
-              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
-                POS billing, offline counter sales, custom discounts, customer loyalty points and transaction ledgers.
-              </p>
-            </div>
+            <SalesManager />
           )}
 
           {currentView === 'expenses' && (
