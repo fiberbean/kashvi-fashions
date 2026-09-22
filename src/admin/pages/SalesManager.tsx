@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ShoppingBag,
   Plus,
@@ -9,7 +9,6 @@ import {
   X,
   Check,
   Eye,
-  Calendar,
   Layers,
   Palette,
   Banknote,
@@ -19,18 +18,12 @@ import {
   Printer,
   ArrowRight,
   User,
-  Phone,
-  Tag,
-  AlertTriangle,
-  ChevronDown,
   UserPlus,
   Users,
   Share2,
   BookOpen,
-  CheckCircle2,
   Clock,
-  Globe,
-  Sparkles
+  Globe
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -64,11 +57,8 @@ interface InventoryItemRecord {
   id: string;
   product_id: string;
   variant_color?: string | null;
-  color?: string | null;
   variant_size?: string | null;
-  size?: string | null;
   stock_quantity?: number | null;
-  quantity?: number | null;
 }
 
 interface ColourMasterRecord {
@@ -104,6 +94,7 @@ interface OrderRecord {
   payment_mode: 'cash' | 'upi';
   utr_number?: string | null;
   payment_status: 'paid' | 'utr_pending';
+  items_summary?: any;
   created_at: string;
 }
 
@@ -126,7 +117,6 @@ function isOfflineCustomer(id: string | null | undefined): boolean {
   return /^CUST\d+$/.test(cleanId);
 }
 
-// Master Color Family Identification helper
 function getBaseFamily(colorName: string): string {
   const c = colorName.trim().toUpperCase();
   if (c.includes('GREEN') || c.includes('OLIVE') || c.includes('MINT') || c.includes('PISTA')) return 'GREEN';
@@ -154,13 +144,13 @@ export default function SalesManager() {
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 1. Customer Modals
+  // Customer Modals
   const [isCustomerPromptOpen, setIsCustomerPromptOpen] = useState<boolean>(false);
   const [isNewCustomerModalOpen, setIsNewCustomerModalOpen] = useState<boolean>(false);
   const [isExistingCustomerPickerOpen, setIsExistingCustomerPickerOpen] = useState<boolean>(false);
   const [isCustomerLedgerOpen, setIsCustomerLedgerOpen] = useState<boolean>(false);
 
-  // Customer Filter Switcher
+  // Customer Filter Switcher: By-default 'offline'
   const [customerPickerType, setCustomerPickerType] = useState<'offline' | 'online'>('offline');
 
   // New Customer Form State
@@ -174,7 +164,7 @@ export default function SalesManager() {
   const [custSearchTerm, setCustSearchTerm] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null);
 
-  // 2. Sales Form State
+  // Sales Form State
   const [isBillingModalOpen, setIsBillingModalOpen] = useState<boolean>(false);
   const [invoiceNo, setInvoiceNo] = useState<string>('KFINV0001');
   const [invoiceDate, setInvoiceDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
@@ -186,7 +176,7 @@ export default function SalesManager() {
   // Product Filter Search in POS Desk
   const [billingProductSearch, setBillingProductSearch] = useState<string>('');
 
-  // 3. Variant Picker Modal State
+  // Variant Picker Modal State
   const [isVariantModalOpen, setIsVariantModalOpen] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductRecord | null>(null);
   const [selectedParentColor, setSelectedParentColor] = useState<string>('');
@@ -198,12 +188,11 @@ export default function SalesManager() {
   // Cart
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  // 4. Colorful Invoice & WhatsApp Share Preview Modal
+  // Invoice & Receipt Preview Modal
   const [completedInvoice, setCompletedInvoice] = useState<OrderRecord | null>(null);
   const [completedItems, setCompletedItems] = useState<CartItem[]>([]);
   const [viewingOrder, setViewingOrder] = useState<OrderRecord | null>(null);
   const [viewingOrderItems, setViewingOrderItems] = useState<any[]>([]);
-  const [loadingViewItems, setLoadingViewItems] = useState<boolean>(false);
 
   const generateCustomerId = async () => {
     try {
@@ -258,7 +247,7 @@ export default function SalesManager() {
       const [orderRes, prodRes, invRes, clrRes, custRes, sizeRes, subCatRes] = await Promise.all([
         supabase.from('orders').select('*').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
-        supabase.from('inventory').select('*'),
+        supabase.from('inventory').select('*'), // Central single inventory table
         supabase.from('colours').select('*'),
         supabase.from('customers').select('*').order('created_at', { ascending: false }),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
@@ -407,8 +396,8 @@ export default function SalesManager() {
     setIsVariantModalOpen(true);
   };
 
-  // MULTI-KEY SAFE INVENTORY FILTERING
-  const modalProductInventory = useMemo(() => {
+  // Central Inventory filter for the selected product
+  const currentProductInventory = useMemo(() => {
     if (!selectedProductForModal) return [];
     const targetId = String(selectedProductForModal.id).trim().toUpperCase();
 
@@ -418,25 +407,43 @@ export default function SalesManager() {
     });
   }, [selectedProductForModal, inventoryList]);
 
-  // ALL VARIANT SHADES FOR CURRENT PRODUCT WITH REALTIME STOCK
+  // Live stock from central inventory
+  const getCentralizedStock = (colorName: string, sizeName?: string): number => {
+    const cTarget = colorName.trim().toUpperCase();
+    const sTarget = sizeName ? sizeName.trim().toUpperCase() : null;
+
+    const matches = currentProductInventory.filter((inv) => {
+      const c = String(inv.variant_color || 'STANDARD').trim().toUpperCase();
+      if (sTarget) {
+        const s = String(inv.variant_size || 'FREE SIZE').trim().toUpperCase();
+        return c === cTarget && s === sTarget;
+      }
+      return c === cTarget;
+    });
+
+    return matches.reduce((sum, inv) => sum + Number(inv.stock_quantity ?? 0), 0);
+  };
+
+  // Distinct shades available with real-time central stock
   const allShadesForProduct = useMemo(() => {
     if (!selectedProductForModal) return [];
     const map = new Map<string, { stock: number; hex?: string; parent?: string }>();
 
-    // 1. Inventory stock rows
-    modalProductInventory.forEach((r) => {
-      const clr = String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase();
-      const current = map.get(clr) || { stock: 0 };
-      const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr);
-      const qty = Number(r.stock_quantity ?? r.quantity ?? 0);
-      map.set(clr, {
-        stock: current.stock + qty,
-        hex: matched?.hex_code || current.hex || '#6d4aff',
-        parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
-      });
+    // 1. From central inventory table
+    currentProductInventory.forEach((r) => {
+      const clr = String(r.variant_color || 'STANDARD').trim().toUpperCase();
+      if (!map.has(clr)) {
+        const liveStock = getCentralizedStock(clr);
+        const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr);
+        map.set(clr, {
+          stock: liveStock,
+          hex: matched?.hex_code || '#6d4aff',
+          parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
+        });
+      }
     });
 
-    // 2. Product Master colour specifications
+    // 2. From product master specification
     const prod = selectedProductForModal;
     if (prod.colour) {
       const rawColors = typeof prod.colour === 'string'
@@ -444,9 +451,10 @@ export default function SalesManager() {
         : [String(prod.colour).toUpperCase()];
       rawColors.filter(Boolean).forEach((clr) => {
         if (!map.has(clr)) {
+          const liveStock = getCentralizedStock(clr);
           const matched = coloursList.find((c) => c.name.trim().toUpperCase() === clr);
           map.set(clr, {
-            stock: 0,
+            stock: liveStock,
             hex: matched?.hex_code || '#6d4aff',
             parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
           });
@@ -458,9 +466,10 @@ export default function SalesManager() {
       prod.variants.colors.forEach((c: string) => {
         const clr = String(c).trim().toUpperCase();
         if (!map.has(clr)) {
+          const liveStock = getCentralizedStock(clr);
           const matched = coloursList.find((x) => x.name.trim().toUpperCase() === clr);
           map.set(clr, {
-            stock: 0,
+            stock: liveStock,
             hex: matched?.hex_code || '#6d4aff',
             parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clr)
           });
@@ -486,9 +495,9 @@ export default function SalesManager() {
       hex: data.hex || '#6d4aff',
       parent: (data.parent || getBaseFamily(color)).toUpperCase()
     }));
-  }, [modalProductInventory, selectedProductForModal, coloursList]);
+  }, [currentProductInventory, selectedProductForModal, coloursList]);
 
-  // DISTINCT PARENT COLOR FAMILIES / CAPSULES
+  // Distinct parent color capsules
   const parentColorFamilies = useMemo(() => {
     const map = new Map<string, { totalStock: number; sampleHex: string; shadeCount: number }>();
 
@@ -510,53 +519,61 @@ export default function SalesManager() {
     }));
   }, [allShadesForProduct]);
 
-  // Auto-select first parent family if none selected
   useEffect(() => {
     if (isVariantModalOpen && parentColorFamilies.length > 0 && !selectedParentColor) {
-      // Incase stock unna family unte adi, lekapothe first family
       const withStock = parentColorFamilies.find((f) => f.stock > 0);
       setSelectedParentColor(withStock ? withStock.family : parentColorFamilies[0].family);
     }
   }, [isVariantModalOpen, parentColorFamilies, selectedParentColor]);
 
-  // SUB-SHADES FILTERED BY CURRENT SELECTED PARENT COLOR
+  // Sub-shades under active parent color
   const activeSubShades = useMemo(() => {
     if (!selectedParentColor) return allShadesForProduct;
     return allShadesForProduct.filter((s) => s.parent === selectedParentColor);
   }, [allShadesForProduct, selectedParentColor]);
 
-  // SIZES FOR SELECTED SHADE
+  // Sizes for selected shade
   const modalAvailableSizes = useMemo(() => {
     if (!selectedProductForModal || !modalColor) return [];
     const chosenColor = modalColor.trim().toUpperCase();
     const map = new Map<string, number>();
 
-    modalProductInventory
-      .filter((r) => String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase() === chosenColor)
+    // From inventory
+    currentProductInventory
+      .filter((r) => String(r.variant_color || 'STANDARD').trim().toUpperCase() === chosenColor)
       .forEach((r) => {
-        const sz = String(r.variant_size || r.size || 'FREE SIZE').trim().toUpperCase();
-        const prev = map.get(sz) || 0;
-        const qty = Number(r.stock_quantity ?? r.quantity ?? 0);
-        map.set(sz, prev + qty);
+        const sz = String(r.variant_size || 'FREE SIZE').trim().toUpperCase();
+        if (!map.has(sz)) {
+          const liveStock = getCentralizedStock(chosenColor, sz);
+          map.set(sz, liveStock);
+        }
       });
 
+    // From product master
     const prod = selectedProductForModal;
     if (prod.size) {
       const rawSizes = typeof prod.size === 'string'
         ? prod.size.split(',').map((s) => s.trim().toUpperCase())
         : [String(prod.size).toUpperCase()];
       rawSizes.filter(Boolean).forEach((sz) => {
-        if (!map.has(sz)) map.set(sz, 0);
+        if (!map.has(sz)) {
+          const liveStock = getCentralizedStock(chosenColor, sz);
+          map.set(sz, liveStock);
+        }
       });
     }
 
     if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
       prod.variants.sizes.forEach((s: string) => {
         const sz = String(s).trim().toUpperCase();
-        if (!map.has(sz)) map.set(sz, 0);
+        if (!map.has(sz)) {
+          const liveStock = getCentralizedStock(chosenColor, sz);
+          map.set(sz, liveStock);
+        }
       });
     }
 
+    // From sub-category
     const subCatObj = subCategoriesList.find(
       (sc) => sc.id === prod.sub_category_id || sc.name?.toUpperCase() === prod.sub_category?.toUpperCase()
     );
@@ -568,7 +585,10 @@ export default function SalesManager() {
       if (directMatches.length > 0) {
         directMatches.forEach((s) => {
           const sName = String(s.name).trim().toUpperCase();
-          if (!map.has(sName)) map.set(sName, 0);
+          if (!map.has(sName)) {
+            const liveStock = getCentralizedStock(chosenColor, sName);
+            map.set(sName, liveStock);
+          }
         });
       } else if (subCatObj.size_group) {
         const groupMatches = allSizesList.filter(
@@ -576,14 +596,18 @@ export default function SalesManager() {
         );
         groupMatches.forEach((s) => {
           const sName = String(s.name).trim().toUpperCase();
-          if (!map.has(sName)) map.set(sName, 0);
+          if (!map.has(sName)) {
+            const liveStock = getCentralizedStock(chosenColor, sName);
+            map.set(sName, liveStock);
+          }
         });
       }
     }
 
     if (map.size === 0 && allSizesList.length > 0) {
       allSizesList.slice(0, 8).forEach((s) => {
-        map.set(String(s.name).trim().toUpperCase(), 0);
+        const sName = String(s.name).trim().toUpperCase();
+        map.set(sName, 0);
       });
     }
 
@@ -595,22 +619,13 @@ export default function SalesManager() {
       size,
       stock
     }));
-  }, [modalProductInventory, selectedProductForModal, modalColor, subCategoriesList, allSizesList]);
+  }, [currentProductInventory, selectedProductForModal, modalColor, subCategoriesList, allSizesList]);
 
-  // LIVE STOCK FOR THE CHOSEN COLOR + SIZE
+  // Exact live stock for the chosen color & size
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
-    const targetColor = modalColor.trim().toUpperCase();
-    const targetSize = modalSize.trim().toUpperCase();
-
-    const matchingRows = modalProductInventory.filter((r) => {
-      const c = String(r.variant_color || r.color || 'STANDARD').trim().toUpperCase();
-      const s = String(r.variant_size || r.size || 'FREE SIZE').trim().toUpperCase();
-      return c === targetColor && s === targetSize;
-    });
-
-    return matchingRows.reduce((sum, r) => sum + Number(r.stock_quantity ?? r.quantity ?? 0), 0);
-  }, [modalProductInventory, modalColor, modalSize]);
+    return getCentralizedStock(modalColor, modalSize);
+  }, [modalColor, modalSize, currentProductInventory]);
 
   const handleConfirmVariantToCart = () => {
     if (!selectedProductForModal) return;
@@ -675,6 +690,7 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
+  // Central sale execution with direct inventory deduction
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -704,26 +720,32 @@ export default function SalesManager() {
         payment_mode: paymentMode,
         utr_number: paymentMode === 'upi' && cleanUtr ? cleanUtr : null,
         payment_status: isUtrPending ? 'utr_pending' : 'paid',
+        items_summary: cartItems, // Inline items backup
         created_at: new Date().toISOString()
       };
 
+      // 1. Insert Order
       const { error: orderErr } = await supabase.from('orders').insert([orderPayload]);
       if (orderErr) throw orderErr;
 
-      const orderItemsPayload = cartItems.map((item, idx) => ({
-        id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
-        order_id: invoiceNo.trim().toUpperCase(),
-        product_id: item.product_id.toUpperCase(),
-        variant_color: item.color.toUpperCase(),
-        variant_size: item.size.toUpperCase(),
-        quantity: item.quantity,
-        price: item.unit_price,
-        total: item.total_price
-      }));
+      // 2. Safe Line items insert (attempt order_items, won't break if table doesn't exist)
+      try {
+        const orderItemsPayload = cartItems.map((item, idx) => ({
+          id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
+          order_id: invoiceNo.trim().toUpperCase(),
+          product_id: item.product_id.toUpperCase(),
+          variant_color: item.color.toUpperCase(),
+          variant_size: item.size.toUpperCase(),
+          quantity: item.quantity,
+          price: item.unit_price,
+          total: item.total_price
+        }));
+        await supabase.from('order_items').insert(orderItemsPayload);
+      } catch (e) {
+        console.warn('order_items table not present or skipped:', e);
+      }
 
-      const { error: itemsErr } = await supabase.from('order_items').insert(orderItemsPayload);
-      if (itemsErr) throw itemsErr;
-
+      // 3. Central inventory deduction (Shared Online & Offline Stock)
       for (const item of cartItems) {
         const { data: invRow } = await supabase
           .from('inventory')
@@ -734,21 +756,26 @@ export default function SalesManager() {
           .maybeSingle();
 
         if (invRow) {
-          const currentQty = Number(invRow.stock_quantity || 0);
-          const newStock = currentQty - item.quantity;
+          const currentStock = Number(invRow.stock_quantity ?? 0);
+          const newStock = currentStock - item.quantity;
           await supabase
             .from('inventory')
             .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
             .eq('id', invRow.id);
         } else {
+          // If not yet present in inventory, compute and insert
+          const liveStockBeforeSale = getCentralizedStock(item.color, item.size);
+          const newStock = liveStockBeforeSale - item.quantity;
+
           await supabase.from('inventory').insert([
             {
-              id: `inv_${item.product_id}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`.toUpperCase(),
+              id: `inv_${item.product_id}_${item.color}_${item.size}_${Date.now()}`.toUpperCase(),
               product_id: item.product_id.toUpperCase(),
               variant_color: item.color.toUpperCase(),
               variant_size: item.size.toUpperCase(),
-              stock_quantity: -item.quantity,
-              low_stock_threshold: 3
+              stock_quantity: newStock,
+              low_stock_threshold: 3,
+              updated_at: new Date().toISOString()
             }
           ]);
         }
@@ -772,8 +799,9 @@ export default function SalesManager() {
       return;
     }
 
-    const itemsSummary = items
-      .map((it, idx) => `${idx + 1}. ${(it.product_name || it.product_id).toUpperCase()} (${(it.color || it.variant_color).toUpperCase()} / ${(it.size || it.variant_size).toUpperCase()}) x ${it.quantity} = ₹${it.total_price || it.total}`)
+    const lineItems = items.length > 0 ? items : (inv.items_summary || []);
+    const itemsSummary = lineItems
+      .map((it: any, idx: number) => `${idx + 1}. ${(it.product_name || it.product_id).toUpperCase()} (${(it.color || it.variant_color).toUpperCase()} / ${(it.size || it.variant_size).toUpperCase()}) x ${it.quantity} = ₹${it.total_price || it.total || it.price}`)
       .join('%0A');
 
     const message = `✨ *KASHVI CREATIONS - TAX INVOICE* ✨%0A%0A` +
@@ -793,17 +821,18 @@ export default function SalesManager() {
 
   const handleOpenViewOrder = async (order: OrderRecord) => {
     setViewingOrder(order);
-    setLoadingViewItems(true);
-    try {
-      const { data } = await supabase
-        .from('order_items')
-        .select('*')
-        .eq('order_id', order.id);
-      setViewingOrderItems(data || []);
-    } catch (err: any) {
-      alert('Error fetching items: ' + err.message);
-    } finally {
-      setLoadingViewItems(false);
+    if (order.items_summary && Array.isArray(order.items_summary)) {
+      setViewingOrderItems(order.items_summary);
+    } else {
+      try {
+        const { data } = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', order.id);
+        setViewingOrderItems(data || []);
+      } catch {
+        setViewingOrderItems([]);
+      }
     }
   };
 
@@ -813,7 +842,6 @@ export default function SalesManager() {
     return orders.filter((o) => o.customer_id === selectedCustomer.id || (custPhone && o.customer_phone === custPhone));
   }, [orders, selectedCustomer]);
 
-  // OFFLINE FILTER: ^CUST\d+$ matrame Offline, Migithavanni Online
   const filteredExistingCustomers = useMemo(() => {
     let list = customersList;
 
@@ -875,7 +903,7 @@ export default function SalesManager() {
               </span>
             </h2>
             <span className="text-[10px] text-[#8b9bb4]">
-              SERIES: KFINV0001 • COLOR CAPSULES & SHADES • AUTO STOCK SYNC
+              SERIES: KFINV0001 • CENTRALISED INVENTORY • PURE SWATCH CUBES
             </span>
           </div>
         </div>
@@ -968,7 +996,7 @@ export default function SalesManager() {
                       </td>
                       <td className="py-2.5 px-3">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ffa500]/15 text-[#ffa500] text-[10px] font-mono font-bold">
-                          <Store className="w-3.5 h-3.5" /> WALK-IN
+                          <Store className="w-3 h-3" /> WALK-IN
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
@@ -1182,7 +1210,7 @@ export default function SalesManager() {
               </button>
             </div>
 
-            {/* TOP COMPACT SWITCHER: OFFLINE (DEFAULT) & ONLINE */}
+            {/* TOP COMPACT SWITCHER: OFFLINE & ONLINE */}
             <div className="p-2 rounded-2xl bg-[#0a0e17] border border-white/10 flex items-center justify-between gap-2">
               <span className="text-[10px] font-mono text-[#8b9bb4] uppercase font-bold tracking-wider">
                 FILTER:
@@ -1230,7 +1258,7 @@ export default function SalesManager() {
               <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
             </div>
 
-            {/* Customers List Render */}
+            {/* Customers List */}
             <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar">
               {filteredExistingCustomers.length === 0 ? (
                 <div className="p-6 text-center text-[#8b9bb4] italic text-xs uppercase">
@@ -1688,12 +1716,12 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 5. VARIANT SELECTION MODAL (TWO-TIER: PARENT COLOUR CAPSULES -> SUB-SHADES TINY CUBES) */}
+      {/* 5. VARIANT SELECTION MODAL (PARENT CAPSULES -> TINY SWATCH CUBES WITHOUT TEXT LABELS) */}
       {isVariantModalOpen && selectedProductForModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-xl w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-lg w-full p-5 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
             
-            {/* Top Bar */}
+            {/* Top Product Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div>
                 <span className="font-mono text-xs font-bold text-[#00ff9d] uppercase">[{selectedProductForModal.id}]</span>
@@ -1708,13 +1736,13 @@ export default function SalesManager() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
+            <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar pr-1">
               
-              {/* STEP 1: MAIN PARENT COLOUR CAPSULES */}
+              {/* STEP 1: PARENT COLOR FAMILY CAPSULES */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[10.5px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1">
-                    <Palette className="w-3 h-3" /> 1. SELECT MAIN COLOUR GROUP:
+                    <Palette className="w-3 h-3" /> 1. SELECT MAIN COLOUR:
                   </span>
                   {selectedParentColor && (
                     <span className="text-[9.5px] font-mono text-[#00ff9d] font-bold">
@@ -1746,8 +1774,8 @@ export default function SalesManager() {
                           style={{ backgroundColor: f.hex }}
                         />
                         <span>{f.family}</span>
-                        <span className={`text-[9px] px-1 rounded-full ${f.stock > 0 ? 'bg-[#00ff9d]/20 text-[#00ff9d]' : 'bg-white/10 text-[#8b9bb4]'}`}>
-                          {f.stock > 0 ? f.stock : f.count}
+                        <span className={`text-[9px] px-1 rounded-full ${f.stock > 0 ? 'bg-[#00ff9d]/20 text-[#00ff9d] font-black' : 'bg-white/10 text-[#8b9bb4]'}`}>
+                          {f.stock > 0 ? `${f.stock}` : '0'}
                         </span>
                       </button>
                     );
@@ -1755,25 +1783,29 @@ export default function SalesManager() {
                 </div>
               </div>
 
-              {/* STEP 2: SUB-SHADES TINY CUBES / CAPSULES */}
-              <div className="space-y-1.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
-                <div className="flex items-center justify-between">
+              {/* STEP 2: PURE VISUAL SWATCH CUBES WITHOUT TEXT LABELS */}
+              <div className="space-y-2 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
+                <div className="flex items-center justify-between border-b border-white/5 pb-1.5">
                   <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase">
-                    2. CHOOSE SHADE FOR &quot;{selectedParentColor || 'ALL'}&quot; ({activeSubShades.length} SHADES):
+                    2. CHOOSE SHADE CUBE ({activeSubShades.length} SHADES):
                   </span>
-                  {modalColor && (
-                    <span className="text-[10px] font-mono font-bold text-[#00d9ff]">
-                      SELECTED: {modalColor}
+                  {modalColor ? (
+                    <span className="text-[11px] font-mono font-black text-[#00d9ff] bg-[#00d9ff]/10 px-2 py-0.5 rounded-lg border border-[#00d9ff]/30">
+                      SHADE: {modalColor} ({activeSubShades.find(s => s.color === modalColor)?.stock || 0} PCS)
+                    </span>
+                  ) : (
+                    <span className="text-[9.5px] font-mono text-[#8b9bb4] italic">
+                      TAP ANY CUBE
                     </span>
                   )}
                 </div>
 
                 {activeSubShades.length === 0 ? (
-                  <div className="p-3 text-center text-[#8b9bb4] italic text-xs uppercase">
-                    NO SUB-SHADES FOUND IN THIS GROUP.
+                  <div className="p-4 text-center text-[#8b9bb4] italic text-xs uppercase">
+                    NO SHADES AVAILABLE IN THIS FAMILY.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5 max-h-40 overflow-y-auto custom-scrollbar p-0.5">
+                  <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto custom-scrollbar p-1">
                     {activeSubShades.map((s) => {
                       const isSelected = modalColor === s.color;
                       const cardBg = s.hex || '#6d4aff';
@@ -1782,33 +1814,33 @@ export default function SalesManager() {
                       return (
                         <div
                           key={s.color}
+                          title={`${s.color} — Central Stock: ${s.stock}`}
                           onClick={() => {
                             setModalColor(s.color);
                             setModalSize('');
                           }}
-                          className={`p-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 border uppercase ${
+                          className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl cursor-pointer transition-all flex flex-col items-center justify-center border shadow-md active:scale-95 group ${
                             isSelected
-                              ? 'border-2 border-white shadow-[0_0_12px_rgba(255,255,255,0.7)] scale-[1.02] bg-[#101628]'
-                              : 'border-white/10 bg-[#101628] hover:border-white/20'
+                              ? 'border-2 border-white shadow-[0_0_15px_rgba(255,255,255,0.85)] scale-110 ring-2 ring-[#00ff9d]'
+                              : 'border-white/20 hover:border-white/60 hover:scale-105'
                           }`}
+                          style={{ backgroundColor: cardBg }}
                         >
-                          {/* Visual Tiny Cube / Swatch */}
-                          <div
-                            className="w-5 h-5 rounded-lg border border-white/30 shrink-0 shadow-sm flex items-center justify-center"
-                            style={{ backgroundColor: cardBg }}
-                          >
-                            {isSelected && <Check className="w-3 h-3" style={{ color: textColor }} />}
-                          </div>
+                          {/* Selected Checkmark */}
+                          {isSelected && (
+                            <Check className="w-4 h-4 stroke-[3]" style={{ color: textColor }} />
+                          )}
 
-                          {/* Shade Text & Stock */}
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[10px] font-bold text-white block truncate leading-tight">
-                              {s.color}
-                            </span>
-                            <span className={`text-[8.5px] font-mono block ${s.stock > 0 ? 'text-[#00ff9d]' : 'text-[#ff6b6b]'}`}>
-                              {s.stock > 0 ? `${s.stock} IN STOCK` : '0 STOCK'}
-                            </span>
-                          </div>
+                          {/* Top-Right Stock Counter Badge */}
+                          <span
+                            className={`absolute -top-1.5 -right-1.5 px-1 py-0.2 rounded-full text-[8px] font-mono font-black border shadow-sm ${
+                              s.stock > 0
+                                ? 'bg-[#00ff9d] text-neutral-950 border-neutral-950'
+                                : 'bg-[#ff6b6b] text-white border-white/20'
+                            }`}
+                          >
+                            {s.stock}
+                          </span>
                         </div>
                       );
                     })}
@@ -1819,9 +1851,15 @@ export default function SalesManager() {
               {/* STEP 3: SIZE SELECTION */}
               {modalColor && (
                 <div className="space-y-1.5">
-                  <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                    3. SELECT SIZE FOR &quot;{modalColor}&quot;:
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10.5px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                      3. SELECT SIZE FOR &quot;{modalColor}&quot;:
+                    </span>
+                    <span className="text-[9.5px] font-mono text-[#00ff9d]">
+                      CENTRALISED STOCK
+                    </span>
+                  </div>
+
                   <div className="flex flex-wrap gap-1.5">
                     {modalAvailableSizes.map((s) => {
                       const isSelected = modalSize === s.size;
@@ -1830,14 +1868,14 @@ export default function SalesManager() {
                           key={s.size}
                           type="button"
                           onClick={() => setModalSize(s.size)}
-                          className={`px-3 py-1 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
+                          className={`px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all cursor-pointer border uppercase ${
                             isSelected
                               ? 'bg-[#00ff9d] text-neutral-950 border-[#00ff9d] shadow-md scale-105'
                               : 'bg-[#0a0e17] text-white border-white/15 hover:border-[#00d9ff]'
                           }`}
                         >
                           <span>{s.size}</span>
-                          <span className={`text-[9px] ml-1 opacity-75 ${s.stock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
+                          <span className={`text-[9.5px] ml-1.5 font-black ${s.stock > 0 ? 'text-[#00ff9d] bg-[#00ff9d]/20 px-1 py-0.2 rounded' : 'text-[#ff6b6b]'}`}>
                             [{s.stock}]
                           </span>
                         </button>
@@ -1865,7 +1903,7 @@ export default function SalesManager() {
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-[9.5px] font-mono text-[#8b9bb4] uppercase">QUANTITY</label>
-                      <span className={`text-[9px] font-mono ${modalCurrentStock <= 0 ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}`}>
+                      <span className={`text-[9.5px] font-mono font-bold ${modalCurrentStock > 0 ? 'text-[#00ff9d]' : 'text-[#ff6b6b]'}`}>
                         STOCK: {modalCurrentStock}
                       </span>
                     </div>
@@ -1895,7 +1933,7 @@ export default function SalesManager() {
                 type="button"
                 disabled={!modalColor || !modalSize}
                 onClick={handleConfirmVariantToCart}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 uppercase shadow-md"
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 uppercase shadow-md active:scale-95"
               >
                 <Check className="w-3.5 h-3.5 stroke-[3]" />
                 <span>ADD TO BILL</span>
@@ -1954,7 +1992,9 @@ export default function SalesManager() {
                     </div>
                     <div>
                       <span className="text-[#8b9bb4] text-[9.5px] uppercase block">CUSTOMER:</span>
-                      <strong className="text-white">{activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}</strong>
+                      <strong className="text-white">
+                        {activeBill.customer_name} {activeBill.customer_id ? `[${activeBill.customer_id}]` : ''}
+                      </strong>
                       <span className="text-[9px] block text-[#8b9bb4]">
                         TYPE: {isCustOffline ? 'OFFLINE (CUST)' : 'ONLINE'}
                       </span>
@@ -1982,7 +2022,7 @@ export default function SalesManager() {
                           <tr key={idx}>
                             <td className="py-2 px-2.5">
                               <span className="font-bold text-white block uppercase">{(it.product_name || it.product_id).toUpperCase()}</span>
-                              <span className="text-[10px] text-[#00d9ff] font-mono uppercase">
+                              <span className="text-[10px] text-[#00d9ff] font-mono">
                                 {(it.color || it.variant_color).toUpperCase()} • {(it.size || it.variant_size).toUpperCase()}
                               </span>
                             </td>
