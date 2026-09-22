@@ -27,6 +27,11 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { AdminStaffUser } from '../types';
+
+interface SalesManagerProps {
+  currentUser?: AdminStaffUser | null;
+}
 
 interface CustomerRecord {
   id: string;
@@ -91,13 +96,18 @@ interface OrderRecord {
   customer_id?: string | null;
   customer_name: string;
   customer_phone?: string;
-  order_type: 'offline' | 'online' | string;
-  total_amount: number;
-  discount_amount: number;
-  final_amount: number;
-  payment_mode: 'cash' | 'upi';
-  utr_number?: string | null;
-  payment_status: 'paid' | 'utr_pending';
+  order_type?: 'offline' | 'online' | string;
+  total?: number;
+  total_amount?: number;
+  subtotal?: number;
+  discount?: number;
+  discount_amount?: number;
+  final_amount?: number;
+  payment_mode?: 'cash' | 'upi' | string;
+  payment_ref?: string | null;
+  payment_status?: 'paid' | 'utr_pending' | string;
+  order_status?: string;
+  items?: any;
   items_summary?: any;
   created_at: string;
 }
@@ -140,7 +150,6 @@ function getBaseFamily(colorName: string): string {
   return 'OTHER';
 }
 
-// POS DESK STORE RATE HELPER (STRICT PRIORITY: STORE / OFFLINE RATE)
 function getProductStorePrice(p: ProductRecord): number {
   if (p.offline_price && Number(p.offline_price) > 0) return Number(p.offline_price);
   if (p.store_price && Number(p.store_price) > 0) return Number(p.store_price);
@@ -149,7 +158,7 @@ function getProductStorePrice(p: ProductRecord): number {
   return 0;
 }
 
-export default function SalesManager() {
+export default function SalesManager({ currentUser }: SalesManagerProps) {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
   const [inventoryList, setInventoryList] = useState<InventoryItemRecord[]>([]);
@@ -405,7 +414,6 @@ export default function SalesManager() {
     setIsBillingModalOpen(true);
   };
 
-  // OPEN VARIANT PICKER WITH STORE PRICE PRIORITY
   const handleOpenVariantPicker = (prod: ProductRecord) => {
     setSelectedProductForModal(prod);
     const storePrice = getProductStorePrice(prod);
@@ -708,7 +716,6 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.total_price, 0);
   }, [cartItems]);
 
-  // STRICT 10% DISCOUNT CAP
   const maxAllowedDiscount = useMemo(() => {
     return Math.floor(subTotalAmount * 0.10);
   }, [subTotalAmount]);
@@ -733,7 +740,7 @@ export default function SalesManager() {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
-  // SALE EXECUTION WITH ACCURATE INVENTORY UPDATE & SUPABASE SCHEMA FALLBACK
+  // SALE EXECUTION: EXACT SCHEMA MATCH WITH 'items' COLUMN
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCustomer) {
@@ -752,41 +759,33 @@ export default function SalesManager() {
     setSubmitting(true);
     try {
       const custPhoneVal = selectedCustomer.phone || selectedCustomer.mobile || undefined;
+
+      // STRICT SCHEMA OBJECT USING 'items' (NOT items_summary)
       const orderPayload: any = {
         id: invoiceNo.trim().toUpperCase(),
         customer_id: selectedCustomer.id.toUpperCase(),
         customer_name: selectedCustomer.name.toUpperCase(),
         customer_phone: custPhoneVal,
-        order_type: 'offline',
+        total: finalPayableAmount,
         total_amount: subTotalAmount,
+        subtotal: subTotalAmount,
+        discount: appliedDisc,
         discount_amount: appliedDisc,
         final_amount: finalPayableAmount,
         payment_mode: paymentMode,
-        utr_number: paymentMode === 'upi' && cleanUtr ? cleanUtr : null,
+        payment_method: paymentMode.toUpperCase(),
+        payment_ref: paymentMode === 'upi' && cleanUtr ? cleanUtr : null,
         payment_status: isUtrPending ? 'utr_pending' : 'paid',
-        items_summary: cartItems,
+        order_status: 'delivered',
+        status: 'completed',
+        items: cartItems, // Matches exact 'items' jsonb column from orders schema
         created_at: new Date().toISOString()
       };
 
-      // 1. Attempt insert with discount_amount
-      let orderInsertRes = await supabase.from('orders').insert([orderPayload]);
+      const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
+      if (orderError) throw orderError;
 
-      // 2. Fallback: If 'discount_amount' column is missing in schema, try with 'discount'
-      if (orderInsertRes.error && orderInsertRes.error.message.includes('discount_amount')) {
-        delete orderPayload.discount_amount;
-        orderPayload.discount = appliedDisc;
-        orderInsertRes = await supabase.from('orders').insert([orderPayload]);
-
-        // 3. Fallback 2: If neither exists, insert without discount column
-        if (orderInsertRes.error && orderInsertRes.error.message.includes('discount')) {
-          delete orderPayload.discount;
-          orderInsertRes = await supabase.from('orders').insert([orderPayload]);
-        }
-      }
-
-      if (orderInsertRes.error) throw orderInsertRes.error;
-
-      // Safe Line Items insert
+      // Safe Line Items insert in order_items table
       try {
         const orderItemsPayload = cartItems.map((item, idx) => ({
           id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
@@ -800,7 +799,7 @@ export default function SalesManager() {
         }));
         await supabase.from('order_items').insert(orderItemsPayload);
       } catch (e) {
-        console.warn('order_items table skipped:', e);
+        console.warn('order_items insert skipped:', e);
       }
 
       // Live Inventory Stock Deduction
@@ -849,14 +848,14 @@ export default function SalesManager() {
     }
   };
 
-  const handleShareWhatsApp = (inv: OrderRecord, items: any[]) => {
+  const handleShareWhatsApp = (inv: OrderRecord, itemsList: any[]) => {
     const phone = (inv.customer_phone || '').replace(/\D/g, '');
     if (!phone) {
       alert('CUSTOMER MOBILE NUMBER LEDU.');
       return;
     }
 
-    const lineItems = items.length > 0 ? items : (inv.items_summary || []);
+    const lineItems = itemsList.length > 0 ? itemsList : (inv.items || inv.items_summary || []);
     const itemsSummary = lineItems
       .map((it: any, idx: number) => `${idx + 1}. ${(it.product_name || it.product_id).toUpperCase()} (${(it.color || it.variant_color).toUpperCase()} / ${(it.size || it.variant_size).toUpperCase()}) x ${it.quantity} = ₹${it.total_price || it.total || it.price}`)
       .join('%0A');
@@ -865,11 +864,11 @@ export default function SalesManager() {
       `*BILL NO:* ${inv.id.toUpperCase()}%0A` +
       `*DATE:* ${new Date(inv.created_at).toLocaleDateString('en-IN')}%0A` +
       `*CUSTOMER:* ${inv.customer_name.toUpperCase()}%0A` +
-      `*PAYMENT MODE:* ${inv.payment_mode.toUpperCase()} ${inv.payment_status === 'utr_pending' ? '(UTR PENDING)' : '(PAID)'}%0A%0A` +
+      `*PAYMENT MODE:* ${(inv.payment_mode || 'CASH').toUpperCase()} ${inv.payment_status === 'utr_pending' ? '(UTR PENDING)' : '(PAID)'}%0A%0A` +
       `*ITEMS PURCHASED:*%0A${itemsSummary}%0A%0A` +
-      `*SUBTOTAL:* ₹${inv.total_amount}%0A` +
-      `*DISCOUNT:* ₹${inv.discount_amount || 0}%0A` +
-      `*TOTAL AMOUNT:* ₹${inv.final_amount}%0A%0A` +
+      `*SUBTOTAL:* ₹${inv.total_amount || inv.subtotal || inv.total}%0A` +
+      `*DISCOUNT:* ₹${inv.discount_amount || inv.discount || 0}%0A` +
+      `*TOTAL AMOUNT:* ₹${inv.final_amount || inv.total}%0A%0A` +
       `THANK YOU FOR SHOPPING WITH US! VISIT AGAIN. 🙏%0A` +
       `_KASHVI COMMAND DECK_`;
 
@@ -878,8 +877,9 @@ export default function SalesManager() {
 
   const handleOpenViewOrder = async (order: OrderRecord) => {
     setViewingOrder(order);
-    if (order.items_summary && Array.isArray(order.items_summary)) {
-      setViewingOrderItems(order.items_summary);
+    const existingItems = order.items || order.items_summary;
+    if (existingItems && Array.isArray(existingItems)) {
+      setViewingOrderItems(existingItems);
     } else {
       try {
         const { data } = await supabase
@@ -1060,7 +1060,7 @@ export default function SalesManager() {
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-1.5">
                           <span className="uppercase font-mono font-bold text-[#8b9bb4] text-[10px]">
-                            {ord.payment_mode}
+                            {ord.payment_mode || 'CASH'}
                           </span>
                           {ord.payment_status === 'utr_pending' ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#ff6b6b]/20 text-[#ff6b6b] border border-[#ff6b6b]/40 text-[9px] font-mono font-bold">
@@ -1074,7 +1074,7 @@ export default function SalesManager() {
                         </div>
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-extrabold text-white text-xs">
-                        ₹{Number(ord.final_amount || ord.total_amount || 0).toLocaleString('en-IN')}
+                        ₹{Number(ord.final_amount || ord.total || ord.total_amount || 0).toLocaleString('en-IN')}
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         <div className="inline-flex items-center gap-1">
@@ -1421,8 +1421,8 @@ export default function SalesManager() {
                             <span className="text-[#ffa500] font-bold">WALK-IN</span>
                           )}
                         </td>
-                        <td className="py-2 px-2.5 uppercase">{ord.payment_mode}</td>
-                        <td className="py-2 px-2.5 text-right font-bold text-white">₹{ord.final_amount.toLocaleString('en-IN')}</td>
+                        <td className="py-2 px-2.5 uppercase">{ord.payment_mode || 'CASH'}</td>
+                        <td className="py-2 px-2.5 text-right font-bold text-white">₹{Number(ord.final_amount || ord.total || ord.total_amount || 0).toLocaleString('en-IN')}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1443,7 +1443,7 @@ export default function SalesManager() {
         </div>
       )}
 
-      {/* 4. MAIN SALES BILLING FORM (WITH STORE PRICE & 10% DISCOUNT ENFORCEMENT) */}
+      {/* 4. MAIN SALES BILLING FORM */}
       {isBillingModalOpen && selectedCustomer && (
         <div className="fixed inset-0 z-[100005] pt-[76px] pb-6 px-2 sm:px-4 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
           <div className="bg-[#101628] border border-white/20 rounded-3xl w-full max-w-[98vw] xl:max-w-7xl overflow-hidden shadow-2xl relative flex flex-col my-auto max-h-[calc(100vh-100px)]">
@@ -1537,7 +1537,7 @@ export default function SalesManager() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
-                {/* Left Products Deck with STORE PRICE */}
+                {/* Left Products Deck */}
                 <div className="lg:col-span-6 space-y-2.5 p-3 rounded-2xl bg-[#0a0e17] border border-white/10">
                   
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 border-b border-white/5 pb-2">
@@ -1602,7 +1602,7 @@ export default function SalesManager() {
                   </div>
                 </div>
 
-                {/* Right Cart with 10% Discount Enforcement */}
+                {/* Right Cart */}
                 <div className="lg:col-span-6 space-y-2.5">
                   <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
                     
@@ -2073,7 +2073,7 @@ export default function SalesManager() {
                     <div>
                       <span className="text-[#8b9bb4] text-[9.5px] uppercase block">PAYMENT / STATUS:</span>
                       <strong className={activeBill.payment_status === 'utr_pending' ? 'text-[#ff6b6b]' : 'text-[#00ff9d]'}>
-                        {activeBill.payment_mode.toUpperCase()} ({activeBill.payment_status === 'utr_pending' ? 'UTR PENDING' : 'PAID'})
+                        {(activeBill.payment_mode || 'CASH').toUpperCase()} ({activeBill.payment_status === 'utr_pending' ? 'UTR PENDING' : 'PAID'})
                       </strong>
                     </div>
                   </div>
@@ -2110,12 +2110,12 @@ export default function SalesManager() {
                     <div>
                       <span className="text-[10px] text-[#8b9bb4] block">NET PAYABLE AMOUNT</span>
                       <span className="text-xl font-extrabold text-[#00ff9d]">
-                        ₹{Number(activeBill.final_amount || activeBill.total_amount).toLocaleString('en-IN')}
+                        ₹{Number(activeBill.final_amount || activeBill.total || activeBill.total_amount).toLocaleString('en-IN')}
                       </span>
                     </div>
 
                     <div className="text-right text-[10px] text-[#8b9bb4]">
-                      <span>DISCOUNT: ₹{activeBill.discount_amount || 0}</span>
+                      <span>DISCOUNT: ₹{activeBill.discount_amount || activeBill.discount || 0}</span>
                     </div>
                   </div>
 
