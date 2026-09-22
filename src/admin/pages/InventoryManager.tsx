@@ -48,6 +48,8 @@ interface PurchaseHistoryItem {
   supplier_name: string;
   supplier_bill_no: string;
   purchase_date: string;
+  variant_color: string;
+  variant_size: string;
   quantity: number;
   unit_cost: number;
   total_cost: number;
@@ -57,6 +59,8 @@ interface SalesHistoryItem {
   order_id: string;
   customer_name: string;
   sale_date: string;
+  variant_color: string;
+  variant_size: string;
   quantity: number;
   unit_price: number;
   total_amount: number;
@@ -109,7 +113,6 @@ export default function InventoryManager() {
       });
       setColoursList(colorRes.data || []);
 
-      // Map latest purchase unit cost per product as fallback for cost price
       const latestCostMap = new Map<string, number>();
       purchaseRecords.forEach((pi: any) => {
         if (pi.product_id && pi.unit_cost) {
@@ -126,7 +129,6 @@ export default function InventoryManager() {
         const cat = String(prod.category || 'FASHION');
         const subCat = String(prod.sub_category || 'GENERAL');
 
-        // Cost price resolution: products table cost_price/price -> purchase_items latest cost
         const baseCost = Number(prod.cost_price || prod.price || latestCostMap.get(pId.toUpperCase()) || 0);
         const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
         const store = prod.offline_price || prod.store_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
@@ -147,6 +149,7 @@ export default function InventoryManager() {
         });
       });
 
+      // Populate variants with accurate inventory stock
       inventoryRecords.forEach((inv: any) => {
         const pId = String(inv.product_id);
         if (groupedMap.has(pId)) {
@@ -227,6 +230,8 @@ export default function InventoryManager() {
           supplier_name: pi.purchases?.supplier_name || 'DIRECT INWARD',
           supplier_bill_no: pi.purchases?.supplier_bill_no || '—',
           purchase_date: pi.purchases?.purchase_date || '—',
+          variant_color: String(pi.variant_color || 'STANDARD').toUpperCase(),
+          variant_size: String(pi.variant_size || 'FREE SIZE').toUpperCase(),
           quantity: Number(pi.quantity || 0),
           unit_cost: Number(pi.unit_cost || 0),
           total_cost: Number(pi.total_cost || (pi.quantity * pi.unit_cost) || 0)
@@ -255,6 +260,8 @@ export default function InventoryManager() {
           order_id: si.orders?.id || '—',
           customer_name: si.orders?.customer_name || 'WALK-IN CUSTOMER',
           sale_date: si.orders?.created_at ? new Date(si.orders.created_at).toLocaleDateString('en-IN') : '—',
+          variant_color: String(si.variant_color || 'STANDARD').toUpperCase(),
+          variant_size: String(si.variant_size || 'FREE SIZE').toUpperCase(),
           quantity: Number(si.quantity || 0),
           unit_price: Number(si.price || 0),
           total_amount: Number(si.total || (si.quantity * si.price) || 0)
@@ -267,6 +274,39 @@ export default function InventoryManager() {
       setLoadingHistory(false);
     }
   };
+
+  // DETAILED LIVE STOCK MATRIX FOR MODAL VIEW
+  const productMatrixSummary = useMemo(() => {
+    if (!selectedProductForHistory) return null;
+    const variants = selectedProductForHistory.variants;
+
+    const shadeMap = new Map<string, Map<string, number>>();
+    const allSizesSet = new Set<string>();
+
+    variants.forEach((v) => {
+      const c = v.color.toUpperCase();
+      const s = v.size.toUpperCase();
+      allSizesSet.add(s);
+
+      if (!shadeMap.has(c)) {
+        shadeMap.set(c, new Map<string, number>());
+      }
+      shadeMap.get(c)!.set(s, (shadeMap.get(c)!.get(s) || 0) + v.stock);
+    });
+
+    const sizes = Array.from(allSizesSet);
+    const shades = Array.from(shadeMap.entries()).map(([color, sizeStockMap]) => {
+      const foundVar = variants.find((v) => v.color === color);
+      return {
+        color,
+        hex: foundVar?.hex || '#6d4aff',
+        stocks: sizes.map((sz) => sizeStockMap.get(sz) || 0),
+        totalShadeStock: Array.from(sizeStockMap.values()).reduce((a, b) => a + b, 0)
+      };
+    });
+
+    return { sizes, shades };
+  }, [selectedProductForHistory]);
 
   const lowStockCount = useMemo(() => {
     return productRows.filter((r) => r.total_stock > 0 && r.total_stock <= 3).length;
@@ -430,7 +470,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE (ROW-WISE PRODUCTS WITH CUBE BADGES FOR COLOURS & SIZES) */}
+      {/* 2. INVENTORY TABLE (ROW-WISE PRODUCTS WITH COLOR CUBES & STOCK COUNT) */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -466,14 +506,13 @@ export default function InventoryManager() {
                   const isOut = row.total_stock <= 0;
                   const isLow = row.total_stock > 0 && row.total_stock <= 3;
 
-                  // Unique distinct colors with stock counts
+                  // Unique distinct colors with stock aggregation
                   const uniqueColors = Array.from(new Set(row.variants.map((v) => v.color))).map((colorName) => {
                     const found = row.variants.find((v) => v.color === colorName);
                     const shadeStock = row.variants.filter((v) => v.color === colorName).reduce((sum, v) => sum + v.stock, 0);
                     return { color: colorName, hex: found?.hex || '#6d4aff', stock: shadeStock };
                   });
 
-                  // Unique distinct sizes
                   const uniqueSizes = Array.from(new Set(row.variants.map((v) => v.size)));
 
                   return (
@@ -483,7 +522,6 @@ export default function InventoryManager() {
                       className="hover:bg-white/[0.04] transition-all cursor-pointer group"
                       title="CLICK TO VIEW DETAILED MATRIX & AUDIT TRAIL"
                     >
-                      {/* PRODUCT CODE & HIGHLIGHTED NAME */}
                       <td className="py-3 px-3">
                         <span className="font-mono font-bold text-[#00ff9d] text-[11px] block">
                           [{row.product_code}]
@@ -493,7 +531,6 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* CATEGORY & SUB-CATEGORY */}
                       <td className="py-3 px-3">
                         <span className="font-bold text-white text-xs block">
                           {row.category}
@@ -503,21 +540,21 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* COLOURS CUBE BADGES (NO NAMES, ONLY SMALL CUBES WITH COUNT) */}
+                      {/* SMALL CUBES WITH EXACT SHADE STOCK COUNT */}
                       <td className="py-3 px-3">
                         <div className="flex flex-wrap gap-1.5 max-w-[220px]">
                           {uniqueColors.map((uc) => {
-                            const badgeBg = uc.hex || '#6d4aff';
-                            const badgeTextColor = getContrastTextColor(badgeBg);
+                            const cubeBg = uc.hex || '#6d4aff';
+                            const textColor = getContrastTextColor(cubeBg);
 
                             return (
                               <span
                                 key={uc.color}
-                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg border border-white/20 shadow-sm"
-                                style={{ backgroundColor: badgeBg }}
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-white/25 shadow-sm font-mono font-bold text-[10px]"
+                                style={{ backgroundColor: cubeBg, color: textColor }}
                                 title={`${uc.color} — Stock: ${uc.stock}`}
                               >
-                                <span className={`px-1 rounded text-[9px] font-mono font-black ${uc.stock > 0 ? 'bg-black/30 text-white' : 'bg-black/50 text-white/70'}`}>
+                                <span className={`px-1 rounded text-[9px] font-black ${uc.stock > 0 ? 'bg-black/40 text-white' : 'bg-black/60 text-white/80'}`}>
                                   {uc.stock}
                                 </span>
                               </span>
@@ -526,7 +563,6 @@ export default function InventoryManager() {
                         </div>
                       </td>
 
-                      {/* SIZES BADGES */}
                       <td className="py-3 px-3">
                         <div className="flex flex-wrap gap-1">
                           {uniqueSizes.map((sz) => {
@@ -547,27 +583,22 @@ export default function InventoryManager() {
                         </div>
                       </td>
 
-                      {/* COST PRICE */}
                       <td className="py-3 px-3 text-right font-mono text-[#8b9bb4]">
                         {row.cost_price ? `₹${row.cost_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
-                      {/* LANDED PRICE */}
                       <td className="py-3 px-3 text-right font-mono text-[#ffa500]">
                         {row.landed_price ? `₹${row.landed_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
-                      {/* STORE PRICE */}
                       <td className="py-3 px-3 text-right font-mono font-bold text-white">
                         {row.store_price ? `₹${row.store_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
-                      {/* ONLINE PRICE */}
                       <td className="py-3 px-3 text-right font-mono text-[#00d9ff]">
                         {row.online_price ? `₹${row.online_price.toLocaleString('en-IN')}` : '—'}
                       </td>
 
-                      {/* TOTAL STOCK */}
                       <td className="py-3 px-3 text-center">
                         <span
                           className={`inline-flex items-center justify-center min-w-[55px] px-2.5 py-0.5 rounded-full font-mono text-[10.5px] font-black border ${
@@ -590,7 +621,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. DETAILED MATRIX & AUDIT TRAIL MODAL */}
+      {/* 3. DETAILED PRODUCT MATRIX & AUDIT TRAIL MODAL */}
       {selectedProductForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
@@ -605,7 +636,7 @@ export default function InventoryManager() {
                     <span>[{selectedProductForHistory.product_code}] {selectedProductForHistory.product_name}</span>
                   </h4>
                   <span className="text-[10px] font-mono text-[#00d9ff]">
-                    DETAILED VARIANT STOCK MATRIX (SHADES VS SIZES) • AUDIT TRAIL
+                    LIVE STOCK MATRIX (SHADES VS SIZES) • AUDIT TRAIL
                   </span>
                 </div>
               </div>
@@ -618,6 +649,50 @@ export default function InventoryManager() {
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* LIVE STOCK MATRIX GRID */}
+            {productMatrixSummary && productMatrixSummary.shades.length > 0 && (
+              <div className="space-y-1.5 shrink-0">
+                <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
+                  LIVE STOCK MATRIX (SHADES & SIZES BREAKDOWN):
+                </span>
+                
+                <div className="border border-white/10 rounded-2xl overflow-x-auto bg-[#0a0e17] max-h-56">
+                  <table className="w-full text-center border-collapse">
+                    <thead>
+                      <tr className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0">
+                        <th className="py-2 px-3 text-left">COLOUR \ SIZE</th>
+                        {productMatrixSummary.sizes.map((sz) => (
+                          <th key={sz} className="py-2 px-2 text-[#00d9ff] font-bold">{sz}</th>
+                        ))}
+                        <th className="py-2 px-3 text-right text-[#00ff9d]">TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-mono text-xs">
+                      {productMatrixSummary.shades.map((sh) => (
+                        <tr key={sh.color} className="hover:bg-white/[0.02]">
+                          <td className="py-2 px-3 text-left font-bold text-white uppercase flex items-center gap-2">
+                            <span
+                              className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
+                              style={{ backgroundColor: sh.hex }}
+                            />
+                            <span>{sh.color}</span>
+                          </td>
+                          {sh.stocks.map((st, i) => (
+                            <td key={i} className={`py-2 px-2 font-bold ${st > 0 ? 'text-[#00ff9d]' : 'text-[#8b9bb4]/40'}`}>
+                              {st}
+                            </td>
+                          ))}
+                          <td className="py-2 px-3 text-right font-black text-[#00ff9d]">
+                            {sh.totalShadeStock}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar p-1">
               {loadingHistory ? (
@@ -646,6 +721,7 @@ export default function InventoryManager() {
                             <tr>
                               <th className="py-1.5 px-2.5">PURCHASE BILL</th>
                               <th className="py-1.5 px-2.5">SUPPLIER NAME</th>
+                              <th className="py-1.5 px-2 text-center">VARIANT</th>
                               <th className="py-1.5 px-2 text-center">DATE</th>
                               <th className="py-1.5 px-2 text-center">QTY</th>
                               <th className="py-1.5 px-2 text-right">COST (₹)</th>
@@ -660,6 +736,9 @@ export default function InventoryManager() {
                                   <span className="block text-[9px] text-[#8b9bb4]">BILL: {ph.supplier_bill_no}</span>
                                 </td>
                                 <td className="py-2 px-2.5 font-sans font-semibold text-white">{ph.supplier_name}</td>
+                                <td className="py-2 px-2 text-center text-[#00d9ff] text-[10.5px]">
+                                  {ph.variant_color} / {ph.variant_size}
+                                </td>
                                 <td className="py-2 px-2 text-center text-[#8b9bb4] text-[11px]">{ph.purchase_date}</td>
                                 <td className="py-2 px-2 text-center font-bold text-[#00ff9d]">+{ph.quantity}</td>
                                 <td className="py-2 px-2 text-right text-[#8b9bb4]">₹{ph.unit_cost}</td>
@@ -691,6 +770,7 @@ export default function InventoryManager() {
                             <tr>
                               <th className="py-1.5 px-2.5">ORDER NO</th>
                               <th className="py-1.5 px-2.5">CUSTOMER NAME</th>
+                              <th className="py-1.5 px-2 text-center">VARIANT</th>
                               <th className="py-1.5 px-2 text-center">DATE</th>
                               <th className="py-1.5 px-2 text-center">QTY SOLD</th>
                               <th className="py-1.5 px-2 text-right">PRICE (₹)</th>
@@ -702,6 +782,9 @@ export default function InventoryManager() {
                               <tr key={idx} className="hover:bg-white/[0.02]">
                                 <td className="py-2 px-2.5 font-bold text-[#ffa500]">{sh.order_id}</td>
                                 <td className="py-2 px-2.5 font-sans font-semibold text-white">{sh.customer_name}</td>
+                                <td className="py-2 px-2 text-center text-[#00d9ff] text-[10.5px]">
+                                  {sh.variant_color} / {sh.variant_size}
+                                </td>
                                 <td className="py-2 px-2 text-center text-[#8b9bb4] text-[11px]">{sh.sale_date}</td>
                                 <td className="py-2 px-2 text-center font-bold text-[#ff6b6b]">-{sh.quantity}</td>
                                 <td className="py-2 px-2 text-right text-[#8b9bb4]">₹{sh.unit_price}</td>
@@ -723,7 +806,7 @@ export default function InventoryManager() {
                 onClick={() => setSelectedProductForHistory(null)}
                 className="px-5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs cursor-pointer uppercase"
               >
-                CLOSE HISTORY
+                CLOSE MATRIX & HISTORY
               </button>
             </div>
 
