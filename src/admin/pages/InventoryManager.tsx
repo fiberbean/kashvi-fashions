@@ -70,24 +70,41 @@ export default function InventoryManager() {
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
-  // Load Inventory Data and Sort strictly by Product Code
+  // Fast & Bulletproof Data Loader
   const loadInventory = async () => {
     setLoading(true);
     try {
-      const [prodRes, invRes, colorRes] = await Promise.all([
-        supabase.from('products').select('*'),
-        supabase.from('inventory').select('*'),
-        supabase.from('colours').select('name, hex_code')
-      ]);
+      // 1. Fetch Products
+      const { data: prodData, error: prodErr } = await supabase
+        .from('products')
+        .select('*');
 
-      const products = prodRes.data || [];
-      const inventoryRecords = invRes.data || [];
-      const colours = colorRes.data || [];
+      if (prodErr) throw prodErr;
+      const products = prodData || [];
 
-      const colorHexMap = new Map<string, string>();
-      colours.forEach((c) => {
-        if (c.name) colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code || '#6d4aff');
-      });
+      // 2. Fetch Colours for Swatch Hexes safely
+      let colorHexMap = new Map<string, string>();
+      try {
+        const { data: colorData } = await supabase
+          .from('colours')
+          .select('name, hex_code');
+        (colorData || []).forEach((c) => {
+          if (c.name) colorHexMap.set(c.name.toLowerCase().trim(), c.hex_code || '#6d4aff');
+        });
+      } catch (err) {
+        console.warn('Colours table fetch skipped or failed:', err);
+      }
+
+      // 3. Fetch Inventory Records safely
+      let inventoryRecords: any[] = [];
+      try {
+        const { data: invData } = await supabase
+          .from('inventory')
+          .select('*');
+        inventoryRecords = invData || [];
+      } catch (err) {
+        console.warn('Inventory table fetch error:', err);
+      }
 
       const processedItems: InventoryItem[] = [];
 
@@ -96,22 +113,26 @@ export default function InventoryManager() {
           const prod = products.find((p) => String(p.id) === String(inv.product_id));
           const colorName = inv.variant_color || inv.color || 'Standard';
           processedItems.push({
-            id: inv.id || `${inv.product_id}_${colorName}_${inv.variant_size || 'Free'}`,
-            product_id: inv.product_id,
-            product_code: prod?.id || inv.product_id,
-            product_name: prod?.name || 'Unknown Product',
-            category: prod?.category || 'Fashion',
-            sub_category: prod?.sub_category || 'General',
+            id: String(inv.id || `${inv.product_id}_${colorName}_${inv.variant_size || 'Free'}`),
+            product_id: String(inv.product_id),
+            product_code: String(prod?.id || inv.product_id),
+            product_name: String(prod?.name || 'Unknown Product'),
+            category: String(prod?.category || 'Fashion'),
+            sub_category: String(prod?.sub_category || 'General'),
             color: colorName,
-            size: inv.variant_size || inv.size || 'Free Size',
+            size: String(inv.variant_size || inv.size || 'Free Size'),
             selling_price: Number(prod?.selling_price || prod?.price || 0),
             cost_price: Number(prod?.cost_price || 0),
             available_stock: Number(inv.stock_quantity ?? inv.quantity ?? 0),
             hex_code: colorHexMap.get(colorName.toLowerCase().trim()) || '#6d4aff'
           });
         });
-      } else {
-        products.forEach((prod) => {
+      }
+
+      // Fallback or products that don't have an entry in inventory yet
+      products.forEach((prod) => {
+        const alreadyInInv = processedItems.some((it) => String(it.product_id) === String(prod.id));
+        if (!alreadyInInv) {
           let sizes: string[] = ['Free Size'];
           if (prod.size) {
             sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim()) : prod.size;
@@ -125,11 +146,11 @@ export default function InventoryManager() {
             sizes.forEach((s) => {
               processedItems.push({
                 id: `${prod.id}_${c}_${s}`,
-                product_id: prod.id,
-                product_code: prod.id,
-                product_name: prod.name,
-                category: prod.category || 'Fashion',
-                sub_category: prod.sub_category || 'General',
+                product_id: String(prod.id),
+                product_code: String(prod.id),
+                product_name: String(prod.name),
+                category: String(prod.category || 'Fashion'),
+                sub_category: String(prod.sub_category || 'General'),
                 color: c,
                 size: s,
                 selling_price: Number(prod.selling_price || prod.price || 0),
@@ -139,20 +160,20 @@ export default function InventoryManager() {
               });
             });
           });
-        });
-      }
+        }
+      });
 
       // Natural Sort by Product Code (KF0001, KF0002, KF0003...)
       processedItems.sort((a, b) => {
         const codeA = String(a.product_code || '');
         const codeB = String(b.product_code || '');
-        const compareResult = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
-        if (compareResult !== 0) return compareResult;
+        const cmp = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+        if (cmp !== 0) return cmp;
         return a.color.localeCompare(b.color);
       });
 
       setInventoryList(processedItems);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load inventory:', err);
     } finally {
       setLoading(false);
@@ -163,7 +184,7 @@ export default function InventoryManager() {
     loadInventory();
   }, []);
 
-  // Fetch full inward & outward history when a product is clicked
+  // Fetch full inward & outward history when a product row is clicked
   const handleOpenProductHistory = async (item: InventoryItem) => {
     setSelectedItemForHistory(item);
     setLoadingHistory(true);
@@ -245,7 +266,6 @@ export default function InventoryManager() {
     return inventoryList.filter((it) => it.available_stock <= 0).length;
   }, [inventoryList]);
 
-  // Extract distinct categories & sub-categories for Filter dropdowns
   const distinctCategories = useMemo(() => {
     const set = new Set<string>();
     inventoryList.forEach((it) => {
@@ -266,25 +286,18 @@ export default function InventoryManager() {
 
   const filteredInventory = useMemo(() => {
     const list = inventoryList.filter((item) => {
-      // Category filter
       if (selectedCategoryFilter !== 'all' && item.category.toLowerCase() !== selectedCategoryFilter.toLowerCase()) {
         return false;
       }
-
-      // Sub-category filter
       if (selectedSubCatFilter !== 'all' && item.sub_category.toLowerCase() !== selectedSubCatFilter.toLowerCase()) {
         return false;
       }
-
-      // Stock Level Filter
       if (stockLevelFilter === 'low' && !(item.available_stock > 0 && item.available_stock <= 3)) {
         return false;
       }
       if (stockLevelFilter === 'out' && item.available_stock > 0) {
         return false;
       }
-
-      // Search Query filter
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchCode = item.product_code.toLowerCase().includes(q);
@@ -294,11 +307,9 @@ export default function InventoryManager() {
         const matchSize = item.size.toLowerCase().includes(q);
         return matchCode || matchName || matchSubCat || matchColor || matchSize;
       }
-
       return true;
     });
 
-    // Maintain Product Code Order
     return list.sort((a, b) => {
       return String(a.product_code || '').localeCompare(String(b.product_code || ''), undefined, {
         numeric: true,
@@ -313,13 +324,12 @@ export default function InventoryManager() {
       {/* 1. FILTER & SEARCH CONTROL BAR */}
       <div className="px-3.5 py-2.5 rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg flex flex-wrap items-center justify-between gap-2.5">
         
-        {/* Left: Clean Filter Options (Category & Sub-Category Dropdowns) */}
+        {/* Left: Filter dropdowns */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
             <Filter className="w-3.5 h-3.5 text-[#00d9ff]" />
             <span className="text-[11px] font-bold text-[#8b9bb4] uppercase tracking-wider">Filter:</span>
             
-            {/* Category Filter */}
             <select
               value={selectedCategoryFilter}
               onChange={(e) => {
@@ -337,7 +347,6 @@ export default function InventoryManager() {
             </select>
           </div>
 
-          {/* Sub-Category Filter */}
           {distinctSubCategories.length > 0 && (
             <div className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white">
               <span className="text-[11px] text-[#8b9bb4] font-semibold">Sub-Cat:</span>
@@ -371,10 +380,9 @@ export default function InventoryManager() {
           )}
         </div>
 
-        {/* Right: Low & Out indicators placed before Search Bar */}
+        {/* Right: Low & Out badges placed before Search Bar */}
         <div className="flex items-center gap-2">
           
-          {/* Low Stock Indicator Filter Button */}
           <button
             type="button"
             onClick={() => setStockLevelFilter(stockLevelFilter === 'low' ? 'all' : 'low')}
@@ -388,7 +396,6 @@ export default function InventoryManager() {
             <span className="font-extrabold">{lowStockCount}</span>
           </button>
 
-          {/* Out of Stock Indicator Filter Button */}
           <button
             type="button"
             onClick={() => setStockLevelFilter(stockLevelFilter === 'out' ? 'all' : 'out')}
@@ -402,7 +409,6 @@ export default function InventoryManager() {
             <span className="font-extrabold">{outOfStockCount}</span>
           </button>
 
-          {/* Search Bar */}
           <div className="relative w-56 sm:w-72">
             <input
               type="text"
@@ -425,7 +431,7 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 2. INVENTORY TABLE (INCREASED FONT & COMPACT PROPORTIONAL COLUMN GAPS) */}
+      {/* 2. INVENTORY TABLE */}
       <div className="rounded-2xl bg-[#101628]/95 border border-white/10 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse table-fixed">
@@ -465,7 +471,6 @@ export default function InventoryManager() {
                       className="hover:bg-white/[0.04] transition-all cursor-pointer group"
                       title="Click to view complete inward & sales history"
                     >
-                      {/* Product Code & Name */}
                       <td className="py-3 px-3.5">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-extrabold text-[#00ff9d] text-[13px] shrink-0 group-hover:underline">
@@ -477,7 +482,6 @@ export default function InventoryManager() {
                         </div>
                       </td>
 
-                      {/* Category & Sub-Category */}
                       <td className="py-3 px-3">
                         <span className="font-extrabold text-white text-[13px] block capitalize truncate">
                           {item.category}
@@ -487,7 +491,6 @@ export default function InventoryManager() {
                         </span>
                       </td>
 
-                      {/* Colour with swatch */}
                       <td className="py-3 px-3">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#0a0e17] border border-white/10 max-w-full">
                           <span
@@ -500,17 +503,14 @@ export default function InventoryManager() {
                         </div>
                       </td>
 
-                      {/* Size */}
                       <td className="py-3 px-3 text-center font-mono font-black text-[#00d9ff] text-[13px]">
                         {item.size}
                       </td>
 
-                      {/* Selling Price */}
                       <td className="py-3 px-3.5 text-right font-mono font-extrabold text-white text-[13.5px]">
                         ₹{item.selling_price.toLocaleString('en-IN')}
                       </td>
 
-                      {/* Available Stock with status badge */}
                       <td className="py-3 px-3.5 text-center">
                         <span
                           className={`inline-flex items-center justify-center min-w-[65px] px-3 py-1 rounded-full font-mono text-xs font-black border ${
@@ -533,12 +533,11 @@ export default function InventoryManager() {
         </div>
       </div>
 
-      {/* 3. PRODUCT LIFECYCLE HISTORY MODAL (WHERE BOUGHT & WHO SOLD TO) */}
+      {/* 3. PRODUCT LIFECYCLE HISTORY MODAL */}
       {selectedItemForHistory && (
         <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none animate-in fade-in">
           <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-3xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
             
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00d9ff] to-[#6d4aff] text-white flex items-center justify-center shadow">
@@ -566,7 +565,6 @@ export default function InventoryManager() {
               </button>
             </div>
 
-            {/* Quick Metrics Bar */}
             <div className="grid grid-cols-3 gap-2 p-2.5 rounded-2xl bg-[#0a0e17] border border-white/10 text-center font-mono">
               <div>
                 <span className="text-[9px] text-[#8b9bb4] uppercase block">Selling Price</span>
@@ -582,9 +580,7 @@ export default function InventoryManager() {
               </div>
             </div>
 
-            {/* Content: Inward vs Outward Logs */}
             <div className="flex-1 overflow-y-auto space-y-3.5 custom-scrollbar p-1">
-              
               {loadingHistory ? (
                 <div className="p-8 text-center text-[#8b9bb4]">
                   <Loader2 className="w-5 h-5 animate-spin mx-auto text-[#00d9ff] mb-1.5" />
@@ -592,12 +588,12 @@ export default function InventoryManager() {
                 </div>
               ) : (
                 <>
-                  {/* Section 1: Inward History (Ekkada Konnam) */}
+                  {/* Purchase Inward Log */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00d9ff] uppercase flex items-center gap-1.5">
                         <ArrowDownLeft className="w-3.5 h-3.5 text-[#00d9ff]" />
-                        Purchase Inward Log (ఎక్కడ కొన్నాం / సప్లయర్ బిల్స్)
+                        Purchase Inward Log (Ekkada Konnam / Supplier Bills)
                       </span>
                       <span className="text-[#8b9bb4]">{purchaseHistory.length} Inward Records</span>
                     </div>
@@ -639,12 +635,12 @@ export default function InventoryManager() {
                     </div>
                   </div>
 
-                  {/* Section 2: Outward Sales History (Yevariki Ammanu) */}
+                  {/* Sales Dispatch Log */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#ffa500] uppercase flex items-center gap-1.5">
                         <ArrowUpRight className="w-3.5 h-3.5 text-[#ffa500]" />
-                        Sales Dispatch Log (ఎవరికి అమ్మాం / కస్టమర్ ఆర్డర్స్)
+                        Sales Dispatch Log (Yevariki Ammanu / Customer Orders)
                       </span>
                       <span className="text-[#8b9bb4]">{salesHistory.length} Sales Records</span>
                     </div>
@@ -684,10 +680,8 @@ export default function InventoryManager() {
                   </div>
                 </>
               )}
-
             </div>
 
-            {/* Footer */}
             <div className="pt-3 border-t border-white/10 flex justify-end shrink-0">
               <button
                 type="button"
