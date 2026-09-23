@@ -81,114 +81,6 @@ interface ComboItem {
   qty: number;
 }
 
-const COLOR_HEX_MAP: Record<string, string> = {
-  teal: '#008080',
-  'teal blue': '#006d77',
-  'deep teal': '#005f73',
-  'ocean blue': '#0077b6',
-  'sky blue': '#87ceeb',
-  'navy blue': '#000080',
-  navy: '#0f172a',
-  blue: '#2563eb',
-  royal: '#4169e1',
-  'royal blue': '#1e3a8a',
-  indigo: '#4b0082',
-  turquoise: '#40e0d0',
-  cyan: '#00f5d4',
-  aqua: '#00ffff',
-  green: '#16a34a',
-  'bottle green': '#09442b',
-  'dark green': '#004b23',
-  'olive green': '#556b2f',
-  olive: '#708238',
-  mint: '#98ff98',
-  'mint green': '#83c5be',
-  lime: '#32cd32',
-  'sea green': '#2e8b57',
-  emerald: '#50c878',
-  black: '#1f2937',
-  white: '#ffffff',
-  grey: '#4b5563',
-  gray: '#4b5563',
-  'dark grey': '#374151',
-  'light grey': '#d1d5db',
-  charcoal: '#36454f',
-  silver: '#c0c0c0',
-  red: '#dc2626',
-  'crimson red': '#dc143c',
-  crimson: '#dc143c',
-  maroon: '#800000',
-  'dark maroon': '#5c0000',
-  wine: '#722f37',
-  burgundy: '#800020',
-  ruby: '#9b111e',
-  pink: '#e83e8c',
-  'baby pink': '#f4c2c2',
-  'rani pink': '#e30b5c',
-  'hot pink': '#ff69b4',
-  magenta: '#d63384',
-  rose: '#f43f5e',
-  peach: '#ffdab9',
-  salmon: '#fa8072',
-  coral: '#ff7f50',
-  orange: '#ea580c',
-  rust: '#b7410e',
-  yellow: '#eab308',
-  'mustard yellow': '#e1ad01',
-  'musturd yellow': '#e1ad01',
-  mustard: '#d4a373',
-  lemon: '#fef08a',
-  gold: '#d4af37',
-  beige: '#d4b996',
-  cream: '#fffdd0',
-  skin: '#e8beac',
-  nude: '#d2b48c',
-  brown: '#78350f',
-  chocolate: '#3e2723',
-  coffee: '#4a2c2a',
-  tan: '#d2b48c',
-  camel: '#c19a6b',
-  purple: '#9333ea',
-  violet: '#8a2be2',
-  lavender: '#e6e6fa',
-  lilac: '#c8a2c8',
-  plum: '#dda0dd',
-  mauve: '#e0b0ff',
-  copper: '#b87333',
-  bronze: '#cd7f32',
-  antique: '#996515',
-  multi: '#ff3385',
-  multicolor: '#ff3385',
-  assorted: '#6366f1',
-};
-
-const resolveColorHex = (colorName: string): string => {
-  if (!colorName) return '#334155';
-  const clean = colorName.toLowerCase().trim();
-  if (COLOR_HEX_MAP[clean]) return COLOR_HEX_MAP[clean];
-
-  for (const [key, val] of Object.entries(COLOR_HEX_MAP)) {
-    if (clean.includes(key) || key.includes(clean)) {
-      return val;
-    }
-  }
-
-  let hash = 0;
-  for (let i = 0; i < clean.length; i++) {
-    hash = clean.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const c = (hash & 0x00ffffff).toString(16).toUpperCase();
-  return '#' + '00000'.substring(0, 6 - c.length) + c;
-};
-
-const isLightColor = (colorName: string): boolean => {
-  const lower = colorName.toLowerCase().trim();
-  return [
-    'white', 'beige', 'skin', 'yellow', 'nude', 'gold', 'silver', 
-    'peach', 'baby pink', 'sky blue', 'cream', 'lemon', 'mint', 'light grey'
-  ].some((c) => lower.includes(c));
-};
-
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
 
 export default function CategoryProductListPage() {
@@ -205,6 +97,9 @@ export default function CategoryProductListPage() {
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [categoryName, setCategoryName] = useState<string>('');
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
+
+  // Database-driven colours dictionary (name -> hex_code)
+  const [dbColoursMap, setDbColoursMap] = useState<Record<string, string>>({});
 
   const [headerLoading, setHeaderLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
@@ -236,7 +131,67 @@ export default function CategoryProductListPage() {
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
-  // 1. Load Category Meta and Sub-Categories
+  // 1. Fetch Colours Table from Supabase
+  useEffect(() => {
+    async function fetchColours() {
+      try {
+        const { data, error } = await supabase
+          .from('colours')
+          .select('name, hex_code')
+          .eq('active', true);
+
+        if (!error && data) {
+          const map: Record<string, string> = {};
+          data.forEach((item: any) => {
+            if (item.name && item.hex_code) {
+              map[item.name.toLowerCase().trim()] = item.hex_code.trim();
+            }
+          });
+          setDbColoursMap(map);
+        }
+      } catch (err) {
+        console.error('Error fetching colours:', err);
+      }
+    }
+    fetchColours();
+  }, []);
+
+  const resolveColorHex = (colorName: string): string => {
+    if (!colorName) return '#475569';
+    const clean = colorName.toLowerCase().trim();
+
+    // 1. Direct match in DB
+    if (dbColoursMap[clean]) return dbColoursMap[clean];
+
+    // 2. Partial match in DB
+    for (const [name, hex] of Object.entries(dbColoursMap)) {
+      if (clean.includes(name) || name.includes(clean)) {
+        return hex;
+      }
+    }
+
+    // 3. Fallback hash generator
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) {
+      hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+    return '#' + '00000'.substring(0, 6 - c.length) + c;
+  };
+
+  const isLightColor = (colorName: string): boolean => {
+    const hex = resolveColorHex(colorName).replace('#', '');
+    if (hex.length === 6) {
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+      return brightness > 155;
+    }
+    return false;
+  };
+
+  // 2. Load Category Meta and Sub-Categories
   useEffect(() => {
     let isCurrent = true;
 
@@ -341,7 +296,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 2. Load Products and Trigger Progressive Rendering
+  // 3. Load Products and Trigger Progressive Rendering
   useEffect(() => {
     let isCurrent = true;
 
@@ -366,7 +321,6 @@ export default function CategoryProductListPage() {
           const filtered = prodData.filter((p: any) => {
             if (p.active === false) return false;
 
-            // 1. Subcategory filter
             if (selectedSub) {
               const sel = selectedSub.toLowerCase().replace(/['s]/g, '').trim();
               const pSub = (p.sub_category || p.sub_category_name || '').toLowerCase().replace(/['s]/g, '').trim();
@@ -375,7 +329,6 @@ export default function CategoryProductListPage() {
               return pSub === sel || pSub.includes(sel) || sel.includes(pSub) || pSubId === sel || pName.includes(sel);
             }
 
-            // 2. Category matching
             const pDept = (p.department || '').toLowerCase().trim();
             if (currentDept === 'jewellery' || slugKey.toLowerCase().includes('jewel')) {
               if (pDept.includes('jewel')) return true;
@@ -416,7 +369,6 @@ export default function CategoryProductListPage() {
     }
   }, [visibleCount, allProducts.length]);
 
-  // Image Parser Helper
   const getProductImage = (images: any): string => {
     const fallback = isJewellery
       ? 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600&q=80'
@@ -521,7 +473,6 @@ export default function CategoryProductListPage() {
     setModalImages(validImgs);
     setSelectedImage(validImgs[0].url);
 
-    // FETCH REAL INVENTORY DATA
     try {
       const pid = String(product.id).trim();
       const { data: invData, error } = await supabase
@@ -538,7 +489,6 @@ export default function CategoryProductListPage() {
       if (inStockItems.length > 0) {
         setModalStock(inStockItems);
 
-        // Extract valid colors with stock
         const uniqueColors = Array.from(
           new Set(
             inStockItems
@@ -571,7 +521,6 @@ export default function CategoryProductListPage() {
         setSelectedColor('');
         setSelectedSize('');
       } else {
-        // Fallback to product table attributes
         const prodColors = (product.colour || product.colors || '')
           .split(',')
           .map((c: string) => c.trim())
@@ -611,7 +560,6 @@ export default function CategoryProductListPage() {
     }
   };
 
-  // Dynamic sizes for currently selected color
   const stockSizesForSelectedColor = selectedColor
     ? Array.from(
         new Set(
@@ -875,75 +823,123 @@ export default function CategoryProductListPage() {
             </span>
           </div>
 
-          {/* COMPACT SUB-CATEGORY TRACK - CENTER ALIGNED */}
-          <div className="flex justify-center items-start gap-3 sm:gap-4 overflow-x-auto pb-2 pt-3 px-1 scrollbar-none mx-auto w-full max-w-4xl">
-            {headerLoading && subCategories.length === 0 ? (
-              <>
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <div
-                    key={i}
-                    className="w-[64px] h-[85px] rounded-lg bg-neutral-800/60 animate-pulse border border-neutral-700/50 shrink-0"
-                  />
-                ))}
-              </>
-            ) : (
-              subCategories.map((sub, idx) => {
-                const isActive = selectedSub?.toLowerCase().trim() === sub.name.toLowerCase().trim();
-                const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
-                const hangTilt = tilts[idx % tilts.length];
+          {/* SCROLLABLE SUB-CATEGORY TRACK */}
+          <div className="w-full overflow-x-auto pb-3 pt-3 px-1 no-scrollbar scroll-smooth">
+            <div className="flex items-start justify-start sm:justify-center gap-3 sm:gap-4 min-w-max mx-auto px-2">
+              {headerLoading && subCategories.length === 0 ? (
+                <>
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <div
+                      key={i}
+                      className="w-[64px] h-[85px] rounded-lg bg-neutral-800/60 animate-pulse border border-neutral-700/50 shrink-0"
+                    />
+                  ))}
+                </>
+              ) : (
+                subCategories.map((sub, idx) => {
+                  const isActive = selectedSub?.toLowerCase().trim() === sub.name.toLowerCase().trim();
+                  const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
+                  const hangTilt = tilts[idx % tilts.length];
 
-                // 2A. JEWELLERY: COMPACT WALL STUD + HANGING GOLD RING
-                if (isJewellery) {
+                  // 2A. JEWELLERY: COMPACT WALL STUD + HANGING GOLD RING
+                  if (isJewellery) {
+                    return (
+                      <button
+                        key={sub.id}
+                        type="button"
+                        onClick={() => handleSubSelect(sub.name)}
+                        className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[72px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
+                      >
+                        <div className="relative w-full flex flex-col items-center pt-2">
+                          <div className="absolute -top-2 w-2 h-2 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-30 border border-[#b38728] flex items-center justify-center">
+                            <div className="w-0.5 h-0.5 rounded-full bg-[#3d2c0b]" />
+                          </div>
+
+                          <div
+                            className={`absolute -top-1.5 w-4.5 h-4.5 rounded-full border-[2px] bg-transparent z-20 transition-all ${
+                              isActive
+                                ? 'border-[#fef08a] shadow-[0_0_12px_#fde68a]'
+                                : 'border-[#e5c07b] shadow-[0_2px_6px_rgba(229,192,123,0.45)] group-hover:shadow-[0_0_10px_#e5c07b]'
+                            }`}
+                          />
+
+                          <div className="absolute top-2 w-0.5 h-1.5 bg-gradient-to-b from-[#e5c07b] to-[#b38728] rounded-xs shadow-xs z-25" />
+
+                          <div
+                            className={`relative w-full h-[74px] sm:h-[82px] rounded-md p-[1px] shadow-[0_6px_14px_rgba(0,0,0,0.85)] transition-all duration-300 flex flex-col mt-1 ${
+                              isActive
+                                ? 'bg-gradient-to-b from-[#fde68a] via-[#e5c07b] to-[#fde68a] ring-2 ring-[#e5c07b] shadow-[0_0_15px_rgba(229,192,123,0.5)]'
+                                : 'bg-gradient-to-b from-[#e5c07b] via-[#946e20] to-[#e5c07b] group-hover:shadow-[0_8px_18px_rgba(229,192,123,0.3)]'
+                            }`}
+                          >
+                            <div className="w-full h-full rounded-[4px] overflow-hidden bg-[#061e17] relative border border-[#0b3b2c] pointer-events-none">
+                              <img
+                                src={
+                                  sub.image_url ||
+                                  'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'
+                                }
+                                alt={sub.name}
+                                className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
+                                loading="lazy"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-[#04120e]/90 via-transparent to-transparent opacity-75 group-hover:opacity-30 transition-opacity" />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-1.5 w-full px-0.5 pointer-events-none min-h-[22px] flex items-center justify-center">
+                          <span
+                            className={`block text-[9px] font-serif font-bold transition-colors whitespace-normal break-words leading-tight py-0.5 px-1 rounded-xs text-center w-full shadow-xs ${
+                              isActive
+                                ? 'bg-[#e5c07b] text-[#061e17] border border-[#fde68a]'
+                                : 'bg-[#061e17]/95 border border-[#e5c07b]/30 text-[#f5ebd7] group-hover:text-[#e5c07b] group-hover:border-[#e5c07b]'
+                            }`}
+                          >
+                            {sub.name}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  }
+
+                  // 2B. FASHIONS: COMPACT TAPED PAPER POSTER
                   return (
                     <button
                       key={sub.id}
                       type="button"
                       onClick={() => handleSubSelect(sub.name)}
-                      className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[72px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
+                      className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[74px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
                     >
-                      <div className="relative w-full flex flex-col items-center pt-2">
-                        <div className="absolute -top-2 w-2 h-2 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-30 border border-[#b38728] flex items-center justify-center">
-                          <div className="w-0.5 h-0.5 rounded-full bg-[#3d2c0b]" />
-                        </div>
+                      <div className="relative w-full flex flex-col items-center pt-1.5">
+                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-2.5 bg-white/45 backdrop-blur-xs border-y border-white/60 shadow-xs z-30 transform -rotate-2 group-hover:rotate-0 transition-transform pointer-events-none" />
 
                         <div
-                          className={`absolute -top-1.5 w-4.5 h-4.5 rounded-full border-[2px] bg-transparent z-20 transition-all ${
+                          className={`relative w-full h-[76px] sm:h-[84px] rounded-xs p-0.5 bg-[#161c2e] border transition-all duration-300 flex flex-col shadow-[0_8px_16px_rgba(0,0,0,0.85)] ${
                             isActive
-                              ? 'border-[#fef08a] shadow-[0_0_12px_#fde68a]'
-                              : 'border-[#e5c07b] shadow-[0_2px_6px_rgba(229,192,123,0.45)] group-hover:shadow-[0_0_10px_#e5c07b]'
-                          }`}
-                        />
-
-                        <div className="absolute top-2 w-0.5 h-1.5 bg-gradient-to-b from-[#e5c07b] to-[#b38728] rounded-xs shadow-xs z-25" />
-
-                        <div
-                          className={`relative w-full h-[74px] sm:h-[82px] rounded-md p-[1px] shadow-[0_6px_14px_rgba(0,0,0,0.85)] transition-all duration-300 flex flex-col mt-1 ${
-                            isActive
-                              ? 'bg-gradient-to-b from-[#fde68a] via-[#e5c07b] to-[#fde68a] ring-2 ring-[#e5c07b] shadow-[0_0_15px_rgba(229,192,123,0.5)]'
-                              : 'bg-gradient-to-b from-[#e5c07b] via-[#946e20] to-[#e5c07b] group-hover:shadow-[0_8px_18px_rgba(229,192,123,0.3)]'
+                              ? 'border-[#00f5d4] ring-2 ring-[#00f5d4]/50 shadow-[0_0_15px_rgba(0,245,212,0.4)]'
+                              : 'border-white/20 group-hover:border-[#ff3385] group-hover:shadow-[0_8px_18px_rgba(255,51,133,0.3)]'
                           }`}
                         >
-                          <div className="w-full h-full rounded-[4px] overflow-hidden bg-[#061e17] relative border border-[#0b3b2c] pointer-events-none">
+                          <div className="w-full h-full rounded-xs overflow-hidden bg-[#0a0f1d] relative pointer-events-none">
                             <img
                               src={
                                 sub.image_url ||
-                                'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'
+                                'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80'
                               }
                               alt={sub.name}
-                              className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
+                              className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
                               loading="lazy"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#04120e]/90 via-transparent to-transparent opacity-75 group-hover:opacity-30 transition-opacity" />
                           </div>
                         </div>
                       </div>
 
                       <div className="mt-1.5 w-full px-0.5 pointer-events-none min-h-[22px] flex items-center justify-center">
                         <span
-                          className={`block text-[9px] font-serif font-bold transition-colors whitespace-normal break-words leading-tight py-0.5 px-1 rounded-xs text-center w-full shadow-xs ${
+                          className={`block text-[9px] font-mono font-bold uppercase transition-colors whitespace-normal break-words leading-tight py-0.5 px-0.5 rounded-xs text-center w-full shadow-xs ${
                             isActive
-                              ? 'bg-[#e5c07b] text-[#061e17] border border-[#fde68a]'
-                              : 'bg-[#061e17]/95 border border-[#e5c07b]/30 text-[#f5ebd7] group-hover:text-[#e5c07b] group-hover:border-[#e5c07b]'
+                              ? 'bg-[#00f5d4] text-[#060b18] border border-[#00f5d4]'
+                              : 'bg-[#0d1426] border border-white/20 text-neutral-200 group-hover:text-[#ff3385] group-hover:border-[#ff3385]'
                           }`}
                         >
                           {sub.name}
@@ -951,55 +947,9 @@ export default function CategoryProductListPage() {
                       </div>
                     </button>
                   );
-                }
-
-                // 2B. FASHIONS: COMPACT TAPED PAPER POSTER
-                return (
-                  <button
-                    key={sub.id}
-                    type="button"
-                    onClick={() => handleSubSelect(sub.name)}
-                    className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[74px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
-                  >
-                    <div className="relative w-full flex flex-col items-center pt-1.5">
-                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-2.5 bg-white/45 backdrop-blur-xs border-y border-white/60 shadow-xs z-30 transform -rotate-2 group-hover:rotate-0 transition-transform pointer-events-none" />
-
-                      <div
-                        className={`relative w-full h-[76px] sm:h-[84px] rounded-xs p-0.5 bg-[#161c2e] border transition-all duration-300 flex flex-col shadow-[0_8px_16px_rgba(0,0,0,0.85)] ${
-                          isActive
-                            ? 'border-[#00f5d4] ring-2 ring-[#00f5d4]/50 shadow-[0_0_15px_rgba(0,245,212,0.4)]'
-                            : 'border-white/20 group-hover:border-[#ff3385] group-hover:shadow-[0_8px_18px_rgba(255,51,133,0.3)]'
-                        }`}
-                      >
-                        <div className="w-full h-full rounded-xs overflow-hidden bg-[#0a0f1d] relative pointer-events-none">
-                          <img
-                            src={
-                              sub.image_url ||
-                              'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80'
-                            }
-                            alt={sub.name}
-                            className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
-                            loading="lazy"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-1.5 w-full px-0.5 pointer-events-none min-h-[22px] flex items-center justify-center">
-                      <span
-                        className={`block text-[9px] font-mono font-bold uppercase transition-colors whitespace-normal break-words leading-tight py-0.5 px-0.5 rounded-xs text-center w-full shadow-xs ${
-                          isActive
-                            ? 'bg-[#00f5d4] text-[#060b18] border border-[#00f5d4]'
-                            : 'bg-[#0d1426] border border-white/20 text-neutral-200 group-hover:text-[#ff3385] group-hover:border-[#ff3385]'
-                        }`}
-                      >
-                        {sub.name}
-                      </span>
-                    </div>
-                  </button>
-                );
-              })
-            )}
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1082,8 +1032,8 @@ export default function CategoryProductListPage() {
                   style={{ animationDelay: staggerDelay }}
                   className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-2xl animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300 ${
                     isJewellery
-                      ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b] hover:shadow-[0_0_25px_rgba(229,192,123,0.2)]'
-                      : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4] hover:shadow-[0_0_25px_rgba(0,245,212,0.2)]'
+                      ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b]'
+                      : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4]'
                   }`}
                 >
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
@@ -1331,7 +1281,7 @@ export default function CategoryProductListPage() {
                     </div>
                   ) : (
                     <>
-                      {/* 1. Color Shade Selection with Real Background Colors */}
+                      {/* 1. Database-driven Exact Color Shade Circles */}
                       {showColors.length > 0 && (
                         <div className="space-y-2">
                           <span className="text-xs font-semibold text-neutral-300 block">
