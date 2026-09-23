@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
   Filter,
@@ -63,6 +63,14 @@ interface SubCategory {
   department?: string | null;
   image_url?: string | null;
   active?: boolean | null;
+}
+
+interface InventoryItem {
+  id: string;
+  product_id: string;
+  variant_color: string;
+  variant_size: string;
+  stock_quantity: number;
 }
 
 interface ComboItem {
@@ -139,6 +147,10 @@ export default function CategoryProductListPage() {
   const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [modalImages, setModalImages] = useState<{ url: string; color?: string }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>('');
+  
+  // Real-time Inventory Stocks strictly > 0
+  const [modalStock, setModalStock] = useState<InventoryItem[]>([]);
+  const [stockColors, setStockColors] = useState<string[]>([]);
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [singleQty, setSingleQty] = useState<number>(1);
@@ -171,22 +183,23 @@ export default function CategoryProductListPage() {
         } else if (slugKey) {
           const { data: catList } = await supabase
             .from('categories')
-            .select('*')
+            .select('id, name, slug, image_url, active, display_order')
             .limit(50);
 
           if (catList && catList.length > 0) {
-            const targetLower = slugKey.toLowerCase();
+            const targetLower = slugKey.toLowerCase().replace(/['s]/g, '').trim();
             const matched = catList.find((c: any) => 
               String(c.id).toLowerCase() === targetLower ||
-              (c.slug && String(c.slug).toLowerCase() === targetLower) ||
-              (c.name && String(c.name).toLowerCase() === targetLower)
+              (c.slug && String(c.slug).toLowerCase().replace(/['s]/g, '').trim() === targetLower) ||
+              (c.name && String(c.name).toLowerCase().replace(/['s]/g, '').trim() === targetLower)
             );
 
             if (matched) {
               activeCatId = String(matched.id);
               activeCatName = matched.name;
-              const d = (matched.department || '').toLowerCase().trim();
-              currentDept = d.includes('jewel') ? 'jewellery' : 'fashions';
+              currentDept = matched.name.toLowerCase().includes('jewel') || (matched.slug && matched.slug.toLowerCase().includes('jewel'))
+                ? 'jewellery'
+                : 'fashions';
               categoryMetaCache.set(slugKey, { name: activeCatName, dept: currentDept, id: activeCatId });
             }
           }
@@ -264,7 +277,7 @@ export default function CategoryProductListPage() {
 
     async function loadProductsData() {
       setProductsLoading(true);
-      setVisibleCount(8); // Reset to first chunk
+      setVisibleCount(8);
       try {
         const slugKey = (slug || '').trim();
         const catInfo = categoryMetaCache.get(slugKey);
@@ -284,10 +297,11 @@ export default function CategoryProductListPage() {
             if (p.active === false) return false;
 
             if (selectedSub) {
-              const sel = selectedSub.toLowerCase().trim();
-              const pSub = (p.sub_category || p.sub_category_name || '').toLowerCase().trim();
+              const sel = selectedSub.toLowerCase().replace(/['s]/g, '').trim();
+              const pSub = (p.sub_category || p.sub_category_name || '').toLowerCase().replace(/['s]/g, '').trim();
               const pSubId = String(p.sub_category_id || '').toLowerCase().trim();
-              return pSub === sel || pSubId === sel || pSub.includes(sel);
+              const pName = (p.name || '').toLowerCase().replace(/['s]/g, '').trim();
+              return pSub.includes(sel) || sel.includes(pSub) || pSubId === sel || pName.includes(sel);
             }
 
             const pDept = (p.department || '').toLowerCase().trim();
@@ -298,8 +312,8 @@ export default function CategoryProductListPage() {
             }
 
             if (activeCatId && String(p.category_id).trim() === activeCatId) return true;
-            const pCatName = (p.category_name || p.category || '').toLowerCase().trim();
-            const targetName = activeCatName.toLowerCase().trim();
+            const pCatName = (p.category_name || p.category || '').toLowerCase().replace(/['s]/g, '').trim();
+            const targetName = activeCatName.toLowerCase().replace(/['s]/g, '').trim();
             return pCatName === targetName || (!pDept.includes('jewel') && slugKey === 'bras') || (!pDept.includes('jewel') && slugKey === 'fashions');
           });
 
@@ -354,124 +368,6 @@ export default function CategoryProductListPage() {
     return fallback;
   };
 
-  const getProductColors = (prod: any): string[] => {
-    if (!prod) return [];
-    const colorsSet = new Set<string>();
-
-    const checkValue = (val: any) => {
-      if (!val) return;
-      if (typeof val === 'string') {
-        try {
-          const parsed = JSON.parse(val);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((c) => checkValue(c));
-            return;
-          }
-        } catch {}
-        val.split(',').forEach((c) => {
-          const clean = c.trim();
-          if (clean && clean.toLowerCase() !== 'all' && clean.toLowerCase() !== 'universal') {
-            colorsSet.add(clean);
-          }
-        });
-      } else if (Array.isArray(val)) {
-        val.forEach((item) => {
-          if (typeof item === 'string') checkValue(item);
-          else if (item?.color || item?.colour || item?.name) {
-            checkValue(item.color || item.colour || item.name);
-          }
-        });
-      }
-    };
-
-    checkValue(prod.colour);
-    checkValue(prod.colors);
-    checkValue(prod.color);
-
-    if (prod.variants) {
-      let vars = prod.variants;
-      if (typeof vars === 'string') {
-        try { vars = JSON.parse(vars); } catch {}
-      }
-      checkValue(vars?.colors);
-      checkValue(vars?.colours);
-      if (Array.isArray(vars)) {
-        vars.forEach((v: any) => {
-          checkValue(v?.colour || v?.color);
-        });
-      }
-    }
-
-    if (Array.isArray(prod.images)) {
-      prod.images.forEach((img: any) => {
-        const tag = img.color_tag || img.color;
-        if (tag && typeof tag === 'string' && tag.toLowerCase() !== 'universal' && tag.toLowerCase() !== 'all') {
-          colorsSet.add(tag.trim());
-        }
-      });
-    }
-
-    if (colorsSet.size === 0) {
-      return ['Black', 'Skin', 'Beige', 'Maroon'];
-    }
-
-    return Array.from(colorsSet);
-  };
-
-  const getProductSizes = (prod: any): string[] => {
-    if (!prod) return [];
-    const sizesSet = new Set<string>();
-
-    const checkValue = (val: any) => {
-      if (!val) return;
-      if (typeof val === 'string') {
-        try {
-          const parsed = JSON.parse(val);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((s) => checkValue(s));
-            return;
-          }
-        } catch {}
-        val.split(',').forEach((s) => {
-          const clean = s.trim();
-          if (clean && clean.toLowerCase() !== 'all') {
-            sizesSet.add(clean);
-          }
-        });
-      } else if (Array.isArray(val)) {
-        val.forEach((item) => {
-          if (typeof item === 'string') checkValue(item);
-          else if (item?.size || item?.name) checkValue(item.size || item.name);
-        });
-      }
-    };
-
-    checkValue(prod.size);
-    checkValue(prod.sizes);
-    checkValue(prod.available_sizes);
-
-    if (prod.variants) {
-      let vars = prod.variants;
-      if (typeof vars === 'string') {
-        try { vars = JSON.parse(vars); } catch {}
-      }
-      checkValue(vars?.sizes);
-      if (Array.isArray(vars)) {
-        vars.forEach((v: any) => checkValue(v?.size));
-      }
-    }
-
-    if (sizesSet.size === 0) {
-      const nameLower = (prod.name || '').toLowerCase();
-      if (nameLower.includes('bra')) {
-        return ['32B', '34B', '36B', '38B', '40B'];
-      }
-      return ['Free Size'];
-    }
-
-    return Array.from(sizesSet);
-  };
-
   const handleWishlistToggle = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
     const pid = String(product.id);
@@ -479,8 +375,6 @@ export default function CategoryProductListPage() {
       removeFromWishlist(pid);
     } else {
       const pImage = getProductImage(product.images);
-      const colors = getProductColors(product);
-      const sizes = getProductSizes(product);
       const price = product.selling_price || product.price || 0;
 
       addToWishlist({
@@ -489,8 +383,6 @@ export default function CategoryProductListPage() {
         price,
         originalPrice: product.mrp || undefined,
         image: pImage,
-        color: colors[0] || undefined,
-        size: sizes[0] || undefined,
         fabric: product.fabric || undefined,
         department,
       });
@@ -499,7 +391,7 @@ export default function CategoryProductListPage() {
 
   const handleShareProduct = async (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
-    const shareUrl = `${window.location.origin}/category/${slug}?sub=${encodeURIComponent(
+    const shareUrl = `${window.location.origin}/#/category/${slug}?sub=${encodeURIComponent(
       product.sub_category || product.sub_category_name || selectedSub || ''
     )}&prod=${product.id}`;
 
@@ -526,7 +418,8 @@ export default function CategoryProductListPage() {
     }
   };
 
-  const handleOpenPopModel = (product: Product) => {
+  // OPEN POP MODAL - STRICTLY QUERY INVENTORY TABLE WHERE stock_quantity > 0
+  const handleOpenPopModel = async (product: Product) => {
     setActiveProduct(product);
     setComboList([]);
     setSingleQty(1);
@@ -556,17 +449,88 @@ export default function CategoryProductListPage() {
     setModalImages(validImgs);
     setSelectedImage(validImgs[0].url);
 
-    const colors = getProductColors(product);
-    const sizes = getProductSizes(product);
+    // FETCH REAL INVENTORY DATA
+    try {
+      const { data: invData, error } = await supabase
+        .from('inventory')
+        .select('id, product_id, variant_color, variant_size, stock_quantity')
+        .eq('product_id', String(product.id))
+        .gt('stock_quantity', 0);
 
-    setSelectedColor(colors.length > 0 ? colors[0] : 'Black');
-    setSelectedSize(sizes.length > 0 ? sizes[0] : '34B');
+      if (!error && invData && invData.length > 0) {
+        setModalStock(invData);
+
+        // Filter valid unique colors with stock
+        const uniqueColors = Array.from(
+          new Set(
+            invData
+              .map((item) => item.variant_color)
+              .filter((c) => c && c.trim().length > 0)
+          )
+        );
+        setStockColors(uniqueColors);
+
+        if (uniqueColors.length > 0) {
+          const firstColor = uniqueColors[0];
+          setSelectedColor(firstColor);
+
+          // Sizes strictly available for this first color
+          const sizesForFirst = Array.from(
+            new Set(
+              invData
+                .filter((item) => item.variant_color === firstColor)
+                .map((item) => item.variant_size)
+                .filter(Boolean)
+            )
+          );
+          setSelectedSize(sizesForFirst.length > 0 ? sizesForFirst[0] : '');
+        } else {
+          setSelectedColor('');
+          setSelectedSize('');
+        }
+      } else {
+        setModalStock([]);
+        setStockColors([]);
+        setSelectedColor('');
+        setSelectedSize('');
+      }
+    } catch (err) {
+      console.error('Error fetching inventory for modal:', err);
+      setModalStock([]);
+      setStockColors([]);
+      setSelectedColor('');
+      setSelectedSize('');
+    }
   };
+
+  // Strictly dynamic sizes for currently selected color from inventory
+  const stockSizesForSelectedColor = selectedColor
+    ? Array.from(
+        new Set(
+          modalStock
+            .filter((item) => item.variant_color === selectedColor && item.stock_quantity > 0)
+            .map((item) => item.variant_size)
+            .filter(Boolean)
+        )
+      )
+    : [];
 
   const handleColorShadeClick = (colorName: string) => {
     setSelectedColor(colorName);
-    const colorLower = colorName.toLowerCase().trim();
 
+    // Reset size to first available size in stock for this color
+    const sizes = modalStock
+      .filter((item) => item.variant_color === colorName && item.stock_quantity > 0)
+      .map((item) => item.variant_size)
+      .filter(Boolean);
+
+    if (sizes.length > 0) {
+      setSelectedSize(sizes[0]);
+    } else {
+      setSelectedSize('');
+    }
+
+    const colorLower = colorName.toLowerCase().trim();
     const matched = modalImages.find((img) => img.color && img.color.toLowerCase().trim() === colorLower);
     if (matched) {
       setSelectedImage(matched.url);
@@ -581,8 +545,9 @@ export default function CategoryProductListPage() {
   };
 
   const handleAddVariant = () => {
+    if (!selectedSize && !selectedColor) return;
     const colorVal = selectedColor || 'Standard';
-    const sizeVal = selectedSize || 'Standard';
+    const sizeVal = selectedSize || 'Free Size';
     const variantId = `${sizeVal}-${colorVal}`;
 
     setComboList((prev) => {
@@ -694,9 +659,7 @@ export default function CategoryProductListPage() {
   const activeMrp = activeProduct?.mrp || 0;
   const activeDiscount = activeMrp > activeSellingPrice ? Math.round(((activeMrp - activeSellingPrice) / activeMrp) * 100) : 0;
   
-  const modalColorOptions = getProductColors(activeProduct);
-  const modalSizeOptions = getProductSizes(activeProduct);
-  const hasVariants = modalColorOptions.length > 0 || modalSizeOptions.length > 0;
+  const hasVariantsInStock = stockColors.length > 0 || stockSizesForSelectedColor.length > 0;
 
   const totalComboItems = comboList.reduce((acc, item) => acc + item.qty, 0);
   const totalComboPrice = totalComboItems * activeSellingPrice;
@@ -805,7 +768,7 @@ export default function CategoryProductListPage() {
             </span>
           </div>
 
-          {/* COMPACT SUB-CATEGORY TRACK */}
+          {/* COMPACT SUB-CATEGORY TRACK - CENTER ALIGNED */}
           <div className="flex justify-center items-start gap-3 sm:gap-4 overflow-x-auto pb-2 pt-3 px-1 scrollbar-none mx-auto w-full max-w-4xl">
             {headerLoading && subCategories.length === 0 ? (
               <>
@@ -964,7 +927,7 @@ export default function CategoryProductListPage() {
         </div>
       </div>
 
-      {/* 4. Products Grid with Progressive Staggered Streaming */}
+      {/* 4. Products Grid */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
         {productsLoading && allProducts.length === 0 ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -1004,7 +967,6 @@ export default function CategoryProductListPage() {
               const isFav = isInWishlist(String(product.id));
               const isCopied = copiedId === String(product.id);
 
-              // Stagger delay for fluid sequence entrance
               const staggerDelay = `${Math.min((index % 8) * 60, 450)}ms`;
 
               return (
@@ -1145,7 +1107,7 @@ export default function CategoryProductListPage() {
         )}
       </div>
 
-      {/* 5. QUICK VIEW POP MODEL */}
+      {/* 5. QUICK VIEW POP MODAL - STRICTLY INVENTORY STOCK ONLY */}
       {activeProduct && (
         <div
           onClick={() => setActiveProduct(null)}
@@ -1259,18 +1221,18 @@ export default function CategoryProductListPage() {
 
                   <hr className="border-white/10" />
 
-                  {/* 1. Color Shade Selection */}
-                  {modalColorOptions.length > 0 && (
+                  {/* 1. In-Stock Color Shade Selection strictly from Inventory */}
+                  {stockColors.length > 0 ? (
                     <div className="space-y-2">
                       <span className="text-xs font-semibold text-neutral-300 block">
-                        Color Shade: <b className="capitalize text-white">{selectedColor || modalColorOptions[0]}</b>
+                        Color Shade: <b className="capitalize text-white">{selectedColor}</b>
                       </span>
 
                       <div className="flex flex-wrap items-center gap-2.5">
-                        {modalColorOptions.map((cName) => {
+                        {stockColors.map((cName) => {
                           const lower = cName.toLowerCase().trim();
                           const hex = COLOR_HEX_MAP[lower] || lower;
-                          const isSelected = (selectedColor || modalColorOptions[0]).toLowerCase() === lower;
+                          const isSelected = selectedColor.toLowerCase() === lower;
 
                           return (
                             <button
@@ -1299,18 +1261,24 @@ export default function CategoryProductListPage() {
                         })}
                       </div>
                     </div>
+                  ) : (
+                    <div className="py-2">
+                      <p className="text-xs text-rose-400 font-semibold uppercase tracking-wider">
+                        Out of Stock
+                      </p>
+                    </div>
                   )}
 
-                  {/* 2. Size Selection */}
-                  {modalSizeOptions.length > 0 && (
+                  {/* 2. In-Stock Size Selection for currently selected Color */}
+                  {stockSizesForSelectedColor.length > 0 && (
                     <div className="space-y-2 pt-1">
                       <span className="text-xs font-semibold text-neutral-300 block">
-                        Select Size: <b className="text-white">{selectedSize || modalSizeOptions[0]}</b>
+                        Select Size: <b className="text-white">{selectedSize}</b>
                       </span>
 
                       <div className="flex flex-wrap gap-2">
-                        {modalSizeOptions.map((sz) => {
-                          const isSelected = (selectedSize || modalSizeOptions[0]) === sz;
+                        {stockSizesForSelectedColor.map((sz) => {
+                          const isSelected = selectedSize === sz;
                           return (
                             <button
                               key={sz}
@@ -1359,7 +1327,7 @@ export default function CategoryProductListPage() {
                   </div>
 
                   {/* 4. Add Variant Button */}
-                  {hasVariants && (
+                  {hasVariantsInStock && (
                     <div className="pt-1">
                       <button
                         type="button"
@@ -1372,7 +1340,7 @@ export default function CategoryProductListPage() {
                       >
                         <Plus className="w-4 h-4" />
                         <span>
-                          Add Variant ({selectedSize || '34B'}{selectedColor ? ` • ${selectedColor}` : ''})
+                          Add Variant ({selectedSize || 'Free Size'}{selectedColor ? ` • ${selectedColor}` : ''})
                         </span>
                       </button>
                     </div>
@@ -1479,8 +1447,9 @@ export default function CategoryProductListPage() {
                   <div className="flex items-center gap-3 pt-2">
                     <button
                       type="button"
+                      disabled={stockColors.length === 0}
                       onClick={() => handleFinalCheckoutAction(false)}
-                      className={`flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer ${
+                      className={`flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                         isJewellery
                           ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b]/10'
                           : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4]/10'
@@ -1492,8 +1461,9 @@ export default function CategoryProductListPage() {
 
                     <button
                       type="button"
+                      disabled={stockColors.length === 0}
                       onClick={() => handleFinalCheckoutAction(true)}
-                      className={`relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#061e17] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden group ${
+                      className={`relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#061e17] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed ${
                         isJewellery
                           ? 'bg-gradient-to-r from-[#e5c07b] via-[#f7e7b4] to-[#b38728] shadow-[#e5c07b]/30 hover:brightness-110'
                           : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
