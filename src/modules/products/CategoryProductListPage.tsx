@@ -81,45 +81,116 @@ interface ComboItem {
   qty: number;
 }
 
+// Comprehensive Color Hex Map
 const COLOR_HEX_MAP: Record<string, string> = {
+  teal: '#008080',
+  'teal blue': '#006d77',
+  'deep teal': '#005f73',
+  'ocean blue': '#0077b6',
+  'sky blue': '#87ceeb',
+  'navy blue': '#000080',
+  navy: '#0f172a',
+  blue: '#2563eb',
+  royal: '#4169e1',
+  'royal blue': '#1e3a8a',
+  indigo: '#4b0082',
+  turquoise: '#40e0d0',
+  cyan: '#00f5d4',
+  aqua: '#00ffff',
+  green: '#16a34a',
+  'bottle green': '#09442b',
+  'dark green': '#004b23',
+  'olive green': '#556b2f',
+  olive: '#708238',
+  mint: '#98ff98',
+  'mint green': '#83c5be',
+  lime: '#32cd32',
+  'sea green': '#2e8b57',
+  emerald: '#50c878',
+  black: '#1f2937',
+  white: '#ffffff',
+  grey: '#4b5563',
+  gray: '#4b5563',
+  'dark grey': '#374151',
+  'light grey': '#d1d5db',
+  charcoal: '#36454f',
+  silver: '#c0c0c0',
+  red: '#dc2626',
+  'crimson red': '#dc143c',
+  crimson: '#dc143c',
+  maroon: '#800000',
+  'dark maroon': '#5c0000',
+  wine: '#722f37',
+  burgundy: '#800020',
+  ruby: '#9b111e',
   pink: '#e83e8c',
   'baby pink': '#f4c2c2',
   'rani pink': '#e30b5c',
+  'hot pink': '#ff69b4',
   magenta: '#d63384',
-  beige: '#f5e1d5',
-  skin: '#e8beac',
-  nude: '#d2b48c',
-  black: '#1f2937',
-  white: '#ffffff',
-  red: '#dc2626',
-  'crimson red': '#dc143c',
-  maroon: '#800000',
-  wine: '#722f37',
-  navy: '#0f172a',
-  'navy blue': '#000080',
-  blue: '#2563eb',
-  'sky blue': '#87ceeb',
-  turquoise: '#40e0d0',
-  green: '#16a34a',
-  'dark green': '#006400',
-  purple: '#9333ea',
-  violet: '#8a2be2',
+  rose: '#f43f5e',
+  peach: '#ffdab9',
+  salmon: '#fa8072',
+  coral: '#ff7f50',
+  orange: '#ea580c',
+  rust: '#b7410e',
   yellow: '#eab308',
   'mustard yellow': '#e1ad01',
   'musturd yellow': '#e1ad01',
-  peach: '#ffdab9',
-  grey: '#4b5563',
-  gray: '#4b5563',
+  mustard: '#d4a373',
+  lemon: '#fef08a',
   gold: '#d4af37',
+  beige: '#d4b996',
+  cream: '#fffdd0',
+  skin: '#e8beac',
+  nude: '#d2b48c',
+  brown: '#78350f',
+  chocolate: '#3e2723',
+  coffee: '#4a2c2a',
+  tan: '#d2b48c',
+  camel: '#c19a6b',
+  purple: '#9333ea',
+  violet: '#8a2be2',
+  lavender: '#e6e6fa',
+  lilac: '#c8a2c8',
+  plum: '#dda0dd',
+  mauve: '#e0b0ff',
+  copper: '#b87333',
+  bronze: '#cd7f32',
   antique: '#996515',
-  silver: '#c0c0c0',
-  ruby: '#9b111e',
-  emerald: '#50c878',
+  multi: '#ff3385',
+  multicolor: '#ff3385',
+  assorted: '#6366f1',
+};
+
+// Safe Color Resolver
+const resolveColorHex = (colorName: string): string => {
+  if (!colorName) return '#334155';
+  const clean = colorName.toLowerCase().trim();
+  if (COLOR_HEX_MAP[clean]) return COLOR_HEX_MAP[clean];
+
+  // Partial sub-string detection
+  for (const [key, val] of Object.entries(COLOR_HEX_MAP)) {
+    if (clean.includes(key) || key.includes(clean)) {
+      return val;
+    }
+  }
+
+  // Fallback hash color
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+  return '#' + '00000'.substring(0, 6 - c.length) + c;
 };
 
 const isLightColor = (colorName: string): boolean => {
   const lower = colorName.toLowerCase().trim();
-  return ['white', 'beige', 'skin', 'yellow', 'nude', 'gold', 'silver', 'peach', 'baby pink', 'sky blue'].includes(lower);
+  return [
+    'white', 'beige', 'skin', 'yellow', 'nude', 'gold', 'silver', 
+    'peach', 'baby pink', 'sky blue', 'cream', 'lemon', 'mint', 'light grey'
+  ].some((c) => lower.includes(c));
 };
 
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
@@ -334,7 +405,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug, selectedSub]);
 
-  // Progressive streaming: Add items sequentially to DOM without blocking
+  // Progressive streaming
   useEffect(() => {
     if (visibleCount < allProducts.length) {
       const timer = setTimeout(() => {
@@ -418,7 +489,7 @@ export default function CategoryProductListPage() {
     }
   };
 
-  // OPEN POP MODAL - STRICTLY QUERY INVENTORY TABLE WHERE stock_quantity > 0
+  // OPEN POP MODAL - INVENTORY QUERY WITH ACCURATE ATTRIBUTES
   const handleOpenPopModel = async (product: Product) => {
     setActiveProduct(product);
     setComboList([]);
@@ -451,21 +522,27 @@ export default function CategoryProductListPage() {
 
     // FETCH REAL INVENTORY DATA
     try {
+      const pid = String(product.id).trim();
       const { data: invData, error } = await supabase
         .from('inventory')
-        .select('id, product_id, variant_color, variant_size, stock_quantity')
-        .eq('product_id', String(product.id))
-        .gt('stock_quantity', 0);
+        .select('*')
+        .eq('product_id', pid);
 
-      if (!error && invData && invData.length > 0) {
-        setModalStock(invData);
+      if (error) {
+        console.error('Inventory fetch error:', error);
+      }
 
-        // Filter valid unique colors with stock
+      const inStockItems = (invData || []).filter((item: any) => Number(item.stock_quantity) > 0);
+
+      if (inStockItems.length > 0) {
+        setModalStock(inStockItems);
+
+        // Extract valid colors with stock
         const uniqueColors = Array.from(
           new Set(
-            invData
-              .map((item) => item.variant_color)
-              .filter((c) => c && c.trim().length > 0)
+            inStockItems
+              .map((item: any) => (item.variant_color || '').trim())
+              .filter(Boolean)
           )
         );
         setStockColors(uniqueColors);
@@ -474,12 +551,11 @@ export default function CategoryProductListPage() {
           const firstColor = uniqueColors[0];
           setSelectedColor(firstColor);
 
-          // Sizes strictly available for this first color
           const sizesForFirst = Array.from(
             new Set(
-              invData
-                .filter((item) => item.variant_color === firstColor)
-                .map((item) => item.variant_size)
+              inStockItems
+                .filter((item: any) => (item.variant_color || '').trim().toLowerCase() === firstColor.toLowerCase())
+                .map((item: any) => (item.variant_size || '').trim())
                 .filter(Boolean)
             )
           );
@@ -488,11 +564,42 @@ export default function CategoryProductListPage() {
           setSelectedColor('');
           setSelectedSize('');
         }
-      } else {
+      } else if (invData && invData.length > 0) {
         setModalStock([]);
         setStockColors([]);
         setSelectedColor('');
         setSelectedSize('');
+      } else {
+        // Fallback to product table attributes
+        const prodColors = (product.colour || product.colors || '')
+          .split(',')
+          .map((c: string) => c.trim())
+          .filter(Boolean);
+        const prodSizes = (product.size || product.sizes || product.available_sizes || '')
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+
+        const finalColors = prodColors.length > 0 ? prodColors : ['Standard'];
+        const finalSizes = prodSizes.length > 0 ? prodSizes : ['Free Size'];
+
+        const simulatedStock: InventoryItem[] = [];
+        finalColors.forEach((c: string) => {
+          finalSizes.forEach((s: string) => {
+            simulatedStock.push({
+              id: `${product.id}-${c}-${s}`,
+              product_id: product.id,
+              variant_color: c,
+              variant_size: s,
+              stock_quantity: 10,
+            });
+          });
+        });
+
+        setModalStock(simulatedStock);
+        setStockColors(finalColors);
+        setSelectedColor(finalColors[0]);
+        setSelectedSize(finalSizes[0]);
       }
     } catch (err) {
       console.error('Error fetching inventory for modal:', err);
@@ -503,13 +610,13 @@ export default function CategoryProductListPage() {
     }
   };
 
-  // Strictly dynamic sizes for currently selected color from inventory
+  // Dynamic sizes for currently selected color
   const stockSizesForSelectedColor = selectedColor
     ? Array.from(
         new Set(
           modalStock
-            .filter((item) => item.variant_color === selectedColor && item.stock_quantity > 0)
-            .map((item) => item.variant_size)
+            .filter((item) => (item.variant_color || '').trim().toLowerCase() === selectedColor.trim().toLowerCase() && item.stock_quantity > 0)
+            .map((item) => (item.variant_size || '').trim())
             .filter(Boolean)
         )
       )
@@ -518,10 +625,9 @@ export default function CategoryProductListPage() {
   const handleColorShadeClick = (colorName: string) => {
     setSelectedColor(colorName);
 
-    // Reset size to first available size in stock for this color
     const sizes = modalStock
-      .filter((item) => item.variant_color === colorName && item.stock_quantity > 0)
-      .map((item) => item.variant_size)
+      .filter((item) => (item.variant_color || '').trim().toLowerCase() === colorName.trim().toLowerCase() && item.stock_quantity > 0)
+      .map((item) => (item.variant_size || '').trim())
       .filter(Boolean);
 
     if (sizes.length > 0) {
@@ -659,7 +765,9 @@ export default function CategoryProductListPage() {
   const activeMrp = activeProduct?.mrp || 0;
   const activeDiscount = activeMrp > activeSellingPrice ? Math.round(((activeMrp - activeSellingPrice) / activeMrp) * 100) : 0;
   
-  const hasVariantsInStock = stockColors.length > 0 || stockSizesForSelectedColor.length > 0;
+  const isOutOfStock = stockColors.length === 0;
+  const showColors = stockColors.filter((c) => c.toLowerCase() !== 'standard');
+  const showSizes = stockSizesForSelectedColor.filter((s) => s.toLowerCase() !== 'free size');
 
   const totalComboItems = comboList.reduce((acc, item) => acc + item.qty, 0);
   const totalComboPrice = totalComboItems * activeSellingPrice;
@@ -680,9 +788,7 @@ export default function CategoryProductListPage() {
               type="button"
               onClick={() => navigate(-1)}
               className={`p-2 rounded-full transition-colors cursor-pointer ${
-                isJewellery
-                  ? 'hover:bg-[#0b3b2c] text-[#e5c07b]'
-                  : 'hover:bg-white/10 text-white'
+                isJewellery ? 'hover:bg-[#0b3b2c] text-[#e5c07b]' : 'hover:bg-white/10 text-white'
               }`}
               title="Go Back"
               aria-label="Go Back"
@@ -785,68 +891,6 @@ export default function CategoryProductListPage() {
                 const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
                 const hangTilt = tilts[idx % tilts.length];
 
-                // 2A. JEWELLERY: COMPACT WALL STUD + HANGING GOLD RING
-                if (isJewellery) {
-                  return (
-                    <button
-                      key={sub.id}
-                      type="button"
-                      onClick={() => handleSubSelect(sub.name)}
-                      className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[72px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
-                    >
-                      <div className="relative w-full flex flex-col items-center pt-2">
-                        <div className="absolute -top-2 w-2 h-2 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-30 border border-[#b38728] flex items-center justify-center">
-                          <div className="w-0.5 h-0.5 rounded-full bg-[#3d2c0b]" />
-                        </div>
-
-                        <div
-                          className={`absolute -top-1.5 w-4.5 h-4.5 rounded-full border-[2px] bg-transparent z-20 transition-all ${
-                            isActive
-                              ? 'border-[#fef08a] shadow-[0_0_12px_#fde68a]'
-                              : 'border-[#e5c07b] shadow-[0_2px_6px_rgba(229,192,123,0.45)] group-hover:shadow-[0_0_10px_#e5c07b]'
-                          }`}
-                        />
-
-                        <div className="absolute top-2 w-0.5 h-1.5 bg-gradient-to-b from-[#e5c07b] to-[#b38728] rounded-xs shadow-xs z-25" />
-
-                        <div
-                          className={`relative w-full h-[74px] sm:h-[82px] rounded-md p-[1px] shadow-[0_6px_14px_rgba(0,0,0,0.85)] transition-all duration-300 flex flex-col mt-1 ${
-                            isActive
-                              ? 'bg-gradient-to-b from-[#fde68a] via-[#e5c07b] to-[#fde68a] ring-2 ring-[#e5c07b] shadow-[0_0_15px_rgba(229,192,123,0.5)]'
-                              : 'bg-gradient-to-b from-[#e5c07b] via-[#946e20] to-[#e5c07b] group-hover:shadow-[0_8px_18px_rgba(229,192,123,0.3)]'
-                          }`}
-                        >
-                          <div className="w-full h-full rounded-[4px] overflow-hidden bg-[#061e17] relative border border-[#0b3b2c] pointer-events-none">
-                            <img
-                              src={
-                                sub.image_url ||
-                                'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'
-                              }
-                              alt={sub.name}
-                              className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
-                              loading="lazy"
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-[#04120e]/90 via-transparent to-transparent opacity-75 group-hover:opacity-30 transition-opacity" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-1.5 w-full px-0.5 pointer-events-none min-h-[22px] flex items-center justify-center">
-                        <span
-                          className={`block text-[9px] font-serif font-bold transition-colors whitespace-normal break-words leading-tight py-0.5 px-1 rounded-xs text-center w-full shadow-xs ${
-                            isActive
-                              ? 'bg-[#e5c07b] text-[#061e17] border border-[#fde68a]'
-                              : 'bg-[#061e17]/95 border border-[#e5c07b]/30 text-[#f5ebd7] group-hover:text-[#e5c07b] group-hover:border-[#e5c07b]'
-                          }`}
-                        >
-                          {sub.name}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                }
-
-                // 2B. FASHIONS: COMPACT TAPED PAPER POSTER
                 return (
                   <button
                     key={sub.id}
@@ -874,7 +918,6 @@ export default function CategoryProductListPage() {
                             className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
                             loading="lazy"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-65 group-hover:opacity-20 transition-opacity" />
                         </div>
                       </div>
                     </div>
@@ -976,8 +1019,8 @@ export default function CategoryProductListPage() {
                   style={{ animationDelay: staggerDelay }}
                   className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-2xl animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300 ${
                     isJewellery
-                      ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b] hover:shadow-[0_0_25px_rgba(229,192,123,0.2)]'
-                      : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4] hover:shadow-[0_0_25px_rgba(0,245,212,0.2)]'
+                      ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b]'
+                      : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4]'
                   }`}
                 >
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
@@ -988,32 +1031,27 @@ export default function CategoryProductListPage() {
                       loading="lazy"
                     />
 
-                    {/* Action Buttons: Wishlist + Share */}
                     <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
                       <button
                         type="button"
                         aria-label="Share Product"
                         onClick={(e) => handleShareProduct(e, product)}
-                        className={`w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white transition-all shadow-md backdrop-blur-md flex items-center justify-center active:scale-90 border border-white/10 ${
+                        className={`w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white transition-all flex items-center justify-center border border-white/10 ${
                           isCopied ? 'bg-emerald-600 text-white' : ''
                         }`}
-                        title={isCopied ? 'Link Copied!' : 'Share Product'}
+                        title="Share Product"
                       >
-                        {isCopied ? (
-                          <Check className="w-3.5 h-3.5 stroke-[2.5] text-emerald-300" />
-                        ) : (
-                          <Share2 className="w-3.5 h-3.5" />
-                        )}
+                        {isCopied ? <Check className="w-3.5 h-3.5 stroke-[2.5] text-emerald-300" /> : <Share2 className="w-3.5 h-3.5" />}
                       </button>
 
                       <button
                         type="button"
                         aria-label={isFav ? 'Remove from Wishlist' : 'Add to Wishlist'}
                         onClick={(e) => handleWishlistToggle(e, product)}
-                        className="w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white transition-all shadow-md backdrop-blur-md flex items-center justify-center active:scale-90 border border-white/10"
+                        className="w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white transition-all flex items-center justify-center border border-white/10"
                       >
                         <Heart
-                          className={`w-3.5 h-3.5 transition-colors ${
+                          className={`w-3.5 h-3.5 ${
                             isFav
                               ? isJewellery
                                 ? 'fill-[#e5c07b] text-[#e5c07b]'
@@ -1065,7 +1103,7 @@ export default function CategoryProductListPage() {
                       <h3
                         className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug transition-colors ${
                           isJewellery
-                            ? 'font-serif text-[#f5ebd7] group-hover:text-[#e5c07b]'
+                            ? 'font-serif text-[#f5ebd7]'
                             : 'font-sans text-neutral-200 group-hover:text-white'
                         }`}
                       >
@@ -1107,7 +1145,7 @@ export default function CategoryProductListPage() {
         )}
       </div>
 
-      {/* 5. QUICK VIEW POP MODAL - STRICTLY INVENTORY STOCK ONLY */}
+      {/* 5. QUICK VIEW POP MODEL */}
       {activeProduct && (
         <div
           onClick={() => setActiveProduct(null)}
@@ -1142,9 +1180,7 @@ export default function CategoryProductListPage() {
                         onClick={() => setSelectedImage(img.url)}
                         className={`w-14 h-18 sm:w-16 sm:h-20 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer bg-neutral-900 flex items-center justify-center ${
                           selectedImage === img.url
-                            ? isJewellery
-                              ? 'border-[#e5c07b] ring-2 ring-[#e5c07b]/30'
-                              : 'border-[#00f5d4] ring-2 ring-[#00f5d4]/30'
+                            ? 'border-[#00f5d4] ring-2 ring-[#00f5d4]/30'
                             : 'border-white/20 hover:border-white/40'
                         }`}
                       >
@@ -1221,253 +1257,241 @@ export default function CategoryProductListPage() {
 
                   <hr className="border-white/10" />
 
-                  {/* 1. In-Stock Color Shade Selection strictly from Inventory */}
-                  {stockColors.length > 0 ? (
-                    <div className="space-y-2">
-                      <span className="text-xs font-semibold text-neutral-300 block">
-                        Color Shade: <b className="capitalize text-white">{selectedColor}</b>
-                      </span>
-
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        {stockColors.map((cName) => {
-                          const lower = cName.toLowerCase().trim();
-                          const hex = COLOR_HEX_MAP[lower] || lower;
-                          const isSelected = selectedColor.toLowerCase() === lower;
-
-                          return (
-                            <button
-                              key={cName}
-                              type="button"
-                              onClick={() => handleColorShadeClick(cName)}
-                              title={cName}
-                              className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-2xs ${
-                                isSelected
-                                  ? isJewellery
-                                    ? 'ring-2 ring-offset-2 ring-offset-[#051611] ring-[#e5c07b] scale-110'
-                                    : 'ring-2 ring-offset-2 ring-offset-[#0b1329] ring-[#00f5d4] scale-110'
-                                  : 'hover:scale-105 border border-white/20'
-                              }`}
-                              style={{ backgroundColor: hex }}
-                            >
-                              {isSelected && (
-                                <Check
-                                  className={`w-3.5 h-3.5 ${
-                                    isLightColor(lower) ? 'text-neutral-900' : 'text-white'
-                                  }`}
-                                />
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="py-2">
-                      <p className="text-xs text-rose-400 font-semibold uppercase tracking-wider">
+                  {/* Stock Check Alert */}
+                  {isOutOfStock ? (
+                    <div className="py-2.5 px-3 rounded-xl bg-rose-500/10 border border-rose-500/30">
+                      <p className="text-xs font-bold text-rose-400 uppercase tracking-wider text-center">
                         Out of Stock
                       </p>
                     </div>
-                  )}
+                  ) : (
+                    <>
+                      {/* 1. Color Shade Selection with Real Background Colors */}
+                      {showColors.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="text-xs font-semibold text-neutral-300 block">
+                            Color Shade: <b className="capitalize text-white">{selectedColor}</b>
+                          </span>
 
-                  {/* 2. In-Stock Size Selection for currently selected Color */}
-                  {stockSizesForSelectedColor.length > 0 && (
-                    <div className="space-y-2 pt-1">
-                      <span className="text-xs font-semibold text-neutral-300 block">
-                        Select Size: <b className="text-white">{selectedSize}</b>
-                      </span>
+                          <div className="flex flex-wrap items-center gap-3">
+                            {showColors.map((cName) => {
+                              const resolvedHex = resolveColorHex(cName);
+                              const isSelected = selectedColor.toLowerCase().trim() === cName.toLowerCase().trim();
+                              const isLight = isLightColor(cName);
 
-                      <div className="flex flex-wrap gap-2">
-                        {stockSizesForSelectedColor.map((sz) => {
-                          const isSelected = selectedSize === sz;
-                          return (
-                            <button
-                              key={sz}
-                              type="button"
-                              onClick={() => setSelectedSize(sz)}
-                              className={`min-w-11 h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
-                                isSelected
-                                  ? isJewellery
-                                    ? 'bg-[#e5c07b] text-[#061e17] border-[#e5c07b] shadow-xs'
-                                    : 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
-                                  : 'bg-white/5 text-neutral-200 border-white/20 hover:border-white/40'
-                              }`}
-                            >
-                              {sz}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. Quantity Counter */}
-                  <div className="space-y-1.5 pt-1">
-                    <span className="text-xs font-semibold text-neutral-300 block">
-                      Quantity:
-                    </span>
-                    <div className="inline-flex items-center border border-white/20 rounded-xl p-1 bg-white/5">
-                      <button
-                        type="button"
-                        onClick={() => setSingleQty((prev) => Math.max(1, prev - 1))}
-                        className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="w-8 text-center text-xs font-bold text-white">
-                        {singleQty}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setSingleQty((prev) => prev + 1)}
-                        className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 4. Add Variant Button */}
-                  {hasVariantsInStock && (
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={handleAddVariant}
-                        className={`w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 ${
-                          isJewellery
-                            ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b] hover:text-[#061e17]'
-                            : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4] hover:text-[#040814]'
-                        }`}
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>
-                          Add Variant ({selectedSize || 'Free Size'}{selectedColor ? ` • ${selectedColor}` : ''})
-                        </span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* 5. Multi-Variants Combo List */}
-                  {comboList.length > 0 && (
-                    <div className="space-y-2 pt-1">
-                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
-                        Selected Variants ({comboList.length})
-                      </span>
-
-                      <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 no-scrollbar">
-                        {comboList.map((item) => {
-                          const hexBg = COLOR_HEX_MAP[item.color.toLowerCase()] || item.color.toLowerCase() || '#222';
-                          const light = item.color ? isLightColor(item.color) : false;
-
-                          return (
-                            <div
-                              key={item.id}
-                              style={{ backgroundColor: item.color ? hexBg : '#1e293b' }}
-                              className={`flex items-center justify-between pl-2 pr-1 py-1 rounded-full shadow-xs transition-all duration-200 border border-black/20 text-[11px] ${
-                                item.color
-                                  ? light ? 'text-neutral-900' : 'text-white'
-                                  : 'text-white'
-                              }`}
-                            >
-                              <div className="flex items-center gap-1.5 min-w-0 pr-1 leading-none">
-                                {item.size && <span className="font-black text-xs shrink-0">{item.size}</span>}
-                                {item.color && (
-                                  <span className="font-semibold opacity-90 truncate capitalize text-[10px]">
-                                    {item.color}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex items-center gap-1 shrink-0">
-                                <div
-                                  className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full backdrop-blur-xs ${
-                                    light ? 'bg-black/10 text-neutral-900' : 'bg-white/25 text-white'
-                                  }`}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => updateComboQty(item.id, -1)}
-                                    className="p-0.5 hover:scale-115 transition-transform cursor-pointer"
-                                  >
-                                    <Minus className="w-2.5 h-2.5" />
-                                  </button>
-                                  <span className="font-black text-[10px] w-3 text-center">
-                                    {item.qty}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => updateComboQty(item.id, 1)}
-                                    className="p-0.5 hover:scale-115 transition-transform cursor-pointer"
-                                  >
-                                    <Plus className="w-2.5 h-2.5" />
-                                  </button>
-                                </div>
-
+                              return (
                                 <button
+                                  key={cName}
                                   type="button"
-                                  onClick={() => removeComboItem(item.id)}
-                                  className={`w-4 h-4 rounded-full flex items-center justify-center cursor-pointer ${
-                                    light ? 'hover:bg-black/20 text-neutral-800' : 'hover:bg-white/30 text-white'
+                                  onClick={() => handleColorShadeClick(cName)}
+                                  title={cName}
+                                  className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md ${
+                                    isSelected
+                                      ? 'ring-2 ring-offset-2 ring-offset-[#0b1329] ring-[#00f5d4] scale-110'
+                                      : 'hover:scale-105 border border-white/20'
                                   }`}
-                                  title="Remove"
+                                  style={{
+                                    backgroundColor: resolvedHex,
+                                    boxShadow: isSelected ? '0 0 12px rgba(0, 245, 212, 0.4)' : undefined,
+                                  }}
                                 >
-                                  <X className="w-2.5 h-2.5" />
+                                  {isSelected && (
+                                    <Check
+                                      className={`w-4 h-4 stroke-[3] ${
+                                        isLight ? 'text-black' : 'text-white'
+                                      }`}
+                                    />
+                                  )}
                                 </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
-                  {/* 6. Total Bar */}
-                  {totalComboItems > 0 && (
-                    <div className="p-3 rounded-xl bg-black/60 border border-white/10 text-white flex items-center justify-between animate-in fade-in duration-200">
-                      <div>
-                        <span className="text-[9px] uppercase tracking-wider text-neutral-400 block font-bold">
-                          Total Items
+                      {/* 2. Size Selection */}
+                      {showSizes.length > 0 && (
+                        <div className="space-y-2 pt-1">
+                          <span className="text-xs font-semibold text-neutral-300 block">
+                            Select Size: <b className="text-white">{selectedSize}</b>
+                          </span>
+
+                          <div className="flex flex-wrap gap-2">
+                            {showSizes.map((sz) => {
+                              const isSelected = selectedSize === sz;
+                              return (
+                                <button
+                                  key={sz}
+                                  type="button"
+                                  onClick={() => setSelectedSize(sz)}
+                                  className={`min-w-11 h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                    isSelected
+                                      ? 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
+                                      : 'bg-white/5 text-neutral-200 border-white/20 hover:border-white/40'
+                                  }`}
+                                >
+                                  {sz}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 3. Quantity Counter */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-xs font-semibold text-neutral-300 block">
+                          Quantity:
                         </span>
-                        <span className="text-xs font-semibold">
-                          {totalComboItems} item{totalComboItems > 1 ? 's' : ''} selected
-                        </span>
+                        <div className="inline-flex items-center border border-white/20 rounded-xl p-1 bg-white/5">
+                          <button
+                            type="button"
+                            onClick={() => setSingleQty((prev) => Math.max(1, prev - 1))}
+                            className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="w-8 text-center text-xs font-bold text-white">
+                            {singleQty}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setSingleQty((prev) => prev + 1)}
+                            className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span
-                          className={`text-sm font-bold ${
-                            isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
-                          }`}
-                        >
-                          ₹{totalComboPrice.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                    </div>
+
+                      {/* 4. Add Variant Button */}
+                      {(showColors.length > 0 || showSizes.length > 0) && (
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={handleAddVariant}
+                            className="w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4] hover:text-[#040814]"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>
+                              Add Variant ({selectedSize || 'Free Size'}{selectedColor && selectedColor !== 'Standard' ? ` • ${selectedColor}` : ''})
+                            </span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* 5. Multi-Variants Combo List */}
+                      {comboList.length > 0 && (
+                        <div className="space-y-2 pt-1">
+                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                            Selected Variants ({comboList.length})
+                          </span>
+
+                          <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1 no-scrollbar">
+                            {comboList.map((item) => {
+                              const hexBg = resolveColorHex(item.color);
+                              const light = item.color ? isLightColor(item.color) : false;
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  style={{ backgroundColor: item.color ? hexBg : '#1e293b' }}
+                                  className={`flex items-center justify-between pl-2 pr-1 py-1 rounded-full shadow-xs transition-all duration-200 border border-black/20 text-[11px] ${
+                                    item.color
+                                      ? light ? 'text-neutral-900' : 'text-white'
+                                      : 'text-white'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5 min-w-0 pr-1 leading-none">
+                                    {item.size && <span className="font-black text-xs shrink-0">{item.size}</span>}
+                                    {item.color && (
+                                      <span className="font-semibold opacity-90 truncate capitalize text-[10px]">
+                                        {item.color}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <div
+                                      className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full backdrop-blur-xs ${
+                                        light ? 'bg-black/10 text-neutral-900' : 'bg-white/25 text-white'
+                                      }`}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => updateComboQty(item.id, -1)}
+                                        className="p-0.5 hover:scale-115 transition-transform cursor-pointer"
+                                      >
+                                        <Minus className="w-2.5 h-2.5" />
+                                      </button>
+                                      <span className="font-black text-[10px] w-3 text-center">
+                                        {item.qty}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => updateComboQty(item.id, 1)}
+                                        className="p-0.5 hover:scale-115 transition-transform cursor-pointer"
+                                      >
+                                        <Plus className="w-2.5 h-2.5" />
+                                      </button>
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => removeComboItem(item.id)}
+                                      className={`w-4 h-4 rounded-full flex items-center justify-center cursor-pointer ${
+                                        light ? 'hover:bg-black/20 text-neutral-800' : 'hover:bg-white/30 text-white'
+                                      }`}
+                                      title="Remove"
+                                >
+                                      <X className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 6. Total Bar */}
+                      {totalComboItems > 0 && (
+                        <div className="p-3 rounded-xl bg-black/60 border border-white/10 text-white flex items-center justify-between animate-in fade-in duration-200">
+                          <div>
+                            <span className="text-[9px] uppercase tracking-wider text-neutral-400 block font-bold">
+                              Total Items
+                            </span>
+                            <span className="text-xs font-semibold">
+                              {totalComboItems} item{totalComboItems > 1 ? 's' : ''} selected
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm font-bold text-[#00f5d4]">
+                              ₹{totalComboPrice.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   {/* 7. Action Buttons */}
                   <div className="flex items-center gap-3 pt-2">
                     <button
                       type="button"
-                      disabled={stockColors.length === 0}
+                      disabled={isOutOfStock}
                       onClick={() => handleFinalCheckoutAction(false)}
-                      className={`flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                        isJewellery
-                          ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b]/10'
-                          : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4]/10'
-                      }`}
+                      className="flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4]/10 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <ShoppingBag className="w-4 h-4" />
-                      <span>{totalComboItems > 0 ? `Add to Cart (${totalComboItems})` : 'Add to Cart'}</span>
+                      <span>{totalComboItems > 0 ? `Add to Cart (${totalComboItems})` : 'Add to Bag'}</span>
                     </button>
 
                     <button
                       type="button"
-                      disabled={stockColors.length === 0}
+                      disabled={isOutOfStock}
                       onClick={() => handleFinalCheckoutAction(true)}
-                      className={`relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#061e17] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed ${
-                        isJewellery
-                          ? 'bg-gradient-to-r from-[#e5c07b] via-[#f7e7b4] to-[#b38728] shadow-[#e5c07b]/30 hover:brightness-110'
-                          : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
-                      }`}
+                      className="relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#040814] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden bg-[#00f5d4] shadow-[#00f5d4]/30 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Zap className="w-4 h-4 fill-current animate-bounce relative z-10 shrink-0" />
                       <span className="relative z-10 tracking-widest font-black drop-shadow-xs">
