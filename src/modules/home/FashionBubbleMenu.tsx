@@ -1,391 +1,768 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { Link } from 'react-router-dom';
-import { X, Sparkles, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import {
+  ArrowLeft,
+  Heart,
+  ShoppingBag,
+  Zap,
+  ShieldCheck,
+  Truck,
+  RotateCcw,
+  Sparkles,
+  ChevronRight,
+  Maximize2,
+  X,
+  Plus,
+  Minus,
+  Check,
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import HeaderBagButton from '../../components/common/HeaderBagButton';
+import HeaderUserButton from '../../components/common/HeaderUserButton';
+import HeaderHeartButton from '../../components/common/HeaderHeartButton';
+import { useCart } from '../../context/CartContext';
+import { useWishlist } from '../../context/WishlistContext';
 
-interface SubCategory {
+import fashionLogo from '../../assets/fashion-logo.png';
+import jewelleryLogo from '../../assets/jewellery-logo.png';
+
+interface Product {
   id: string;
   name: string;
-  category_id?: string | null;
-  category_name?: string | null;
-  image_url?: string | null;
-  active?: boolean | null;
+  category: string | null;
+  sub_category: string | null;
+  brand: string | null;
+  sub_brand: string | null;
+  selling_price: number | null;
+  mrp: number | null;
+  images: any;
+  active: boolean | null;
+  fabric: string | null;
+  description: string | null;
+  features: string | null;
+  stock_quantity: number | null;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  slug?: string | null;
-  department?: string | null;
-  image_url?: string | null;
-  active?: boolean | null;
-  sub_categories?: SubCategory[];
-}
+const COLOR_HEX_MAP: Record<string, string> = {
+  pink: '#e83e8c',
+  'baby pink': '#f4c2c2',
+  'rani pink': '#e30b5c',
+  magenta: '#d63384',
+  beige: '#f5e1d5',
+  skin: '#e8beac',
+  nude: '#d2b48c',
+  black: '#1f2937',
+  white: '#ffffff',
+  red: '#dc2626',
+  'crimson red': '#dc143c',
+  maroon: '#800000',
+  wine: '#722f37',
+  navy: '#0f172a',
+  'navy blue': '#000080',
+  blue: '#2563eb',
+  'sky blue': '#87ceeb',
+  turquoise: '#40e0d0',
+  green: '#16a34a',
+  'dark green': '#006400',
+  purple: '#9333ea',
+  violet: '#8a2be2',
+  yellow: '#eab308',
+  'mustard yellow': '#e1ad01',
+  'musturd yellow': '#e1ad01',
+  peach: '#ffdab9',
+  grey: '#4b5563',
+  gray: '#4b5563',
+  gold: '#d4af37',
+  antique: '#996515',
+  silver: '#c0c0c0',
+  ruby: '#9b111e',
+  emerald: '#50c878',
+};
 
-const PAPER_TAPES = [
-  {
-    tapeColor: 'bg-[#ff3385]/75 border-y border-[#ff3385]/40 shadow-[0_2px_8px_rgba(255,51,133,0.35)]',
-    tapeTilt: 'rotate-[-3deg]',
-    paperTilt: 'hover:rotate-0 rotate-[-1.5deg]',
-    borderGlow: 'border-[#ff3385]/40 group-hover:border-[#ff3385]',
-  },
-  {
-    tapeColor: 'bg-[#00f5d4]/75 border-y border-[#00f5d4]/40 shadow-[0_2px_8px_rgba(0,245,212,0.35)]',
-    tapeTilt: 'rotate-[2.5deg]',
-    paperTilt: 'hover:rotate-0 rotate-[1.8deg]',
-    borderGlow: 'border-[#00f5d4]/40 group-hover:border-[#00f5d4]',
-  },
-  {
-    tapeColor: 'bg-[#ffb800]/75 border-y border-[#ffb800]/40 shadow-[0_2px_8px_rgba(255,184,0,0.35)]',
-    tapeTilt: 'rotate-[-2deg]',
-    paperTilt: 'hover:rotate-0 rotate-[-1.2deg]',
-    borderGlow: 'border-[#ffb800]/40 group-hover:border-[#ffb800]',
-  },
-  {
-    tapeColor: 'bg-[#6366f1]/75 border-y border-[#6366f1]/40 shadow-[0_2px_8px_rgba(99,102,241,0.35)]',
-    tapeTilt: 'rotate-[3deg]',
-    paperTilt: 'hover:rotate-0 rotate-[1.5deg]',
-    borderGlow: 'border-[#6366f1]/40 group-hover:border-[#6366f1]',
-  },
-];
+const isLightColor = (colorName: string): boolean => {
+  const lower = colorName.toLowerCase().trim();
+  return ['white', 'beige', 'skin', 'yellow', 'nude', 'gold', 'silver', 'peach', 'baby pink', 'sky blue'].includes(lower);
+};
 
-export default function FashionBubbleMenu() {
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [activeCategory, setActiveCategory] = useState<Category | null>(null);
+export default function ProductDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const { addToCart, openCart } = useCart();
+  const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
+
+  const [product, setProduct] = useState<Product | null>(null);
+  const [imageList, setImageList] = useState<{ url: string; color?: string }[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string>('');
+  
+  // Strictly Inventory-based Stock States
+  const [inventoryStock, setInventoryStock] = useState<any[]>([]);
+  const [availableColors, setAvailableColors] = useState<string[]>([]);
+  const [selectedColor, setSelectedColor] = useState<string>('');
+  const [selectedSize, setSelectedSize] = useState<string>('');
+
+  const [quantity, setQuantity] = useState<number>(1);
   const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
 
-  // Mouse Drag States
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [scrollLeftState, setScrollLeftState] = useState(0);
-  const [hasMoved, setHasMoved] = useState(false);
+  const isJewellery =
+    product?.category?.toLowerCase().includes('jewel') ||
+    product?.sub_category?.toLowerCase().includes('jewel');
 
-  // Lock background scroll when modal is active
+  const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
+  const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
+
   useEffect(() => {
-    if (activeCategory) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
+    async function fetchProductAndInventory() {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (error) throw error;
+
+        if (data) {
+          setProduct(data);
+
+          // Fetch Inventory Stock where stock_quantity > 0 strictly for this product
+          const { data: invData, error: invError } = await supabase
+            .from('inventory')
+            .select('*')
+            .eq('product_id', data.id)
+            .gt('stock_quantity', 0);
+
+          if (!invError && invData) {
+            setInventoryStock(invData);
+
+            // Extract ONLY colors that have inventory stock > 0
+            const colors = Array.from(
+              new Set(
+                invData
+                  .map((item: any) => item.variant_color)
+                  .filter((c: string) => c && c.toLowerCase() !== 'standard')
+              )
+            );
+
+            // Fallback to 'Standard' if no specific color variants exist
+            const finalColors = colors.length > 0 ? colors : Array.from(new Set(invData.map((item: any) => item.variant_color).filter(Boolean)));
+            setAvailableColors(finalColors);
+
+            if (finalColors.length > 0) {
+              const firstColor = finalColors[0];
+              setSelectedColor(firstColor);
+
+              // Get sizes strictly available for this first color
+              const sizesForFirstColor = invData
+                .filter((item: any) => item.variant_color === firstColor)
+                .map((item: any) => item.variant_size)
+                .filter(Boolean);
+
+              if (sizesForFirstColor.length > 0) {
+                setSelectedSize(sizesForFirstColor[0]);
+              }
+            }
+          }
+
+          // Images Parsing
+          let parsedImgs: { url: string; color?: string }[] = [];
+          if (Array.isArray(data.images)) {
+            parsedImgs = data.images.map((img: any) =>
+              typeof img === 'string'
+                ? { url: img }
+                : { url: img?.url || '', color: img?.color_tag || img?.color || img?.colour }
+            );
+          } else if (typeof data.images === 'string') {
+            try {
+              const parsed = JSON.parse(data.images);
+              if (Array.isArray(parsed)) {
+                parsedImgs = parsed.map((img: any) =>
+                  typeof img === 'string' ? { url: img } : { url: img?.url || '', color: img?.color_tag || img?.color }
+                );
+              }
+            } catch {
+              parsedImgs = [{ url: data.images }];
+            }
+          }
+
+          const fallback = isJewellery
+            ? 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=800&q=80'
+            : 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=800&q=80';
+
+          const validImgs = parsedImgs.filter((img) => img.url).length > 0 ? parsedImgs.filter((img) => img.url) : [{ url: fallback }];
+          setImageList(validImgs);
+          setSelectedImage(validImgs[0].url);
+        }
+      } catch (err) {
+        console.error('Error fetching product and inventory details:', err);
+      } finally {
+        setLoading(false);
+      }
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [activeCategory]);
+
+    if (id) fetchProductAndInventory();
+  }, [id]);
+
+  // Dynamically filter sizes based strictly on the selected color's inventory stock > 0
+  const availableSizesForSelectedColor = selectedColor
+    ? Array.from(
+        new Set(
+          inventoryStock
+            .filter((item: any) => item.variant_color === selectedColor && item.stock_quantity > 0)
+            .map((item: any) => item.variant_size)
+            .filter(Boolean)
+        )
+      )
+    : [];
+
+  // Handle color click
+  const handleColorClick = (colorName: string) => {
+    setSelectedColor(colorName);
+    
+    // Automatically set size to the first available size for this selected color
+    const sizes = inventoryStock
+      .filter((item: any) => item.variant_color === colorName && item.stock_quantity > 0)
+      .map((item: any) => item.variant_size)
+      .filter(Boolean);
+    
+    if (sizes.length > 0) {
+      setSelectedSize(sizes[0]);
+    }
+
+    // Switch image if matching color tag exists
+    const lowerColor = colorName.toLowerCase().trim();
+    const matchedImg = imageList.find((img) => img.color && img.color.toLowerCase().trim() === lowerColor);
+    if (matchedImg) {
+      setSelectedImage(matchedImg.url);
+    } else {
+      const urlMatch = imageList.find((img) => img.url.toLowerCase().includes(lowerColor));
+      if (urlMatch) {
+        setSelectedImage(urlMatch.url);
+      }
+    }
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setActiveCategory(null);
+      if (e.key === 'Escape' && isZoomOpen) {
+        setIsZoomOpen(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Native wheel event binding for horizontal scroll
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-
-    const onWheel = (e: WheelEvent) => {
-      if (e.deltaY !== 0) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY * 1.5;
-      }
-    };
-
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [loading, categories]);
-
-  // Button Scroll Handler
-  const handleScroll = (direction: 'left' | 'right') => {
-    if (scrollRef.current) {
-      const scrollAmount = direction === 'left' ? -350 : 350;
-      scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-    }
-  };
-
-  // Mouse Drag to Scroll Handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!scrollRef.current) return;
-    setIsDragging(true);
-    setHasMoved(false);
-    setStartX(e.pageX - scrollRef.current.offsetLeft);
-    setScrollLeftState(scrollRef.current.scrollLeft);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !scrollRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - scrollRef.current.offsetLeft;
-    const walk = (x - startX) * 1.6;
-    if (Math.abs(walk) > 4) {
-      setHasMoved(true);
-    }
-    scrollRef.current.scrollLeft = scrollLeftState - walk;
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadFashionMenu() {
-      setLoading(true);
-      try {
-        const [catRes, subRes] = await Promise.all([
-          supabase.from('categories').select('*').order('name'),
-          supabase.from('sub_categories').select('*').order('name'),
-        ]);
-
-        const catData: any[] = catRes.data || [];
-        const subData: any[] = subRes.data || [];
-
-        const fashionCats = catData.filter((c) => {
-          if (c.active === false) return false;
-          const dept = (c.department || '').toLowerCase().trim();
-          const name = (c.name || '').toLowerCase().trim();
-          const slug = (c.slug || '').toLowerCase().trim();
-          const isJewel = dept.includes('jewel') || name.includes('jewel') || slug.includes('jewel');
-          return !isJewel;
-        });
-
-        const mappedCategories: Category[] = fashionCats.map((cat) => {
-          const catIdStr = String(cat.id).trim();
-          const catNameStr = (cat.name || '').toLowerCase().trim();
-
-          const relatedSubs = subData.filter((sub) => {
-            if (sub.active === false) return false;
-            const subDept = (sub.department || '').toLowerCase().trim();
-            if (subDept.includes('jewel')) return false;
-
-            const mId = sub.category_id && String(sub.category_id).trim() === catIdStr;
-            const mName = sub.category_name && sub.category_name.toLowerCase().trim() === catNameStr;
-            return mId || mName;
-          });
-
-          return {
-            ...cat,
-            sub_categories: relatedSubs,
-          };
-        });
-
-        if (isMounted) {
-          setCategories(mappedCategories);
-        }
-      } catch (err) {
-        console.error('Error loading fashion menu:', err);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-
-    loadFashionMenu();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [isZoomOpen]);
 
   if (loading) {
     return (
-      <div className="w-full py-8 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00f5d4] shadow-[0_0_12px_#00f5d4]"></div>
+      <div className="min-h-screen flex items-center justify-center bg-[#080d1a]">
+        <div className="animate-spin rounded-full h-9 w-9 border-b-2 border-[#00f5d4] shadow-[0_0_12px_#00f5d4]"></div>
       </div>
     );
   }
 
-  if (categories.length === 0) return null;
+  if (!product) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#080d1a] px-4 text-center text-white">
+        <h2 className="text-xl font-bold">Product Not Found</h2>
+        <p className="text-sm text-neutral-400 mt-1">The item you are looking for is no longer available.</p>
+        <Link
+          to="/"
+          className="mt-4 px-6 py-2.5 rounded-full bg-[#00f5d4] text-[#040814] text-xs font-bold hover:bg-white transition-all shadow-md"
+        >
+          Back to Shopping
+        </Link>
+      </div>
+    );
+  }
+
+  const pid = String(product.id);
+  const isFav = isInWishlist(pid);
+  const sellingPrice = product.selling_price || 0;
+  const mrp = product.mrp || 0;
+  const discountPercent = mrp > sellingPrice ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0;
+
+  const handleWishlistToggle = () => {
+    if (isFav) {
+      removeFromWishlist(pid);
+    } else {
+      addToWishlist({
+        id: pid,
+        name: product.name,
+        price: sellingPrice,
+        originalPrice: mrp || undefined,
+        image: selectedImage || imageList[0]?.url,
+        color: selectedColor || undefined,
+        size: selectedSize || undefined,
+        fabric: product.fabric || undefined,
+        department: isJewellery ? 'jewellery' : 'fashions',
+      });
+    }
+  };
+
+  const handleAddToCart = (instantCheckout: boolean = false) => {
+    addToCart({
+      id: `${product.id}-${selectedSize || 'default'}-${selectedColor || 'default'}`,
+      productId: product.id,
+      name: product.name,
+      price: sellingPrice,
+      mrp: mrp || undefined,
+      image: selectedImage || imageList[0]?.url,
+      color: selectedColor || undefined,
+      size: selectedSize || undefined,
+      fabric: product.fabric || undefined,
+      qty: quantity,
+      department: isJewellery ? 'jewellery' : 'fashions',
+    });
+
+    if (instantCheckout) {
+      openCart();
+    }
+  };
 
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-2 pb-3 select-none relative z-10">
-      {/* 1. Header with Scroll Controls Only */}
-      <div className="flex items-center justify-end mb-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleScroll('left')}
-            className="p-1.5 sm:p-2 rounded-lg bg-[#0b1122]/90 hover:bg-[#ff3385] text-white border border-white/10 hover:border-[#ff3385] transition-all cursor-pointer shadow-md active:scale-95"
-            aria-label="Scroll left"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleScroll('right')}
-            className="p-1.5 sm:p-2 rounded-lg bg-[#0b1122]/90 hover:bg-[#00f5d4] text-white hover:text-[#040814] border border-white/10 hover:border-[#00f5d4] transition-all cursor-pointer shadow-md active:scale-95"
-            aria-label="Scroll right"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Main Track */}
-      <div
-        ref={scrollRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        className={`flex items-start gap-4 sm:gap-5 overflow-x-auto pb-4 pt-3 px-2 focus:outline-none scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
-          isDragging ? 'cursor-grabbing select-none' : 'cursor-grab'
+    <div className={`min-h-screen ${isJewellery ? 'bg-[#030907] text-[#f5ebd7]' : 'bg-[#080d1a] text-white'}`}>
+      {/* 1. Global Header */}
+      <header
+        className={`w-full sticky top-0 z-40 backdrop-blur-md transition-all duration-300 border-b ${
+          isJewellery
+            ? 'bg-[#04120e]/95 border-[#e5c07b]/20 shadow-md'
+            : 'bg-[#060b18]/95 border-[#00f5d4]/20 shadow-md'
         }`}
-        style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        {categories.map((cat, idx) => {
-          const profile = PAPER_TAPES[idx % PAPER_TAPES.length];
-
-          return (
-            <div
-              key={cat.id}
-              onClick={() => {
-                if (!hasMoved) setActiveCategory(cat);
-              }}
-              className={`group shrink-0 flex flex-col items-center w-[104px] sm:w-[116px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${profile.paperTilt} hover:scale-105 hover:z-20`}
+        <div className="w-full max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className={`p-2 rounded-full transition-colors cursor-pointer ${
+                isJewellery
+                  ? 'hover:bg-[#0b3b2c] text-[#e5c07b]'
+                  : 'hover:bg-white/10 text-white'
+              }`}
+              title="Go Back"
+              aria-label="Go Back"
             >
-              {/* Paper Poster Card */}
+              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+            </button>
+
+            <Link to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`} className="inline-flex items-center group py-0.5">
               <div
-                className={`relative w-full h-[118px] sm:h-[128px] rounded-xs p-1.5 bg-[#0f172a] border ${profile.borderGlow} shadow-[0_10px_20px_rgba(0,0,0,0.85)] group-hover:shadow-[0_14px_28px_rgba(0,0,0,0.95)] transition-all duration-300 flex flex-col`}
+                className={`relative h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-sm border flex items-center justify-center shrink-0 ${
+                  isJewellery
+                    ? 'bg-[#061e17] border-[#e5c07b]/40 shadow-[#061e17]/40'
+                    : 'bg-[#080d1a] border-[#00f5d4]/40 shadow-[#00f5d4]/10'
+                }`}
               >
-                {/* Wall Stick Tape */}
-                <div
-                  className={`absolute -top-2.5 left-1/2 -translate-x-1/2 w-11 h-3.5 ${profile.tapeColor} ${profile.tapeTilt} backdrop-blur-xs z-30 pointer-events-none opacity-90`}
-                  style={{
-                    clipPath: 'polygon(0% 15%, 4% 0%, 96% 0%, 100% 15%, 98% 85%, 100% 100%, 0% 100%, 2% 85%)',
-                  }}
+                <img
+                  src={currentLogo}
+                  alt={brandAlt}
+                  className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
                 />
-
-                {/* Inner Image Frame */}
-                <div className="w-full h-full rounded-xs overflow-hidden bg-[#040814] relative border border-white/5 pointer-events-none">
-                  <img
-                    src={
-                      cat.image_url ||
-                      'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80'
-                    }
-                    alt={cat.name}
-                    className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105 pointer-events-none"
-                    loading="lazy"
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#040814]/85 via-transparent to-transparent opacity-70 group-hover:opacity-20 transition-opacity" />
-                </div>
               </div>
+            </Link>
+          </div>
 
-              {/* Title Tag */}
-              <div className="mt-2 w-full px-0.5 pointer-events-none min-h-[30px] flex items-center justify-center">
-                <span className="block text-[11px] font-mono font-black text-white group-hover:text-[#00f5d4] transition-colors whitespace-normal break-words leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] bg-[#040814]/90 border border-white/15 py-1 px-1.5 rounded-xs shadow-md group-hover:border-[#00f5d4] text-center w-full">
-                  {cat.name}
-                </span>
-              </div>
-            </div>
-          );
-        })}
+          <div className="flex items-center gap-1 sm:gap-2">
+            <HeaderUserButton isJewellery={isJewellery} />
+            <HeaderHeartButton isJewellery={isJewellery} />
+            <HeaderBagButton isJewellery={isJewellery} />
+          </div>
+        </div>
+      </header>
+
+      {/* 2. Breadcrumbs Navigation */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-3.5 text-xs text-neutral-400 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <Link to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`} className="hover:underline shrink-0 text-neutral-300">
+          Home
+        </Link>
+        <ChevronRight className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+        <Link
+          to={`/category/${isJewellery ? 'jewellery' : 'fashions'}`}
+          className="capitalize hover:underline shrink-0 text-neutral-300"
+        >
+          {isJewellery ? 'Royal Vault' : 'Haute Couture'}
+        </Link>
+        {product.sub_category && (
+          <>
+            <ChevronRight className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+            <Link
+              to={`/category/${isJewellery ? 'jewellery' : 'fashions'}?sub=${encodeURIComponent(product.sub_category)}`}
+              className="capitalize hover:underline shrink-0 text-neutral-300"
+            >
+              {product.sub_category}
+            </Link>
+          </>
+        )}
+        <ChevronRight className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+        <span className="text-white font-medium truncate">{product.name}</span>
       </div>
 
-      {/* 3. Sub-Category Pop-Up Menu Modal via React Portal (Never covered by banners) */}
-      {activeCategory &&
-        createPortal(
-          <div
-            onClick={() => setActiveCategory(null)}
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200 cursor-pointer"
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-xl bg-[#0b1122] rounded-2xl p-5 sm:p-6 shadow-[0_25px_70px_rgba(0,0,0,0.98)] border border-[#ff3385]/50 cursor-default animate-in zoom-in-95 duration-200 flex flex-col z-[10000] my-auto max-h-[88vh]"
-            >
-              {/* Modal Header */}
-              <div className="flex items-center justify-between pb-3.5 border-b border-white/10 shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <span className="p-1.5 rounded-md bg-[#ff3385]/20 text-[#ff3385] border border-[#ff3385]/40">
-                    <Sparkles className="w-4 h-4" />
-                  </span>
-                  <div>
-                    <h3 className="text-base sm:text-lg font-sans font-black text-white leading-none uppercase tracking-tight">
-                      {activeCategory.name}
-                    </h3>
-                    <span className="text-[10px] font-mono text-[#00f5d4] font-bold">SELECT SUB-COLLECTION</span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveCategory(null)}
-                  className="p-1.5 rounded-md bg-white/10 hover:bg-[#ff3385] text-white hover:text-[#040814] transition-all cursor-pointer"
-                  aria-label="Close"
-                >
-                  <X className="w-4 h-4 stroke-[2.5]" />
-                </button>
+      {/* 3. Main Product Showcase */}
+      <main className="max-w-7xl mx-auto px-4 md:px-8 py-4 pb-28 md:pb-20">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+          {/* Left: Image Gallery */}
+          <div className="lg:col-span-7 flex flex-col-reverse sm:flex-row gap-4">
+            {/* Thumbnails */}
+            {imageList.length > 1 && (
+              <div className="flex sm:flex-col gap-3 overflow-x-auto sm:overflow-y-auto no-scrollbar max-h-[520px] shrink-0">
+                {imageList.map((img, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setSelectedImage(img.url)}
+                    className={`w-16 h-20 sm:w-20 sm:h-24 rounded-2xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer bg-neutral-900 ${
+                      selectedImage === img.url
+                        ? isJewellery
+                          ? 'border-[#e5c07b] ring-2 ring-[#e5c07b]/30'
+                          : 'border-[#00f5d4] ring-2 ring-[#00f5d4]/30'
+                        : 'border-white/20 hover:border-white/40'
+                    }`}
+                  >
+                    <img src={img.url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover object-top" />
+                  </button>
+                ))}
               </div>
+            )}
 
-              {/* Subcategories Grid */}
-              <div className="overflow-y-auto max-h-[58vh] py-4 no-scrollbar flex-1">
-                {activeCategory.sub_categories && activeCategory.sub_categories.length > 0 ? (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3.5 sm:gap-4 justify-items-center">
-                    {activeCategory.sub_categories.map((sub, sIdx) => {
-                      const catSlug = activeCategory.slug || activeCategory.id;
-                      const profile = PAPER_TAPES[sIdx % PAPER_TAPES.length];
+            {/* Featured Image with Zoom Trigger */}
+            <div className="flex-1 relative aspect-[3/4] rounded-3xl overflow-hidden bg-neutral-900 border border-white/10 shadow-md group">
+              <img
+                src={selectedImage}
+                alt={product.name}
+                className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-105"
+              />
 
-                      return (
-                        <Link
-                          key={sub.id}
-                          to={`/category/${catSlug}?sub=${encodeURIComponent(sub.name)}`}
-                          onClick={() => setActiveCategory(null)}
-                          className={`group flex flex-col items-center w-[82px] sm:w-[92px] text-center cursor-pointer active:scale-95 transition-all ${profile.paperTilt}`}
-                        >
-                          <div
-                            className={`relative w-full h-[92px] sm:h-[102px] rounded-xs p-1 bg-[#0f172a] border ${profile.borderGlow} shadow-md transition-all duration-300`}
-                          >
-                            <div
-                              className={`absolute -top-2 left-1/2 -translate-x-1/2 w-9 h-2.5 ${profile.tapeColor} ${profile.tapeTilt} z-20 pointer-events-none opacity-85`}
-                            />
+              {/* Floating Wishlist Button */}
+              <button
+                type="button"
+                onClick={handleWishlistToggle}
+                className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/60 hover:bg-black text-white shadow-md backdrop-blur-md flex items-center justify-center transition-all active:scale-90 cursor-pointer z-10 border border-white/10"
+                aria-label={isFav ? 'Remove from wishlist' : 'Add to wishlist'}
+              >
+                <Heart
+                  className={`w-5 h-5 transition-colors ${
+                    isFav
+                      ? isJewellery
+                        ? 'fill-[#e5c07b] text-[#e5c07b]'
+                        : 'fill-[#ff3385] text-[#ff3385]'
+                      : 'text-neutral-400 hover:text-white'
+                  }`}
+                />
+              </button>
 
-                            <div className="w-full h-full rounded-xs overflow-hidden bg-[#040814] relative">
-                              <img
-                                src={
-                                  sub.image_url ||
-                                  activeCategory.image_url ||
-                                  'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=200&q=80'
-                                }
-                                alt={sub.name}
-                                className="w-full h-full object-cover object-top group-hover:scale-115 transition-transform duration-500"
-                                loading="lazy"
-                              />
-                            </div>
-                          </div>
+              {/* Click to Zoom Pill */}
+              <button
+                type="button"
+                onClick={() => setIsZoomOpen(true)}
+                className="absolute bottom-4 right-4 px-3 py-1.5 rounded-full bg-black/60 hover:bg-black text-white text-xs font-medium flex items-center gap-1.5 backdrop-blur-md shadow-md transition-all cursor-pointer border border-white/10"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>Zoom</span>
+              </button>
+            </div>
+          </div>
 
-                          <span className="mt-1.5 text-[10.5px] font-mono font-bold text-neutral-200 group-hover:text-[#00f5d4] transition-colors whitespace-normal break-words leading-tight w-full text-center min-h-[26px] flex items-center justify-center">
-                            {sub.name}
-                          </span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="py-8 text-center text-xs font-mono text-[#7d8ea7]">
-                    No sub-categories found in this category.
-                  </div>
+          {/* Right: Specifications & Purchases */}
+          <div className="lg:col-span-5 flex flex-col justify-between space-y-6">
+            <div className="space-y-4">
+              {/* Collection / Sub-Category Badge */}
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-[0.25em] px-3 py-1 rounded-full ${
+                    isJewellery
+                      ? 'text-[#e5c07b] bg-[#0b3b2c] border border-[#e5c07b]/30'
+                      : 'text-[#ff3385] bg-[#ff3385]/10 border border-[#ff3385]/30'
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  {product.sub_category || (isJewellery ? 'Imperial Vault' : 'Haute Couture')}
+                </span>
+
+                {product.brand && (
+                  <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-white/10 text-neutral-200 border border-white/10">
+                    {product.brand}
+                  </span>
                 )}
               </div>
 
-              {/* Modal Footer CTA */}
-              <div className="pt-3 border-t border-white/10 text-center shrink-0">
-                <Link
-                  to={`/category/${activeCategory.slug || activeCategory.id}`}
-                  onClick={() => setActiveCategory(null)}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-mono font-black text-[#00f5d4] hover:text-[#ff3385] transition-colors uppercase tracking-wider"
+              {/* Product Title */}
+              <h1
+                className={`text-2xl sm:text-3xl font-bold leading-snug ${
+                  isJewellery ? 'font-serif text-[#f5ebd7]' : 'font-sans text-white'
+                }`}
+              >
+                {product.name}
+              </h1>
+
+              {/* Pricing Display */}
+              <div className="flex items-baseline gap-3 pt-1">
+                <span
+                  className={`text-2xl sm:text-3xl font-bold ${
+                    isJewellery ? 'text-[#e5c07b]' : 'text-white'
+                  }`}
                 >
-                  <span>View All {activeCategory.name}</span>
-                  <ArrowRight className="w-3.5 h-3.5 stroke-[2.5]" />
-                </Link>
+                  ₹{sellingPrice.toLocaleString('en-IN')}
+                </span>
+                {mrp > sellingPrice && (
+                  <>
+                    <span className="text-base text-neutral-400 line-through">
+                      ₹{mrp.toLocaleString('en-IN')}
+                    </span>
+                    <span
+                      className={`text-xs font-bold px-2 py-0.5 rounded-md ${
+                        isJewellery
+                          ? 'text-[#e5c07b] bg-[#0b3b2c] border border-[#e5c07b]/30'
+                          : 'text-[#00f5d4] bg-[#00f5d4]/10 border border-[#00f5d4]/30'
+                      }`}
+                    >
+                      {discountPercent}% OFF
+                    </span>
+                  </>
+                )}
               </div>
+              <p className="text-[11px] text-neutral-400">Price includes all applicable taxes & insured shipping.</p>
+
+              <hr className="border-white/10" />
+
+              {/* Fabric Details */}
+              {product.fabric && (
+                <div
+                  className={`p-3.5 rounded-2xl border shadow-2xs w-max ${
+                    isJewellery ? 'bg-[#061e17]/90 border-[#e5c07b]/25' : 'bg-[#0f172a]/90 border-[#1e293b]'
+                  }`}
+                >
+                  <span className="text-neutral-400 block text-[10px] uppercase font-mono font-bold tracking-wider">
+                    Fabric
+                  </span>
+                  <span className="font-semibold text-neutral-200 mt-0.5 block">{product.fabric}</span>
+                </div>
+              )}
+
+              {/* 1. Strictly In-Stock Color Options from Inventory */}
+              {availableColors.length > 0 && availableColors[0] !== 'Standard' && (
+                <div className="space-y-2 pt-1">
+                  <span className="text-xs font-semibold text-neutral-300 block">
+                    Available Colour: <b className="capitalize text-white">{selectedColor || availableColors[0]}</b>
+                  </span>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {availableColors.map((cName) => {
+                      const lower = cName.toLowerCase().trim();
+                      const hex = COLOR_HEX_MAP[lower] || lower;
+                      const isSelected = (selectedColor || availableColors[0]).toLowerCase() === lower;
+
+                      return (
+                        <button
+                          key={cName}
+                          type="button"
+                          onClick={() => handleColorClick(cName)}
+                          title={cName}
+                          className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-2xs ${
+                            isSelected
+                              ? isJewellery
+                                ? 'ring-2 ring-offset-2 ring-offset-[#030907] ring-[#e5c07b] scale-110'
+                                : 'ring-2 ring-offset-2 ring-offset-[#080d1a] ring-[#00f5d4] scale-110'
+                              : 'hover:scale-105 border border-white/20'
+                          }`}
+                          style={{ backgroundColor: hex }}
+                        >
+                          {isSelected && (
+                            <Check
+                              className={`w-3.5 h-3.5 ${
+                                isLightColor(lower) ? 'text-neutral-900' : 'text-white'
+                              }`}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Strictly In-Stock Sizes for Selected Color from Inventory */}
+              {availableSizesForSelectedColor.length > 0 && availableSizesForSelectedColor[0] !== 'Free Size' && (
+                <div className="space-y-2 pt-1">
+                  <span className="text-xs font-semibold text-neutral-300 block">
+                    Available Size: <b className="text-white">{selectedSize || availableSizesForSelectedColor[0]}</b>
+                  </span>
+
+                  <div className="flex flex-wrap gap-2">
+                    {availableSizesForSelectedColor.map((sz) => {
+                      const isSelected = (selectedSize || availableSizesForSelectedColor[0]) === sz;
+                      return (
+                        <button
+                          key={sz}
+                          type="button"
+                          onClick={() => setSelectedSize(sz)}
+                          className={`min-w-11 h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                            isSelected
+                              ? isJewellery
+                                ? 'bg-[#e5c07b] text-[#061e17] border-[#e5c07b] shadow-xs'
+                                : 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
+                              : 'bg-white/5 text-neutral-200 border-white/20 hover:border-white/40'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Quantity Selector */}
+              <div className="space-y-2 pt-1">
+                <span className="font-bold text-neutral-300 uppercase tracking-wider text-[11px] block">
+                  Quantity
+                </span>
+                <div className="flex items-center gap-3">
+                  <div className="inline-flex items-center border border-white/20 rounded-xl p-1 bg-white/5">
+                    <button
+                      type="button"
+                      onClick={() => setQuantity((prev) => Math.max(1, prev - 1))}
+                      className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
+                      aria-label="Decrease quantity"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="w-10 text-center text-xs font-bold text-white">
+                      {quantity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQuantity((prev) => prev + 1)}
+                      className="w-8 h-8 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons (Desktop) */}
+              <div className="hidden md:flex items-center gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => handleAddToCart(false)}
+                  className={`flex-1 py-4 px-6 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer ${
+                    isJewellery
+                      ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b]/10'
+                      : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4]/10'
+                  }`}
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  <span>Add to Bag</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAddToCart(true)}
+                  className={`relative flex-1 py-4 px-6 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#061e17] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden group ${
+                    isJewellery
+                      ? 'bg-gradient-to-r from-[#e5c07b] via-[#f7e7b4] to-[#b38728] shadow-[#e5c07b]/30 hover:brightness-110'
+                      : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
+                  }`}
+                >
+                  <Zap className="w-4 h-4 fill-current animate-bounce relative z-10 shrink-0" />
+                  <span className="relative z-10 tracking-widest font-black drop-shadow-xs">
+                    Instant Buy
+                  </span>
+                </button>
+              </div>
+
+              {/* Trust Assurances */}
+              <div className="pt-4 border-t border-white/10 grid grid-cols-3 gap-2 text-center text-neutral-400">
+                <div className="flex flex-col items-center gap-1">
+                  <ShieldCheck className="w-4 h-4 text-neutral-300" />
+                  <span className="text-[10px] font-medium">100% Genuine</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <Truck className="w-4 h-4 text-neutral-300" />
+                  <span className="text-[10px] font-medium">Fast Dispatch</span>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <RotateCcw className="w-4 h-4 text-neutral-300" />
+                  <span className="text-[10px] font-medium">Easy Returns</span>
+                </div>
+              </div>
+
+              {/* Description */}
+              {product.description && (
+                <div className="pt-4 text-xs text-neutral-300 space-y-1.5">
+                  <h4 className="font-bold text-white uppercase text-[10px] font-mono tracking-wider">
+                    Product Description
+                  </h4>
+                  <p className="leading-relaxed whitespace-pre-line text-neutral-300">{product.description}</p>
+                </div>
+              )}
             </div>
-          </div>,
-          document.body
-        )}
-    </section>
+          </div>
+        </div>
+      </main>
+
+      {/* 4. Mobile Sticky Bottom Action Bar */}
+      <div className="md:hidden fixed bottom-0 inset-x-0 bg-[#060b18]/95 backdrop-blur-md border-t border-white/10 px-4 py-3 z-40 flex items-center gap-3 shadow-lg">
+        <button
+          type="button"
+          onClick={() => handleAddToCart(false)}
+          className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 border active:scale-95 cursor-pointer ${
+            isJewellery
+              ? 'border-[#e5c07b] text-[#e5c07b]'
+              : 'border-[#00f5d4] text-[#00f5d4]'
+          }`}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          <span>Add to Bag</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleAddToCart(true)}
+          className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 text-[#040814] shadow-md active:scale-95 cursor-pointer ${
+            isJewellery
+              ? 'bg-[#e5c07b] text-[#061e17]'
+              : 'bg-[#00f5d4] text-[#040814]'
+          }`}
+        >
+          <Zap className="w-4 h-4 fill-current" />
+          <span>Buy Now</span>
+        </button>
+      </div>
+
+      {/* 5. Fullscreen Zoom Lightbox Modal */}
+      {isZoomOpen && (
+        <div
+          onClick={() => setIsZoomOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/92 backdrop-blur-md p-4 animate-in fade-in duration-200 cursor-zoom-out"
+        >
+          <button
+            type="button"
+            onClick={() => setIsZoomOpen(false)}
+            className="absolute top-5 right-5 p-2.5 rounded-full bg-white/20 hover:bg-white text-white hover:text-black transition-colors cursor-pointer z-60"
+            aria-label="Close Preview"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl max-h-[88vh] flex flex-col items-center justify-center cursor-default"
+          >
+            <img
+              src={selectedImage}
+              alt={product.name}
+              className="max-h-[84vh] w-auto object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200"
+            />
+            <p className="text-xs text-neutral-300 mt-2 font-medium">
+              {product.name}
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
