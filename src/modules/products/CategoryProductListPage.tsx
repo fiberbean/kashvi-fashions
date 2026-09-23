@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
   Filter,
@@ -23,6 +23,7 @@ import { supabase } from '../../lib/supabase';
 import HeaderBagButton from '../../components/common/HeaderBagButton';
 import HeaderUserButton from '../../components/common/HeaderUserButton';
 import HeaderHeartButton from '../../components/common/HeaderHeartButton';
+import CringeLoader from '../../components/common/CringeLoader';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
 
@@ -81,12 +82,13 @@ interface ComboItem {
   qty: number;
 }
 
-const normalizeText = (text?: string | null): string => {
-  if (!text) return '';
-  return decodeURIComponent(text)
+const cleanStr = (val?: string | null): string => {
+  if (!val) return '';
+  return decodeURIComponent(String(val))
     .toLowerCase()
-    .replace(/['’`"s]/g, '') // Removes apostrophes and plural 's'
-    .replace(/[^a-z0-9]/g, '') // Cleans spaces and special symbols
+    .replace(/%27/g, "'")
+    .replace(/['’`"]/g, '')
+    .replace(/[^a-z0-9]/g, '')
     .trim();
 };
 
@@ -101,8 +103,10 @@ export default function CategoryProductListPage() {
   const { addToCart, openCart } = useCart();
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [visibleCount, setVisibleCount] = useState<number>(8);
+  const [isSwitching, startTransition] = useTransition();
+
+  const [rawProducts, setRawProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [categoryName, setCategoryName] = useState<string>('');
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
@@ -138,7 +142,7 @@ export default function CategoryProductListPage() {
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
-  // 1. Fetch Colours Table from Supabase
+  // 1. Database nunchi Colours retrieve cheyadam
   useEffect(() => {
     async function fetchColours() {
       try {
@@ -220,11 +224,11 @@ export default function CategoryProductListPage() {
             .limit(50);
 
           if (catList && catList.length > 0) {
-            const targetNorm = normalizeText(slugKey);
+            const targetNorm = cleanStr(slugKey);
             const matched = catList.find((c: any) => 
-              normalizeText(c.id) === targetNorm ||
-              normalizeText(c.slug) === targetNorm ||
-              normalizeText(c.name) === targetNorm
+              cleanStr(c.id) === targetNorm ||
+              cleanStr(c.slug) === targetNorm ||
+              cleanStr(c.name) === targetNorm
             );
 
             if (matched) {
@@ -279,7 +283,7 @@ export default function CategoryProductListPage() {
               const matchesName =
                 sub.category_name &&
                 activeCatName &&
-                normalizeText(sub.category_name) === normalizeText(activeCatName);
+                cleanStr(sub.category_name) === cleanStr(activeCatName);
               return matchesId || matchesName || !activeCatId;
             });
           }
@@ -300,13 +304,12 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 3. Load Products and Accurate Sub-Category Filtering
+  // 3. Load Category Products
   useEffect(() => {
     let isCurrent = true;
 
-    async function loadProductsData() {
+    async function loadCategoryProducts() {
       setProductsLoading(true);
-      setVisibleCount(8);
       try {
         const slugKey = (slug || '').trim();
         const catInfo = categoryMetaCache.get(slugKey);
@@ -322,33 +325,9 @@ export default function CategoryProductListPage() {
         if (prodError) throw prodError;
 
         if (isCurrent && prodData) {
-          const selectedSubNorm = normalizeText(selectedSub);
-
-          // Find if this subcategory matches any ID from subCategories list
-          const matchedSubObj = subCategories.find(
-            (s) => normalizeText(s.name) === selectedSubNorm || normalizeText(s.id) === selectedSubNorm
-          );
-          const matchedSubId = matchedSubObj ? String(matchedSubObj.id).trim().toLowerCase() : '';
-
-          const filtered = prodData.filter((p: any) => {
+          const categoryMatched = prodData.filter((p: any) => {
             if (p.active === false) return false;
-
-            // 1. Precise Sub-Category Filtering
-            if (selectedSubNorm) {
-              const pSub = normalizeText(p.sub_category || p.sub_category_name);
-              const pSubId = String(p.sub_category_id || '').trim().toLowerCase();
-              const pName = normalizeText(p.name);
-
-              const subMatches =
-                pSub === selectedSubNorm ||
-                (pSub.length > 2 && (pSub.includes(selectedSubNorm) || selectedSubNorm.includes(pSub))) ||
-                (matchedSubId && pSubId === matchedSubId) ||
-                (pName.includes(selectedSubNorm) && !pName.includes('kurta')); // Prevents cross-matching
-
-              return subMatches;
-            }
-
-            // 2. Category Level Filtering
+            
             const pDept = (p.department || '').toLowerCase().trim();
             if (currentDept === 'jewellery' || slugKey.toLowerCase().includes('jewel')) {
               if (pDept.includes('jewel')) return true;
@@ -357,37 +336,80 @@ export default function CategoryProductListPage() {
             }
 
             if (activeCatId && String(p.category_id).trim() === activeCatId) return true;
-            const pCatNorm = normalizeText(p.category_name || p.category);
-            const targetNorm = normalizeText(activeCatName);
-            return pCatNorm === targetNorm || (!pDept.includes('jewel') && slugKey === 'fashions');
+            
+            const pCatNorm = cleanStr(p.category_name || p.category);
+            const targetNorm = cleanStr(activeCatName);
+            const slugNorm = cleanStr(slugKey);
+
+            if (pCatNorm && (pCatNorm === targetNorm || pCatNorm === slugNorm || pCatNorm.includes('ethnic') || targetNorm.includes('ethnic'))) {
+              return true;
+            }
+
+            return true;
           });
 
-          setAllProducts(filtered);
+          setRawProducts(categoryMatched);
         }
       } catch (err) {
-        console.error('Error loading category products:', err);
-        if (isCurrent) setAllProducts([]);
+        console.error('Error loading products:', err);
+        if (isCurrent) setRawProducts([]);
       } finally {
         if (isCurrent) setProductsLoading(false);
       }
     }
 
-    loadProductsData();
+    loadCategoryProducts();
 
     return () => {
       isCurrent = false;
     };
-  }, [slug, selectedSub, subCategories]);
+  }, [slug]);
 
-  // Progressive streaming
+  // 4. Reliable Dynamic Sub-Category Filtering
   useEffect(() => {
-    if (visibleCount < allProducts.length) {
-      const timer = setTimeout(() => {
-        setVisibleCount((prev) => Math.min(prev + 4, allProducts.length));
-      }, 120);
-      return () => clearTimeout(timer);
+    if (!selectedSub) {
+      setFilteredProducts(rawProducts);
+      return;
     }
-  }, [visibleCount, allProducts.length]);
+
+    const token = cleanStr(selectedSub);
+
+    const targetObj = subCategories.find(
+      (s) => cleanStr(s.name) === token || cleanStr(s.id) === token
+    );
+    const targetId = targetObj ? String(targetObj.id).trim().toLowerCase() : '';
+    const rawTargetName = (targetObj?.name || selectedSub).toLowerCase().trim();
+
+    const matched = rawProducts.filter((p: any) => {
+      const pSubId = String(p.sub_category_id || '').trim().toLowerCase();
+      if (targetId && pSubId && pSubId === targetId) return true;
+
+      const pSub = String(p.sub_category || p.sub_category_name || '').toLowerCase().trim();
+      if (pSub) {
+        const pSubNorm = cleanStr(pSub);
+        if (pSubNorm === token || pSubNorm.includes(token) || token.includes(pSubNorm)) return true;
+        if (pSub.includes(rawTargetName) || rawTargetName.includes(pSub)) return true;
+      }
+
+      const pName = String(p.name || '').toLowerCase();
+      const pNameNorm = cleanStr(pName);
+      if (token.length >= 3 && (pNameNorm.includes(token) || pName.includes(rawTargetName))) {
+        return true;
+      }
+
+      return false;
+    });
+
+    setFilteredProducts(matched);
+  }, [rawProducts, selectedSub, subCategories]);
+
+  const handleSubSelect = (subName: string) => {
+    if (selectedSub === subName) return;
+    startTransition(() => {
+      searchParams.set('sub', subName);
+      setSearchParams(searchParams);
+    });
+  };
 
   const getProductImage = (images: any): string => {
     const fallback = isJewellery
@@ -714,21 +736,13 @@ export default function CategoryProductListPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isZoomOpen]);
 
-  const sortedAllProducts = [...allProducts].sort((a, b) => {
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
     const priceA = a.selling_price || a.price || 0;
     const priceB = b.selling_price || b.price || 0;
     if (sortBy === 'price-asc') return priceA - priceB;
     if (sortBy === 'price-desc') return priceB - priceA;
     return 0;
   });
-
-  const displayProducts = sortedAllProducts.slice(0, visibleCount);
-
-  // Smooth subcategory selection
-  const handleSubSelect = (subName: string) => {
-    searchParams.set('sub', subName);
-    setSearchParams(searchParams);
-  };
 
   const activeSellingPrice = activeProduct?.selling_price || activeProduct?.price || 0;
   const activeMrp = activeProduct?.mrp || 0;
@@ -822,9 +836,9 @@ export default function CategoryProductListPage() {
             )}
           </div>
 
-          {/* Title & Items Counter */}
+          {/* Title & Items Counter with Compact Inline CringeLoader */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-1.5">
-            <div>
+            <div className="flex items-center gap-3">
               <h1
                 className={`text-2xl sm:text-3xl font-bold capitalize ${
                   isJewellery ? 'font-serif text-[#f5ebd7]' : 'font-sans text-white tracking-tight'
@@ -832,13 +846,14 @@ export default function CategoryProductListPage() {
               >
                 {selectedSub || categoryName || (isJewellery ? 'Jewellery Collection' : 'Collection')}
               </h1>
+              {isSwitching && <CringeLoader size="sm" />}
             </div>
 
             <span className="text-xs text-neutral-400 font-mono">
-              {productsLoading ? (
+              {productsLoading || isSwitching ? (
                 <span className="inline-block w-20 h-4 bg-neutral-800 animate-pulse rounded-md"></span>
               ) : (
-                `Showing ${allProducts.length} items`
+                `Showing ${sortedProducts.length} items`
               )}
             </span>
           </div>
@@ -857,7 +872,7 @@ export default function CategoryProductListPage() {
                 </>
               ) : (
                 subCategories.map((sub, idx) => {
-                  const isActive = normalizeText(selectedSub) === normalizeText(sub.name);
+                  const isActive = cleanStr(selectedSub) === cleanStr(sub.name);
                   const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
                   const hangTilt = tilts[idx % tilts.length];
 
@@ -1003,25 +1018,11 @@ export default function CategoryProductListPage() {
         </div>
       </div>
 
-      {/* 4. Products Grid */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8">
-        {productsLoading && allProducts.length === 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((idx) => (
-              <div
-                key={idx}
-                className="bg-[#0b1224] rounded-2xl overflow-hidden border border-white/5 p-3 space-y-3 animate-pulse"
-              >
-                <div className="w-full aspect-[3/4] bg-neutral-800 rounded-xl" />
-                <div className="space-y-2 pt-1">
-                  <div className="w-1/3 h-3 bg-neutral-800 rounded-full" />
-                  <div className="w-4/5 h-4 bg-neutral-800 rounded-full" />
-                  <div className="w-1/2 h-4 bg-neutral-800 rounded-full pt-2" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : allProducts.length === 0 ? (
+      {/* 4. Products Grid with Reusable CringeLoader */}
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 min-h-[380px]">
+        {productsLoading || isSwitching ? (
+          <CringeLoader size="lg" />
+        ) : sortedProducts.length === 0 ? (
           <div className="py-24 text-center space-y-3">
             <p className="text-neutral-400 text-sm">No products found in this collection.</p>
             <Link
@@ -1034,8 +1035,8 @@ export default function CategoryProductListPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-            {displayProducts.map((product, index) => {
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in duration-150">
+            {sortedProducts.map((product) => {
               const currentPrice = product.selling_price || product.price || 0;
               const originalPrice = product.mrp && product.mrp > currentPrice ? product.mrp : null;
               const discountPercent = originalPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0;
@@ -1043,14 +1044,11 @@ export default function CategoryProductListPage() {
               const isFav = isInWishlist(String(product.id));
               const isCopied = copiedId === String(product.id);
 
-              const staggerDelay = `${Math.min((index % 8) * 60, 450)}ms`;
-
               return (
                 <div
                   key={product.id}
                   onClick={() => handleOpenPopModel(product)}
-                  style={{ animationDelay: staggerDelay }}
-                  className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-2xl animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300 ${
+                  className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-2xl animate-in fade-in duration-150 ${
                     isJewellery
                       ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b]'
                       : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4]'
@@ -1136,7 +1134,7 @@ export default function CategoryProductListPage() {
                       <h3
                         className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug transition-colors ${
                           isJewellery
-                            ? 'font-serif text-[#f5ebd7] group-hover:text-[#e5c07b]'
+                            ? 'font-serif text-[#f5ebd7]'
                             : 'font-sans text-neutral-200 group-hover:text-white'
                         }`}
                       >
