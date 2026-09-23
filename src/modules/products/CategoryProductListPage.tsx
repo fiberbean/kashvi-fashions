@@ -81,7 +81,6 @@ interface ComboItem {
   qty: number;
 }
 
-// Comprehensive Color Hex Map
 const COLOR_HEX_MAP: Record<string, string> = {
   teal: '#008080',
   'teal blue': '#006d77',
@@ -163,20 +162,17 @@ const COLOR_HEX_MAP: Record<string, string> = {
   assorted: '#6366f1',
 };
 
-// Safe Color Resolver
 const resolveColorHex = (colorName: string): string => {
   if (!colorName) return '#334155';
   const clean = colorName.toLowerCase().trim();
   if (COLOR_HEX_MAP[clean]) return COLOR_HEX_MAP[clean];
 
-  // Partial sub-string detection
   for (const [key, val] of Object.entries(COLOR_HEX_MAP)) {
     if (clean.includes(key) || key.includes(clean)) {
       return val;
     }
   }
 
-  // Fallback hash color
   let hash = 0;
   for (let i = 0; i < clean.length; i++) {
     hash = clean.charCodeAt(i) + ((hash << 5) - hash);
@@ -229,7 +225,14 @@ export default function CategoryProductListPage() {
   const [isZoomOpen, setIsZoomOpen] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const isJewellery = department === 'jewellery' || slug?.toLowerCase().includes('jewel') || searchParams.get('tab') === 'jewellery';
+  const isJewellery =
+    department === 'jewellery' ||
+    (slug || '').toLowerCase().includes('jewel') ||
+    searchParams.get('tab') === 'jewellery' ||
+    ['earring', 'earrings', 'bangle', 'bangles', 'necklace', 'necklaces', 'chain', 'ring', 'choker', 'bridal jewellery', 'jewellery sets'].some((j) =>
+      (selectedSub || '').toLowerCase().includes(j)
+    );
+
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
@@ -279,7 +282,6 @@ export default function CategoryProductListPage() {
         if (isCurrent) {
           setCategoryName(activeCatName);
           setDepartment(currentDept);
-          setHeaderLoading(false);
         }
 
         const { data: subData } = await supabase
@@ -289,31 +291,28 @@ export default function CategoryProductListPage() {
         if (isCurrent && subData) {
           let filtered: SubCategory[] = [];
 
-          if (currentDept === 'jewellery') {
+          if (currentDept === 'jewellery' || slugKey.toLowerCase().includes('jewel')) {
             filtered = subData.filter((sub: any) => {
               if (sub.active === false) return false;
               const subDept = (sub.department || '').toLowerCase().trim();
               if (subDept.includes('jewel')) return true;
               if (activeCatId && String(sub.category_id).trim() === activeCatId) return true;
               const cName = (sub.category_name || '').toLowerCase();
-              return cName.includes('jewel');
-            });
+              if (cName.includes('jewel')) return true;
 
-            if (filtered.length === 0) {
-              filtered = subData.filter((sub: any) => {
-                if (sub.active === false) return false;
-                const sName = (sub.name || '').toLowerCase();
-                return (
-                  sName.includes('bangle') ||
-                  sName.includes('necklace') ||
-                  sName.includes('earring') ||
-                  sName.includes('chain') ||
-                  sName.includes('ring') ||
-                  sName.includes('choker') ||
-                  sName.includes('chuda')
-                );
-              });
-            }
+              const sName = (sub.name || '').toLowerCase();
+              return (
+                sName.includes('bangle') ||
+                sName.includes('necklace') ||
+                sName.includes('earring') ||
+                sName.includes('chain') ||
+                sName.includes('ring') ||
+                sName.includes('choker') ||
+                sName.includes('chuda') ||
+                sName.includes('jewel') ||
+                sName.includes('set')
+              );
+            });
           } else {
             filtered = subData.filter((sub: any) => {
               if (sub.active === false) return false;
@@ -367,16 +366,18 @@ export default function CategoryProductListPage() {
           const filtered = prodData.filter((p: any) => {
             if (p.active === false) return false;
 
+            // 1. Subcategory filter
             if (selectedSub) {
               const sel = selectedSub.toLowerCase().replace(/['s]/g, '').trim();
               const pSub = (p.sub_category || p.sub_category_name || '').toLowerCase().replace(/['s]/g, '').trim();
               const pSubId = String(p.sub_category_id || '').toLowerCase().trim();
               const pName = (p.name || '').toLowerCase().replace(/['s]/g, '').trim();
-              return pSub.includes(sel) || sel.includes(pSub) || pSubId === sel || pName.includes(sel);
+              return pSub === sel || pSub.includes(sel) || sel.includes(pSub) || pSubId === sel || pName.includes(sel);
             }
 
+            // 2. Category matching
             const pDept = (p.department || '').toLowerCase().trim();
-            if (currentDept === 'jewellery') {
+            if (currentDept === 'jewellery' || slugKey.toLowerCase().includes('jewel')) {
               if (pDept.includes('jewel')) return true;
               const pCat = (p.category || p.category_name || '').toLowerCase();
               return pCat.includes('jewel');
@@ -455,7 +456,7 @@ export default function CategoryProductListPage() {
         originalPrice: product.mrp || undefined,
         image: pImage,
         fabric: product.fabric || undefined,
-        department,
+        department: isJewellery ? 'jewellery' : 'fashions',
       });
     }
   };
@@ -710,7 +711,7 @@ export default function CategoryProductListPage() {
         size: item.size || undefined,
         fabric: item.fabric,
         qty: item.qty,
-        department,
+        department: isJewellery ? 'jewellery' : 'fashions',
       }));
       addToCart(itemsToAdd);
     } else {
@@ -725,7 +726,7 @@ export default function CategoryProductListPage() {
         size: selectedSize || undefined,
         fabric: activeProduct.fabric,
         qty: singleQty,
-        department,
+        department: isJewellery ? 'jewellery' : 'fashions',
       });
     }
 
@@ -796,7 +797,7 @@ export default function CategoryProductListPage() {
               <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
 
-            <Link to={`/?tab=${department}`} className="inline-flex items-center group py-0.5">
+            <Link to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`} className="inline-flex items-center group py-0.5">
               <div
                 className={`relative h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-sm border flex items-center justify-center shrink-0 ${
                   isJewellery
@@ -832,18 +833,18 @@ export default function CategoryProductListPage() {
         <div className="max-w-7xl mx-auto space-y-3">
           {/* Breadcrumb Navigation */}
           <div className="flex items-center gap-2 text-xs text-neutral-400">
-            <Link to={`/?tab=${department}`} className="hover:underline font-medium text-neutral-300">
+            <Link to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`} className="hover:underline font-medium text-neutral-300">
               Home
             </Link>
             <ChevronRight className="w-3.5 h-3.5 text-neutral-600" />
-            <span className="capitalize">{department}</span>
+            <span className="capitalize">{isJewellery ? 'jewellery' : department}</span>
             <ChevronRight className="w-3.5 h-3.5 text-neutral-600" />
             <span
               className={`font-semibold capitalize ${
                 isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
               }`}
             >
-              {categoryName || '...'}
+              {categoryName || (isJewellery ? 'Jewellery' : 'Collection')}
             </span>
             {selectedSub && (
               <>
@@ -861,7 +862,7 @@ export default function CategoryProductListPage() {
                   isJewellery ? 'font-serif text-[#f5ebd7]' : 'font-sans text-white tracking-tight'
                 }`}
               >
-                {selectedSub || categoryName || 'Collection'}
+                {selectedSub || categoryName || (isJewellery ? 'Jewellery Collection' : 'Collection')}
               </h1>
             </div>
 
@@ -891,6 +892,68 @@ export default function CategoryProductListPage() {
                 const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
                 const hangTilt = tilts[idx % tilts.length];
 
+                // 2A. JEWELLERY: COMPACT WALL STUD + HANGING GOLD RING
+                if (isJewellery) {
+                  return (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => handleSubSelect(sub.name)}
+                      className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[72px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
+                    >
+                      <div className="relative w-full flex flex-col items-center pt-2">
+                        <div className="absolute -top-2 w-2 h-2 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-30 border border-[#b38728] flex items-center justify-center">
+                          <div className="w-0.5 h-0.5 rounded-full bg-[#3d2c0b]" />
+                        </div>
+
+                        <div
+                          className={`absolute -top-1.5 w-4.5 h-4.5 rounded-full border-[2px] bg-transparent z-20 transition-all ${
+                            isActive
+                              ? 'border-[#fef08a] shadow-[0_0_12px_#fde68a]'
+                              : 'border-[#e5c07b] shadow-[0_2px_6px_rgba(229,192,123,0.45)] group-hover:shadow-[0_0_10px_#e5c07b]'
+                          }`}
+                        />
+
+                        <div className="absolute top-2 w-0.5 h-1.5 bg-gradient-to-b from-[#e5c07b] to-[#b38728] rounded-xs shadow-xs z-25" />
+
+                        <div
+                          className={`relative w-full h-[74px] sm:h-[82px] rounded-md p-[1px] shadow-[0_6px_14px_rgba(0,0,0,0.85)] transition-all duration-300 flex flex-col mt-1 ${
+                            isActive
+                              ? 'bg-gradient-to-b from-[#fde68a] via-[#e5c07b] to-[#fde68a] ring-2 ring-[#e5c07b] shadow-[0_0_15px_rgba(229,192,123,0.5)]'
+                              : 'bg-gradient-to-b from-[#e5c07b] via-[#946e20] to-[#e5c07b] group-hover:shadow-[0_8px_18px_rgba(229,192,123,0.3)]'
+                          }`}
+                        >
+                          <div className="w-full h-full rounded-[4px] overflow-hidden bg-[#061e17] relative border border-[#0b3b2c] pointer-events-none">
+                            <img
+                              src={
+                                sub.image_url ||
+                                'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'
+                              }
+                              alt={sub.name}
+                              className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
+                              loading="lazy"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#04120e]/90 via-transparent to-transparent opacity-75 group-hover:opacity-30 transition-opacity" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-1.5 w-full px-0.5 pointer-events-none min-h-[22px] flex items-center justify-center">
+                        <span
+                          className={`block text-[9px] font-serif font-bold transition-colors whitespace-normal break-words leading-tight py-0.5 px-1 rounded-xs text-center w-full shadow-xs ${
+                            isActive
+                              ? 'bg-[#e5c07b] text-[#061e17] border border-[#fde68a]'
+                              : 'bg-[#061e17]/95 border border-[#e5c07b]/30 text-[#f5ebd7] group-hover:text-[#e5c07b] group-hover:border-[#e5c07b]'
+                          }`}
+                        >
+                          {sub.name}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                }
+
+                // 2B. FASHIONS: COMPACT TAPED PAPER POSTER
                 return (
                   <button
                     key={sub.id}
@@ -992,7 +1055,7 @@ export default function CategoryProductListPage() {
           <div className="py-24 text-center space-y-3">
             <p className="text-neutral-400 text-sm">No products found in this collection.</p>
             <Link
-              to={`/?tab=${department}`}
+              to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`}
               className={`inline-block text-xs font-bold underline ${
                 isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
               }`}
@@ -1019,8 +1082,8 @@ export default function CategoryProductListPage() {
                   style={{ animationDelay: staggerDelay }}
                   className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-2xl animate-in fade-in slide-in-from-bottom-2 fill-mode-both duration-300 ${
                     isJewellery
-                      ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b]'
-                      : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4]'
+                      ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b] hover:shadow-[0_0_25px_rgba(229,192,123,0.2)]'
+                      : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4] hover:shadow-[0_0_25px_rgba(0,245,212,0.2)]'
                   }`}
                 >
                   <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
@@ -1103,7 +1166,7 @@ export default function CategoryProductListPage() {
                       <h3
                         className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug transition-colors ${
                           isJewellery
-                            ? 'font-serif text-[#f5ebd7]'
+                            ? 'font-serif text-[#f5ebd7] group-hover:text-[#e5c07b]'
                             : 'font-sans text-neutral-200 group-hover:text-white'
                         }`}
                       >
@@ -1180,7 +1243,9 @@ export default function CategoryProductListPage() {
                         onClick={() => setSelectedImage(img.url)}
                         className={`w-14 h-18 sm:w-16 sm:h-20 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer bg-neutral-900 flex items-center justify-center ${
                           selectedImage === img.url
-                            ? 'border-[#00f5d4] ring-2 ring-[#00f5d4]/30'
+                            ? isJewellery
+                              ? 'border-[#e5c07b] ring-2 ring-[#e5c07b]/30'
+                              : 'border-[#00f5d4] ring-2 ring-[#00f5d4]/30'
                             : 'border-white/20 hover:border-white/40'
                         }`}
                       >
@@ -1287,12 +1352,18 @@ export default function CategoryProductListPage() {
                                   title={cName}
                                   className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md ${
                                     isSelected
-                                      ? 'ring-2 ring-offset-2 ring-offset-[#0b1329] ring-[#00f5d4] scale-110'
+                                      ? isJewellery
+                                        ? 'ring-2 ring-offset-2 ring-offset-[#051611] ring-[#e5c07b] scale-110'
+                                        : 'ring-2 ring-offset-2 ring-offset-[#0b1329] ring-[#00f5d4] scale-110'
                                       : 'hover:scale-105 border border-white/20'
                                   }`}
                                   style={{
                                     backgroundColor: resolvedHex,
-                                    boxShadow: isSelected ? '0 0 12px rgba(0, 245, 212, 0.4)' : undefined,
+                                    boxShadow: isSelected
+                                      ? isJewellery
+                                        ? '0 0 12px rgba(229, 192, 123, 0.4)'
+                                        : '0 0 12px rgba(0, 245, 212, 0.4)'
+                                      : undefined,
                                   }}
                                 >
                                   {isSelected && (
@@ -1326,7 +1397,9 @@ export default function CategoryProductListPage() {
                                   onClick={() => setSelectedSize(sz)}
                                   className={`min-w-11 h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                                     isSelected
-                                      ? 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
+                                      ? isJewellery
+                                        ? 'bg-[#e5c07b] text-[#061e17] border-[#e5c07b] shadow-xs'
+                                        : 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
                                       : 'bg-white/5 text-neutral-200 border-white/20 hover:border-white/40'
                                   }`}
                                 >
@@ -1370,7 +1443,11 @@ export default function CategoryProductListPage() {
                           <button
                             type="button"
                             onClick={handleAddVariant}
-                            className="w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4] hover:text-[#040814]"
+                            className={`w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 ${
+                              isJewellery
+                                ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b] hover:text-[#061e17]'
+                                : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4] hover:text-[#040814]'
+                            }`}
                           >
                             <Plus className="w-4 h-4" />
                             <span>
@@ -1443,7 +1520,7 @@ export default function CategoryProductListPage() {
                                         light ? 'hover:bg-black/20 text-neutral-800' : 'hover:bg-white/30 text-white'
                                       }`}
                                       title="Remove"
-                                >
+                                    >
                                       <X className="w-2.5 h-2.5" />
                                     </button>
                                   </div>
@@ -1466,7 +1543,11 @@ export default function CategoryProductListPage() {
                             </span>
                           </div>
                           <div className="text-right">
-                            <span className="text-sm font-bold text-[#00f5d4]">
+                            <span
+                              className={`text-sm font-bold ${
+                                isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
+                              }`}
+                            >
                               ₹{totalComboPrice.toLocaleString('en-IN')}
                             </span>
                           </div>
@@ -1481,7 +1562,11 @@ export default function CategoryProductListPage() {
                       type="button"
                       disabled={isOutOfStock}
                       onClick={() => handleFinalCheckoutAction(false)}
-                      className="flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4]/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className={`flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+                        isJewellery
+                          ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b]/10'
+                          : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4]/10'
+                      }`}
                     >
                       <ShoppingBag className="w-4 h-4" />
                       <span>{totalComboItems > 0 ? `Add to Cart (${totalComboItems})` : 'Add to Bag'}</span>
@@ -1491,7 +1576,11 @@ export default function CategoryProductListPage() {
                       type="button"
                       disabled={isOutOfStock}
                       onClick={() => handleFinalCheckoutAction(true)}
-                      className="relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#040814] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden bg-[#00f5d4] shadow-[#00f5d4]/30 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed"
+                      className={`relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#061e17] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden disabled:opacity-40 disabled:cursor-not-allowed ${
+                        isJewellery
+                          ? 'bg-gradient-to-r from-[#e5c07b] via-[#f7e7b4] to-[#b38728] shadow-[#e5c07b]/30 hover:brightness-110'
+                          : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
+                      }`}
                     >
                       <Zap className="w-4 h-4 fill-current animate-bounce relative z-10 shrink-0" />
                       <span className="relative z-10 tracking-widest font-black drop-shadow-xs">
