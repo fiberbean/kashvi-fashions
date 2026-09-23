@@ -81,6 +81,15 @@ interface ComboItem {
   qty: number;
 }
 
+const normalizeText = (text?: string | null): string => {
+  if (!text) return '';
+  return decodeURIComponent(text)
+    .toLowerCase()
+    .replace(/['’`"s]/g, '') // Removes apostrophes and plural 's'
+    .replace(/[^a-z0-9]/g, '') // Cleans spaces and special symbols
+    .trim();
+};
+
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
 
 export default function CategoryProductListPage() {
@@ -98,7 +107,6 @@ export default function CategoryProductListPage() {
   const [categoryName, setCategoryName] = useState<string>('');
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
 
-  // Database-driven colours dictionary (name -> hex_code)
   const [dbColoursMap, setDbColoursMap] = useState<Record<string, string>>({});
 
   const [headerLoading, setHeaderLoading] = useState(true);
@@ -110,7 +118,6 @@ export default function CategoryProductListPage() {
   const [modalImages, setModalImages] = useState<{ url: string; color?: string }[]>([]);
   const [selectedImage, setSelectedImage] = useState<string>('');
   
-  // Real-time Inventory Stocks strictly > 0
   const [modalStock, setModalStock] = useState<InventoryItem[]>([]);
   const [stockColors, setStockColors] = useState<string[]>([]);
   const [selectedColor, setSelectedColor] = useState<string>('');
@@ -160,17 +167,14 @@ export default function CategoryProductListPage() {
     if (!colorName) return '#475569';
     const clean = colorName.toLowerCase().trim();
 
-    // 1. Direct match in DB
     if (dbColoursMap[clean]) return dbColoursMap[clean];
 
-    // 2. Partial match in DB
     for (const [name, hex] of Object.entries(dbColoursMap)) {
       if (clean.includes(name) || name.includes(clean)) {
         return hex;
       }
     }
 
-    // 3. Fallback hash generator
     let hash = 0;
     for (let i = 0; i < clean.length; i++) {
       hash = clean.charCodeAt(i) + ((hash << 5) - hash);
@@ -216,11 +220,11 @@ export default function CategoryProductListPage() {
             .limit(50);
 
           if (catList && catList.length > 0) {
-            const targetLower = slugKey.toLowerCase().replace(/['s]/g, '').trim();
+            const targetNorm = normalizeText(slugKey);
             const matched = catList.find((c: any) => 
-              String(c.id).toLowerCase() === targetLower ||
-              (c.slug && String(c.slug).toLowerCase().replace(/['s]/g, '').trim() === targetLower) ||
-              (c.name && String(c.name).toLowerCase().replace(/['s]/g, '').trim() === targetLower)
+              normalizeText(c.id) === targetNorm ||
+              normalizeText(c.slug) === targetNorm ||
+              normalizeText(c.name) === targetNorm
             );
 
             if (matched) {
@@ -275,7 +279,7 @@ export default function CategoryProductListPage() {
               const matchesName =
                 sub.category_name &&
                 activeCatName &&
-                sub.category_name.toLowerCase().trim() === activeCatName.toLowerCase().trim();
+                normalizeText(sub.category_name) === normalizeText(activeCatName);
               return matchesId || matchesName || !activeCatId;
             });
           }
@@ -296,7 +300,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 3. Load Products and Trigger Progressive Rendering
+  // 3. Load Products and Accurate Sub-Category Filtering
   useEffect(() => {
     let isCurrent = true;
 
@@ -318,17 +322,33 @@ export default function CategoryProductListPage() {
         if (prodError) throw prodError;
 
         if (isCurrent && prodData) {
+          const selectedSubNorm = normalizeText(selectedSub);
+
+          // Find if this subcategory matches any ID from subCategories list
+          const matchedSubObj = subCategories.find(
+            (s) => normalizeText(s.name) === selectedSubNorm || normalizeText(s.id) === selectedSubNorm
+          );
+          const matchedSubId = matchedSubObj ? String(matchedSubObj.id).trim().toLowerCase() : '';
+
           const filtered = prodData.filter((p: any) => {
             if (p.active === false) return false;
 
-            if (selectedSub) {
-              const sel = selectedSub.toLowerCase().replace(/['s]/g, '').trim();
-              const pSub = (p.sub_category || p.sub_category_name || '').toLowerCase().replace(/['s]/g, '').trim();
-              const pSubId = String(p.sub_category_id || '').toLowerCase().trim();
-              const pName = (p.name || '').toLowerCase().replace(/['s]/g, '').trim();
-              return pSub === sel || pSub.includes(sel) || sel.includes(pSub) || pSubId === sel || pName.includes(sel);
+            // 1. Precise Sub-Category Filtering
+            if (selectedSubNorm) {
+              const pSub = normalizeText(p.sub_category || p.sub_category_name);
+              const pSubId = String(p.sub_category_id || '').trim().toLowerCase();
+              const pName = normalizeText(p.name);
+
+              const subMatches =
+                pSub === selectedSubNorm ||
+                (pSub.length > 2 && (pSub.includes(selectedSubNorm) || selectedSubNorm.includes(pSub))) ||
+                (matchedSubId && pSubId === matchedSubId) ||
+                (pName.includes(selectedSubNorm) && !pName.includes('kurta')); // Prevents cross-matching
+
+              return subMatches;
             }
 
+            // 2. Category Level Filtering
             const pDept = (p.department || '').toLowerCase().trim();
             if (currentDept === 'jewellery' || slugKey.toLowerCase().includes('jewel')) {
               if (pDept.includes('jewel')) return true;
@@ -337,9 +357,9 @@ export default function CategoryProductListPage() {
             }
 
             if (activeCatId && String(p.category_id).trim() === activeCatId) return true;
-            const pCatName = (p.category_name || p.category || '').toLowerCase().replace(/['s]/g, '').trim();
-            const targetName = activeCatName.toLowerCase().replace(/['s]/g, '').trim();
-            return pCatName === targetName || (!pDept.includes('jewel') && slugKey === 'bras') || (!pDept.includes('jewel') && slugKey === 'fashions');
+            const pCatNorm = normalizeText(p.category_name || p.category);
+            const targetNorm = normalizeText(activeCatName);
+            return pCatNorm === targetNorm || (!pDept.includes('jewel') && slugKey === 'fashions');
           });
 
           setAllProducts(filtered);
@@ -357,7 +377,7 @@ export default function CategoryProductListPage() {
     return () => {
       isCurrent = false;
     };
-  }, [slug, selectedSub]);
+  }, [slug, selectedSub, subCategories]);
 
   // Progressive streaming
   useEffect(() => {
@@ -442,7 +462,6 @@ export default function CategoryProductListPage() {
     }
   };
 
-  // OPEN POP MODAL - INVENTORY QUERY WITH ACCURATE ATTRIBUTES
   const handleOpenPopModel = async (product: Product) => {
     setActiveProduct(product);
     setComboList([]);
@@ -705,6 +724,7 @@ export default function CategoryProductListPage() {
 
   const displayProducts = sortedAllProducts.slice(0, visibleCount);
 
+  // Smooth subcategory selection
   const handleSubSelect = (subName: string) => {
     searchParams.set('sub', subName);
     setSearchParams(searchParams);
@@ -837,7 +857,7 @@ export default function CategoryProductListPage() {
                 </>
               ) : (
                 subCategories.map((sub, idx) => {
-                  const isActive = selectedSub?.toLowerCase().trim() === sub.name.toLowerCase().trim();
+                  const isActive = normalizeText(selectedSub) === normalizeText(sub.name);
                   const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
                   const hangTilt = tilts[idx % tilts.length];
 
