@@ -84,6 +84,10 @@ const COLOR_HEX_MAP: Record<string, string> = {
   purple: '#9333ea',
   yellow: '#eab308',
   grey: '#4b5563',
+  teal: '#008080',
+  'teal blue': '#006d77',
+  gold: '#d4af37',
+  silver: '#c0c0c0',
 };
 
 async function generateOrderNumber(): Promise<string> {
@@ -190,7 +194,7 @@ export default function CartDrawer() {
   // Weight units in 500g slabs
   const weightSlabs = Math.max(1, Math.ceil(totalWeightGrams / 500));
 
-  // Dynamic Total: Bag view displays only subtotal; Address/Payment view includes weight-based shipping
+  // Dynamic Total: Bag view displays only subtotal; Address/Payment view includes shipping
   const finalPayableAmount = activeStep === 'cart' ? subtotal : subtotal + (shippingCharge || 0);
 
   // Fetch addresses directly from Supabase customer_addresses table
@@ -379,7 +383,7 @@ export default function CartDrawer() {
     closeCart();
   };
 
-  // Calculate Shipping based on Pincode AND Product Weight (Quantity x Weight)
+  // Calculate Shipping based on Pincode and Product Weight
   const fetchShippingByPincode = async (pincode: string): Promise<number> => {
     const cleanPin = pincode.trim();
     if (cleanPin.length !== 6) return 0;
@@ -455,7 +459,6 @@ export default function CartDrawer() {
           : 70;
       }
 
-      // Multiply base rate by weight slabs (Every 500g slab)
       const calculatedRate = Math.round(baseRate * weightSlabs);
 
       setShippingCharge(calculatedRate);
@@ -650,7 +653,6 @@ export default function CartDrawer() {
       orderId,
     });
 
-    // Valid email validation to prevent 500 server errors
     const resolvedEmail = address.email?.trim() || user?.email?.trim();
     if (resolvedEmail && resolvedEmail.includes('@') && !resolvedEmail.endsWith('.local')) {
       supabase.functions
@@ -763,7 +765,6 @@ export default function CartDrawer() {
 
       const totalOrderAmount = subtotal + shippingCharge;
 
-      // Supabase Edge Function Call
       const { data: sessionData, error: sessionError } = await supabase.functions.invoke(
         'create-payment-order',
         {
@@ -927,18 +928,22 @@ export default function CartDrawer() {
   const drawerContent = (
     <div
       onClick={handleCloseModal}
-      className="fixed inset-0 z-[999] flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-300"
+      className="fixed inset-0 z-[999] flex justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md md:max-w-lg bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 border-l border-neutral-200/80 cursor-default"
+        className={`relative w-full max-w-md md:max-w-lg h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 border-l cursor-default ${
+          hasJewelleryItems
+            ? 'bg-[#030907] border-[#e5c07b]/20 text-[#f5ebd7]'
+            : 'bg-[#080d1a] border-[#00f5d4]/20 text-white'
+        }`}
       >
         {/* Drawer Header */}
         <div
-          className={`px-5 py-4 border-b flex items-center justify-between sticky top-0 z-20 transition-colors ${
+          className={`px-5 py-4 border-b flex items-center justify-between sticky top-0 z-20 backdrop-blur-md transition-colors ${
             hasJewelleryItems
-              ? 'bg-[#0b3b2c] text-white border-[#0b3b2c]/20'
-              : 'bg-white text-neutral-900 border-neutral-100'
+              ? 'bg-[#04120e]/95 text-[#f5ebd7] border-[#e5c07b]/20 shadow-md'
+              : 'bg-[#060b18]/95 text-white border-[#00f5d4]/20 shadow-md'
           }`}
         >
           <div className="flex items-center gap-2.5">
@@ -947,7 +952,7 @@ export default function CartDrawer() {
                 type="button"
                 onClick={() => setActiveStep('cart')}
                 className={`p-1.5 -ml-1 rounded-full transition-colors cursor-pointer ${
-                  hasJewelleryItems ? 'hover:bg-white/10 text-white' : 'hover:bg-neutral-100 text-neutral-700'
+                  hasJewelleryItems ? 'hover:bg-[#0b3b2c] text-[#e5c07b]' : 'hover:bg-white/10 text-white'
                 }`}
                 aria-label="Back to Cart"
               >
@@ -957,7 +962,7 @@ export default function CartDrawer() {
             <div className="flex items-center gap-2">
               <ShoppingBag
                 className={`w-5 h-5 ${
-                  hasJewelleryItems ? 'text-[#e5c07b]' : 'text-[#ff4d6d]'
+                  hasJewelleryItems ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
                 }`}
               />
               <h2 className="text-base sm:text-lg font-serif font-bold leading-none">
@@ -972,10 +977,10 @@ export default function CartDrawer() {
             </div>
             {activeStep === 'cart' && totalItems > 0 && (
               <span
-                className={`text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                className={`text-[10px] font-mono font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                   hasJewelleryItems
-                    ? 'bg-[#e5c07b] text-[#0b3b2c]'
-                    : 'bg-[#fff0f3] text-[#ff4d6d]'
+                    ? 'bg-[#e5c07b] text-[#061e17]'
+                    : 'bg-[#00f5d4] text-[#040814]'
                 }`}
               >
                 {totalItems} item{totalItems > 1 ? 's' : ''}
@@ -988,8 +993,8 @@ export default function CartDrawer() {
             onClick={handleCloseModal}
             className={`p-2 rounded-full transition-all cursor-pointer ${
               hasJewelleryItems
-                ? 'hover:bg-white/10 text-white'
-                : 'bg-neutral-100 hover:bg-neutral-900 text-neutral-600 hover:text-white'
+                ? 'hover:bg-[#0b3b2c] text-[#e5c07b]'
+                : 'hover:bg-white/10 text-neutral-300 hover:text-white'
             }`}
             aria-label="Close Cart"
           >
@@ -1005,15 +1010,15 @@ export default function CartDrawer() {
               <div
                 className={`rounded-3xl p-5 text-center border relative overflow-hidden ${
                   paymentResult.type === 'success'
-                    ? 'bg-gradient-to-b from-emerald-50/70 via-white to-emerald-50/30 border-emerald-200'
+                    ? 'bg-gradient-to-b from-emerald-950/40 via-[#0b1329] to-emerald-950/20 border-emerald-500/40'
                     : paymentResult.type === 'pending'
-                    ? 'bg-gradient-to-b from-amber-50/70 via-white to-amber-50/30 border-amber-200'
-                    : 'bg-gradient-to-b from-rose-50/70 via-white to-rose-50/30 border-rose-200'
+                    ? 'bg-gradient-to-b from-amber-950/40 via-[#0b1329] to-amber-950/20 border-amber-500/40'
+                    : 'bg-gradient-to-b from-rose-950/40 via-[#0b1329] to-rose-950/20 border-rose-500/40'
                 }`}
               >
                 <div className="flex justify-center mb-2.5">
                   {paymentResult.type === 'success' && (
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-[#040814] flex items-center justify-center shadow-lg shadow-emerald-500/30">
                       <CheckCircle2 className="w-8 h-8 stroke-[2.2]" />
                     </div>
                   )}
@@ -1028,19 +1033,19 @@ export default function CartDrawer() {
                     </div>
                   )}
                   {paymentResult.type === 'pending' && (
-                    <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/30">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500 text-[#040814] flex items-center justify-center shadow-lg shadow-amber-500/30">
                       <Clock3 className="w-8 h-8 stroke-[2.2]" />
                     </div>
                   )}
                 </div>
 
                 <span
-                  className={`text-[10px] font-extrabold uppercase tracking-[0.2em] px-3 py-1 rounded-full border ${
+                  className={`text-[10px] font-mono font-extrabold uppercase tracking-[0.2em] px-3 py-1 rounded-full border ${
                     paymentResult.type === 'success'
-                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      ? 'bg-emerald-900/60 text-emerald-300 border-emerald-500/50'
                       : paymentResult.type === 'pending'
-                      ? 'bg-amber-100 text-amber-800 border-amber-300'
-                      : 'bg-rose-100 text-rose-800 border-rose-300'
+                      ? 'bg-amber-900/60 text-amber-300 border-amber-500/50'
+                      : 'bg-rose-900/60 text-rose-300 border-rose-500/50'
                   }`}
                 >
                   {paymentResult.type === 'success'
@@ -1052,19 +1057,19 @@ export default function CartDrawer() {
                     : 'Payment Declined'}
                 </span>
 
-                <h3 className="text-xl font-serif font-bold text-neutral-950 mt-2.5">
+                <h3 className="text-xl font-serif font-bold text-white mt-2.5">
                   {paymentResult.title}
                 </h3>
-                <p className="text-xs text-neutral-500 mt-1 max-w-xs mx-auto leading-relaxed">
+                <p className="text-xs text-neutral-400 mt-1 max-w-xs mx-auto leading-relaxed">
                   {paymentResult.message}
                 </p>
 
                 {paymentResult.orderId && (
-                  <div className="mt-3 inline-block bg-white/80 border border-neutral-200 px-3 py-1.5 rounded-xl">
-                    <span className="text-[9px] text-neutral-400 uppercase tracking-widest block">
+                  <div className="mt-3 inline-block bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                    <span className="text-[9px] text-neutral-400 uppercase tracking-widest block font-mono">
                       Order Reference
                     </span>
-                    <span className="text-xs font-mono font-bold text-neutral-800">
+                    <span className="text-xs font-mono font-bold text-[#00f5d4]">
                       {paymentResult.orderId}
                     </span>
                   </div>
@@ -1073,13 +1078,13 @@ export default function CartDrawer() {
 
               {paymentResult.type === 'success' && confirmedOrder && (
                 <div className="space-y-3">
-                  <div className="border border-neutral-200 rounded-2xl p-4 bg-neutral-50/50 space-y-3">
-                    <div className="flex items-center justify-between border-b border-neutral-200/80 pb-2">
-                      <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider flex items-center gap-1.5">
-                        <ShoppingBag className="w-3.5 h-3.5 text-neutral-600" />
+                  <div className="border border-white/10 rounded-2xl p-4 bg-white/5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                      <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                        <ShoppingBag className="w-3.5 h-3.5 text-[#00f5d4]" />
                         Items ({confirmedOrder.items.length})
                       </span>
-                      <span className="text-xs font-serif font-bold text-neutral-950">
+                      <span className="text-xs font-serif font-bold text-[#00f5d4]">
                         ₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}
                       </span>
                     </div>
@@ -1088,24 +1093,24 @@ export default function CartDrawer() {
                       {confirmedOrder.items.map((item: any, idx: number) => (
                         <div
                           key={idx}
-                          className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-neutral-100 shadow-2xs"
+                          className="flex items-center gap-3 bg-neutral-900/80 p-2.5 rounded-xl border border-white/10 shadow-sm"
                         >
                           <img
                             src={item.image}
                             alt={item.name}
-                            className="w-12 h-14 object-cover object-top rounded-lg border border-neutral-100 shrink-0"
+                            className="w-12 h-14 object-cover object-top rounded-lg border border-white/10 shrink-0"
                           />
                           <div className="flex-1 min-w-0 text-xs">
-                            <h5 className="font-bold text-neutral-900 truncate leading-tight">
+                            <h5 className="font-bold text-white truncate leading-tight">
                               {item.name}
                             </h5>
-                            <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-500">
+                            <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-400">
                               {item.color && <span className="capitalize">{item.color}</span>}
                               {item.size && <span>• Size: {item.size}</span>}
                               <span>• Qty: {item.qty}</span>
                             </div>
                           </div>
-                          <span className="text-xs font-bold text-neutral-900 shrink-0">
+                          <span className="text-xs font-bold text-white shrink-0">
                             ₹{(item.price * item.qty).toLocaleString('en-IN')}
                           </span>
                         </div>
@@ -1113,14 +1118,14 @@ export default function CartDrawer() {
                     </div>
                   </div>
 
-                  <div className="border border-neutral-200 rounded-2xl p-3 bg-white text-xs space-y-0.5">
-                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                  <div className="border border-white/10 rounded-2xl p-3 bg-white/5 text-xs space-y-0.5">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block font-mono">
                       Delivery Address
                     </span>
-                    <p className="font-bold text-neutral-900">
+                    <p className="font-bold text-white">
                       {confirmedOrder.customerName} ({confirmedOrder.customerPhone})
                     </p>
-                    <p className="text-neutral-600 leading-relaxed text-[11px]">
+                    <p className="text-neutral-400 leading-relaxed text-[11px]">
                       {confirmedOrder.deliveryAddress}
                     </p>
                   </div>
@@ -1133,7 +1138,11 @@ export default function CartDrawer() {
                     <button
                       type="button"
                       onClick={handleNavigateToOrders}
-                      className="w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-[#0b3b2c] shadow-lg shadow-[#0b3b2c]/30 hover:opacity-95 active:scale-98 transition-all cursor-pointer"
+                      className={`w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-98 transition-all cursor-pointer ${
+                        hasJewelleryItems
+                          ? 'bg-gradient-to-r from-[#e5c07b] to-[#b38728] text-[#061e17] shadow-[#e5c07b]/30'
+                          : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
+                      }`}
                     >
                       <PackageCheck className="w-4 h-4" />
                       <span>View in My Orders</span>
@@ -1141,7 +1150,7 @@ export default function CartDrawer() {
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-neutral-200 text-neutral-800 hover:bg-neutral-50 transition-all cursor-pointer"
+                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-white/20 text-neutral-300 hover:bg-white/10 transition-all cursor-pointer"
                     >
                       Continue Shopping
                     </button>
@@ -1151,7 +1160,11 @@ export default function CartDrawer() {
                     <button
                       type="button"
                       onClick={() => setActiveStep('address')}
-                      className="w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white bg-neutral-900 hover:bg-neutral-800 active:scale-98 transition-all cursor-pointer shadow-md"
+                      className={`w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer shadow-md ${
+                        hasJewelleryItems
+                          ? 'bg-[#e5c07b] text-[#061e17]'
+                          : 'bg-[#00f5d4] text-[#040814]'
+                      }`}
                     >
                       <RotateCcw className="w-4 h-4" />
                       <span>Retry Payment</span>
@@ -1160,9 +1173,9 @@ export default function CartDrawer() {
                       href="https://wa.me/918686353574?text=Hi%20Kashvi%20Support,%20I%20need%20help%20with%20my%20order"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                     >
-                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      <MessageCircle className="w-4 h-4 text-emerald-400" />
                       <span>Support on WhatsApp</span>
                     </a>
                   </>
@@ -1176,17 +1189,21 @@ export default function CartDrawer() {
             <>
               {cart.length === 0 ? (
                 <div className="py-24 flex flex-col items-center justify-center text-center space-y-3">
-                  <div className="w-16 h-16 rounded-full bg-neutral-50 flex items-center justify-center text-neutral-300">
+                  <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500">
                     <ShoppingBag className="w-8 h-8" />
                   </div>
-                  <p className="text-neutral-800 font-serif font-semibold text-base">Your bag is empty</p>
+                  <p className="text-white font-serif font-semibold text-base">Your bag is empty</p>
                   <p className="text-xs text-neutral-400 max-w-xs">
                     Explore our haute couture fashion and royal jewellery vaults to add your favorites.
                   </p>
                   <button
                     type="button"
                     onClick={handleCloseModal}
-                    className="mt-2 px-6 py-2.5 rounded-full bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all cursor-pointer"
+                    className={`mt-2 px-6 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      hasJewelleryItems
+                        ? 'bg-[#e5c07b] text-[#061e17] hover:brightness-110'
+                        : 'bg-[#00f5d4] text-[#040814] hover:bg-white'
+                    }`}
                   >
                     Start Shopping
                   </button>
@@ -1203,51 +1220,55 @@ export default function CartDrawer() {
                         key={item.id}
                         className={`flex gap-3.5 p-3 rounded-2xl border transition-all duration-300 items-center ${
                           isJewelleryItem
-                            ? 'border-[#0b3b2c]/15 bg-[#f4f7f5]/40 hover:border-[#0b3b2c]/30'
-                            : 'border-neutral-200/80 bg-neutral-50/50 hover:border-[#ff4d6d]/30'
+                            ? 'border-[#e5c07b]/25 bg-[#061e17]/80 hover:border-[#e5c07b]'
+                            : 'border-white/10 bg-[#0f172a]/80 hover:border-[#00f5d4]'
                         }`}
                       >
-                        <div className="w-16 h-20 rounded-t-[22px] rounded-b-xl overflow-hidden bg-white shrink-0 border border-neutral-200/80 p-0.5 shadow-2xs">
+                        <div className="w-16 h-20 rounded-xl overflow-hidden bg-neutral-900 shrink-0 border border-white/10 p-0.5 shadow-sm">
                           <img
                             src={item.image}
                             alt={item.name}
-                            className="w-full h-full object-cover object-top rounded-t-[20px] rounded-b-lg"
+                            className="w-full h-full object-cover object-top rounded-lg"
                           />
                         </div>
 
                         <div className="flex-1 flex flex-col justify-between min-w-0">
                           <div>
                             <div className="flex items-start justify-between gap-2">
-                              <h4 className="text-xs font-serif font-bold text-neutral-900 truncate leading-snug">
+                              <h4
+                                className={`text-xs font-bold truncate leading-snug ${
+                                  isJewelleryItem ? 'font-serif text-[#f5ebd7]' : 'font-sans text-white'
+                                }`}
+                              >
                                 {item.name}
                               </h4>
                               <button
                                 type="button"
                                 onClick={() => removeFromCart(item.id)}
-                                className="text-neutral-400 hover:text-rose-600 transition-colors p-0.5 cursor-pointer"
+                                className="text-neutral-400 hover:text-rose-400 transition-colors p-0.5 cursor-pointer"
                                 title="Remove Item"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
 
-                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                               {item.color && (
-                                <span className="inline-flex items-center gap-1 text-[10px] text-neutral-600 bg-white border border-neutral-200 px-2 py-0.5 rounded-md">
+                                <span className="inline-flex items-center gap-1 text-[10px] text-neutral-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
                                   <span
-                                    className="w-2 h-2 rounded-full border border-black/10 shrink-0"
+                                    className="w-2 h-2 rounded-full border border-black/20 shrink-0"
                                     style={{ backgroundColor: hex }}
                                   />
                                   <span className="capitalize">{item.color}</span>
                                 </span>
                               )}
                               {item.size && (
-                                <span className="text-[10px] font-bold text-neutral-700 bg-white border border-neutral-200 px-2 py-0.5 rounded-md">
+                                <span className="text-[10px] font-bold text-neutral-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
                                   Size: {item.size}
                                 </span>
                               )}
                               {item.fabric && (
-                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-md bg-neutral-200/70 text-neutral-700 font-semibold">
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-md bg-white/10 text-neutral-300 font-semibold font-mono">
                                   {item.fabric}
                                 </span>
                               )}
@@ -1255,22 +1276,22 @@ export default function CartDrawer() {
                           </div>
 
                           <div className="flex items-center justify-between pt-2">
-                            <div className="inline-flex items-center gap-1 bg-white border border-neutral-200 rounded-full px-2 py-0.5 shadow-2xs">
+                            <div className="inline-flex items-center gap-1 bg-white/5 border border-white/15 rounded-full px-2 py-0.5">
                               <button
                                 type="button"
                                 onClick={() => updateQty(item.id, -1)}
-                                className="text-neutral-500 hover:text-neutral-900 transition-colors p-0.5 cursor-pointer"
+                                className="text-neutral-400 hover:text-white transition-colors p-0.5 cursor-pointer"
                                 aria-label="Decrease quantity"
                               >
                                 <Minus className="w-2.5 h-2.5" />
                               </button>
-                              <span className="text-xs font-bold text-neutral-900 w-4 text-center">
+                              <span className="text-xs font-bold text-white w-4 text-center font-mono">
                                 {item.qty}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => updateQty(item.id, 1)}
-                                className="text-neutral-500 hover:text-neutral-900 transition-colors p-0.5 cursor-pointer"
+                                className="text-neutral-400 hover:text-white transition-colors p-0.5 cursor-pointer"
                                 aria-label="Increase quantity"
                               >
                                 <Plus className="w-2.5 h-2.5" />
@@ -1279,7 +1300,7 @@ export default function CartDrawer() {
 
                             <span
                               className={`text-sm font-bold ${
-                                isJewelleryItem ? 'text-[#0b3b2c]' : 'text-neutral-950'
+                                isJewelleryItem ? 'text-[#e5c07b]' : 'text-white'
                               }`}
                             >
                               ₹{(item.price * item.qty).toLocaleString('en-IN')}
@@ -1298,13 +1319,17 @@ export default function CartDrawer() {
           {activeStep === 'address' && (
             <div className="space-y-4 animate-in fade-in duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-800 uppercase tracking-wider">
+                <span className="text-xs font-bold text-neutral-300 uppercase tracking-wider font-mono">
                   Deliver To
                 </span>
                 <button
                   type="button"
                   onClick={handleOpenAddAddressModal}
-                  className="text-xs font-bold text-[#ff4d6d] hover:underline cursor-pointer flex items-center gap-1 bg-rose-50 px-3 py-1.5 rounded-full"
+                  className={`text-xs font-bold hover:underline cursor-pointer flex items-center gap-1 px-3 py-1.5 rounded-full border ${
+                    hasJewelleryItems
+                      ? 'text-[#e5c07b] bg-[#0b3b2c] border-[#e5c07b]/30'
+                      : 'text-[#00f5d4] bg-[#00f5d4]/10 border-[#00f5d4]/30'
+                  }`}
                 >
                   <Plus className="w-3.5 h-3.5" /> Add New
                 </button>
@@ -1312,17 +1337,19 @@ export default function CartDrawer() {
 
               {loadingAddresses ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-2 text-neutral-400">
-                  <Loader2 className="w-6 h-6 animate-spin text-neutral-600" />
+                  <Loader2 className="w-6 h-6 animate-spin text-[#00f5d4]" />
                   <span className="text-xs">Loading addresses from server...</span>
                 </div>
               ) : savedAddresses.length === 0 ? (
-                <div className="py-10 text-center border-2 border-dashed border-neutral-200 rounded-2xl p-6 space-y-3">
-                  <MapPin className="w-8 h-8 text-neutral-300 mx-auto" />
-                  <p className="text-xs text-neutral-500">No delivery address saved yet.</p>
+                <div className="py-10 text-center border-2 border-dashed border-white/15 rounded-2xl p-6 space-y-3">
+                  <MapPin className="w-8 h-8 text-neutral-500 mx-auto" />
+                  <p className="text-xs text-neutral-400">No delivery address saved yet.</p>
                   <button
                     type="button"
                     onClick={handleOpenAddAddressModal}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 text-white text-xs font-bold cursor-pointer"
+                    className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${
+                      hasJewelleryItems ? 'bg-[#e5c07b] text-[#061e17]' : 'bg-[#00f5d4] text-[#040814]'
+                    }`}
                   >
                     + Add New Delivery Address
                   </button>
@@ -1343,9 +1370,9 @@ export default function CartDrawer() {
                         className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 relative group ${
                           isSelected
                             ? hasJewelleryItems
-                              ? 'border-[#0b3b2c] bg-[#f4f7f5] shadow-xs'
-                              : 'border-[#ff4d6d] bg-rose-50/30 shadow-xs'
-                            : 'border-neutral-200 bg-white hover:border-neutral-300'
+                              ? 'border-[#e5c07b] bg-[#061e17] shadow-lg shadow-[#e5c07b]/10'
+                              : 'border-[#00f5d4] bg-[#0f172a] shadow-lg shadow-[#00f5d4]/10'
+                            : 'border-white/10 bg-white/5 hover:border-white/20'
                         }`}
                       >
                         <input
@@ -1354,30 +1381,30 @@ export default function CartDrawer() {
                           checked={isSelected}
                           onChange={() => handleSelectExistingAddress(addr)}
                           className={`mt-1 cursor-pointer ${
-                            hasJewelleryItems ? 'accent-[#0b3b2c]' : 'accent-[#ff4d6d]'
+                            hasJewelleryItems ? 'accent-[#e5c07b]' : 'accent-[#00f5d4]'
                           }`}
                         />
 
                         <div className="flex-1 text-xs space-y-1">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-neutral-900 text-sm">{addr.name}</span>
-                              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-700 border border-neutral-200 flex items-center gap-1">
+                              <span className="font-bold text-white text-sm">{addr.name}</span>
+                              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-white/10 text-neutral-300 border border-white/10 flex items-center gap-1 font-mono">
                                 {addr.address_type === 'Work' && <Briefcase className="w-2.5 h-2.5" />}
                                 {addr.address_type === 'Home' && <Home className="w-2.5 h-2.5" />}
-                                {addr.address_type === 'Others' && <Bookmark className="w-2.5 h-2.5 text-[#ff4d6d]" />}
+                                {addr.address_type === 'Others' && <Bookmark className="w-2.5 h-2.5 text-[#00f5d4]" />}
                                 <span>{displayLabel}</span>
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                              <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
                                 WA: {addr.whatsapp_number}
                               </span>
                               <button
                                 type="button"
                                 onClick={(e) => handleDeleteAddress(addr.id, e)}
-                                className="text-neutral-400 hover:text-rose-600 p-1 rounded-md hover:bg-rose-50 transition-colors"
+                                className="text-neutral-400 hover:text-rose-400 p-1 rounded-md hover:bg-white/10 transition-colors"
                                 title="Delete Address"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1385,17 +1412,17 @@ export default function CartDrawer() {
                             </div>
                           </div>
 
-                          <p className="text-neutral-600 leading-relaxed pt-0.5">
+                          <p className="text-neutral-300 leading-relaxed pt-0.5">
                             {addr.door_no}, {addr.building_name ? `${addr.building_name}, ` : ''}
                             {addr.street}, {addr.area}
                           </p>
 
                           <div className="flex items-center justify-between pt-1">
-                            <p className="font-semibold text-neutral-900">
-                              {addr.city}, {addr.state} — <span className="font-bold">{addr.pincode}</span>
+                            <p className="font-semibold text-neutral-200">
+                              {addr.city}, {addr.state} — <span className="font-bold text-white">{addr.pincode}</span>
                             </p>
                             {isSelected && pincodeStatus?.zoneType && (
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 bg-neutral-100 border border-neutral-200 px-2 py-0.5 rounded-md">
+                              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#00f5d4] bg-[#00f5d4]/10 border border-[#00f5d4]/30 px-2 py-0.5 rounded-md">
                                 {pincodeStatus.zoneType}
                               </span>
                             )}
@@ -1412,31 +1439,36 @@ export default function CartDrawer() {
 
         {/* Bottom Checkout & Action Area */}
         {cart.length > 0 && activeStep !== 'order_result' && (
-          <div className="p-5 border-t border-neutral-200/80 bg-white space-y-3 shrink-0 shadow-lg">
-            <div className="space-y-1.5 text-xs text-neutral-600">
+          <div
+            className={`p-5 border-t space-y-3 shrink-0 shadow-2xl backdrop-blur-md ${
+              hasJewelleryItems
+                ? 'bg-[#04120e]/95 border-[#e5c07b]/20'
+                : 'bg-[#060b18]/95 border-[#00f5d4]/20'
+            }`}
+          >
+            <div className="space-y-1.5 text-xs text-neutral-300">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span className="font-bold text-neutral-900">₹{subtotal.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-white">₹{subtotal.toLocaleString('en-IN')}</span>
               </div>
 
-              {/* Delivery Charge is strictly shown ONLY during the Address / Payment step */}
               {activeStep === 'address' && (
                 <div className="flex justify-between items-center animate-in fade-in duration-150">
                   <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-neutral-500" />
+                    <Truck className="w-3.5 h-3.5 text-[#00f5d4]" />
                     Delivery Charge {pincodeStatus?.zoneType ? `(${pincodeStatus.zoneType} • ${totalWeightGrams}g)` : ''}
                   </span>
-                  <span className="font-bold text-neutral-900">
+                  <span className="font-bold text-white">
                     {pincodeLoading ? '...' : `₹${shippingCharge}`}
                   </span>
                 </div>
               )}
 
-              <div className="flex justify-between text-sm font-bold text-neutral-900 pt-2 border-t border-neutral-100">
+              <div className="flex justify-between text-sm font-bold text-white pt-2 border-t border-white/10">
                 <span>{activeStep === 'cart' ? 'Subtotal Due' : 'Total Due'}</span>
                 <span
-                  className={`text-lg font-serif font-black ${
-                    hasJewelleryItems ? 'text-[#0b3b2c]' : 'text-neutral-950'
+                  className={`text-lg font-bold ${
+                    hasJewelleryItems ? 'text-[#e5c07b]' : 'text-white'
                   }`}
                 >
                   ₹{finalPayableAmount.toLocaleString('en-IN')}
@@ -1448,10 +1480,10 @@ export default function CartDrawer() {
               <button
                 type="button"
                 onClick={handleProceedToAddress}
-                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white shadow-xl transition-all duration-300 active:scale-98 cursor-pointer ${
+                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all duration-300 active:scale-98 cursor-pointer ${
                   hasJewelleryItems
-                    ? 'bg-[#0b3b2c] hover:bg-[#07261c] shadow-[#0b3b2c]/30'
-                    : 'bg-[#ff4d6d] hover:bg-[#e03a58] shadow-[#ff4d6d]/30'
+                    ? 'bg-gradient-to-r from-[#e5c07b] to-[#b38728] text-[#061e17] shadow-[#e5c07b]/30 hover:brightness-110'
+                    : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
                 }`}
               >
                 {!user ? (
@@ -1472,10 +1504,10 @@ export default function CartDrawer() {
                 type="button"
                 disabled={!selectedAddressId || isCheckingOut}
                 onClick={handleInstantCheckout}
-                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white shadow-xl transition-all duration-300 active:scale-98 cursor-pointer disabled:opacity-50 ${
+                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all duration-300 active:scale-98 cursor-pointer disabled:opacity-50 ${
                   hasJewelleryItems
-                    ? 'bg-gradient-to-r from-[#0b3b2c] via-[#14532d] to-[#0b3b2c] ring-2 ring-[#e5c07b]/60 shadow-[#0b3b2c]/40'
-                    : 'bg-gradient-to-r from-[#ff4d6d] via-[#e63956] to-[#ff2a55] ring-2 ring-rose-300/60 shadow-[#ff4d6d]/40'
+                    ? 'bg-gradient-to-r from-[#e5c07b] via-[#f7e7b4] to-[#b38728] text-[#061e17] shadow-[#e5c07b]/40 hover:brightness-110'
+                    : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/40 hover:bg-white'
                 }`}
               >
                 {isCheckingOut ? (
@@ -1493,7 +1525,7 @@ export default function CartDrawer() {
             )}
 
             <div className="flex items-center justify-center gap-1.5 text-[10px] text-neutral-400 pt-0.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-neutral-600" />
+              <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
               <span>100% Secure Encrypted Checkout with {activeGatewayName}</span>
             </div>
           </div>
@@ -1504,23 +1536,27 @@ export default function CartDrawer() {
       {isAddressModalOpen && (
         <div
           onClick={() => setIsAddressModalOpen(false)}
-          className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+          className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 p-6 space-y-4"
+            className={`relative w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border cursor-default my-auto animate-in zoom-in-95 duration-200 p-6 space-y-4 ${
+              hasJewelleryItems
+                ? 'bg-[#051611] text-[#f5ebd7] border-[#e5c07b]/30'
+                : 'bg-[#0b1329] text-white border-white/15'
+            }`}
           >
-            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-[#ff4d6d]" />
-                <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-900">
+                <MapPin className={`w-5 h-5 ${hasJewelleryItems ? 'text-[#e5c07b]' : 'text-[#00f5d4]'}`} />
+                <h3 className="text-sm font-bold uppercase tracking-wider">
                   Add New Delivery Address
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAddressModalOpen(false)}
-                className="p-1 rounded-full hover:bg-neutral-100 text-neutral-500 hover:text-neutral-900 transition-colors cursor-pointer"
+                className="p-1 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1528,7 +1564,7 @@ export default function CartDrawer() {
 
             <form onSubmit={handleSaveNewAddress} className="space-y-3">
               <div>
-                <label className="text-[11px] font-semibold text-neutral-700 block mb-1.5">
+                <label className="text-[11px] font-semibold text-neutral-300 block mb-1.5">
                   Save Address As:
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1545,8 +1581,10 @@ export default function CartDrawer() {
                         onClick={() => setFormData({ ...formData, address_type: type as any })}
                         className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
-                            : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100'
+                            ? hasJewelleryItems
+                              ? 'bg-[#e5c07b] text-[#061e17] border-[#e5c07b] shadow-xs'
+                              : 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
+                            : 'bg-white/5 text-neutral-300 border-white/10 hover:border-white/20'
                         }`}
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -1559,7 +1597,7 @@ export default function CartDrawer() {
 
               {formData.address_type === 'Others' && (
                 <div className="animate-in fade-in duration-200">
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Address Label Name * (e.g. Mom's House, Boutique)
                   </label>
                   <input
@@ -1568,14 +1606,14 @@ export default function CartDrawer() {
                     placeholder="Enter Custom Address Name"
                     value={formData.custom_label}
                     onChange={(e) => setFormData({ ...formData, custom_label: e.target.value })}
-                    className="w-full bg-white border border-[#ff4d6d]/50 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-[#ff4d6d] font-medium"
+                    className="w-full bg-white/5 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4] font-medium"
                   />
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Full Name *
                   </label>
                   <input
@@ -1584,12 +1622,12 @@ export default function CartDrawer() {
                     placeholder="e.g. Abhilash"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Mobile WhatsApp No. *
                   </label>
                   <input
@@ -1604,13 +1642,13 @@ export default function CartDrawer() {
                         whatsapp_number: e.target.value.replace(/\D/g, ''),
                       })
                     }
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                   Email Address (For Invoices & Tracking)
                 </label>
                 <input
@@ -1618,13 +1656,13 @@ export default function CartDrawer() {
                   placeholder="e.g. yourname@gmail.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                  className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Door / House / Flat No. *
                   </label>
                   <input
@@ -1633,12 +1671,12 @@ export default function CartDrawer() {
                     placeholder="e.g. 2-1-65/2"
                     value={formData.door_no}
                     onChange={(e) => setFormData({ ...formData, door_no: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Building Name / House Name
                   </label>
                   <input
@@ -1648,14 +1686,14 @@ export default function CartDrawer() {
                     onChange={(e) =>
                       setFormData({ ...formData, building_name: e.target.value })
                     }
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Street Name / Road
                   </label>
                   <input
@@ -1663,12 +1701,12 @@ export default function CartDrawer() {
                     placeholder="e.g. Bhanugundi Junction"
                     value={formData.street}
                     onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Area / Landmark
                   </label>
                   <input
@@ -1676,14 +1714,14 @@ export default function CartDrawer() {
                     placeholder="e.g. Bhanugundi"
                     value={formData.area}
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 pt-1">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     Pincode *
                   </label>
                   <input
@@ -1693,12 +1731,12 @@ export default function CartDrawer() {
                     placeholder="533003"
                     value={formData.pincode}
                     onChange={(e) => handlePincodeChange(e.target.value)}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900 font-bold"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4] font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     City (Auto)
                   </label>
                   <input
@@ -1707,12 +1745,12 @@ export default function CartDrawer() {
                     readOnly
                     placeholder={pincodeLoading ? '...' : 'City'}
                     value={formData.city}
-                    className="w-full bg-neutral-100 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-800 font-medium cursor-not-allowed"
+                    className="w-full bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-xs text-neutral-300 font-medium cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
                     State (Auto)
                   </label>
                   <input
@@ -1721,7 +1759,7 @@ export default function CartDrawer() {
                     readOnly
                     placeholder={pincodeLoading ? '...' : 'State'}
                     value={formData.state}
-                    className="w-full bg-neutral-100 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-800 font-medium cursor-not-allowed"
+                    className="w-full bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-xs text-neutral-300 font-medium cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -1729,12 +1767,12 @@ export default function CartDrawer() {
               {pincodeStatus && (
                 <div className="text-[11px] flex items-center gap-1.5 pt-1">
                   {pincodeStatus.deliveryAvailable ? (
-                    <span className="text-emerald-600 font-bold flex items-center gap-1">
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       Delivery Available ({pincodeStatus.zoneType} — ₹{shippingCharge})
                     </span>
                   ) : (
-                    <span className="text-red-500 font-semibold flex items-center gap-1">
+                    <span className="text-rose-400 font-semibold flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5" />
                       {pincodeStatus.message}
                     </span>
@@ -1746,14 +1784,18 @@ export default function CartDrawer() {
                 <button
                   type="button"
                   onClick={() => setIsAddressModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-neutral-200 text-neutral-700 text-xs font-bold uppercase tracking-wider hover:bg-neutral-50 transition-all cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl border border-white/20 text-neutral-300 text-xs font-bold uppercase tracking-wider hover:bg-white/10 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingAddress || pincodeStatus?.deliveryAvailable === false}
-                  className="flex-1 py-2.5 rounded-xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-40 transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 ${
+                    hasJewelleryItems
+                      ? 'bg-[#e5c07b] text-[#061e17] hover:brightness-110'
+                      : 'bg-[#00f5d4] text-[#040814] hover:bg-white'
+                  }`}
                 >
                   {savingAddress ? (
                     <>
