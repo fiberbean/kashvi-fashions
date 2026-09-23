@@ -138,7 +138,6 @@ export default function CartDrawer() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [isAddressModalOpen, setIsAddressModalOpen] = useState<boolean>(false);
 
-  // Dynamic database colors dictionary
   const [dbColoursMap, setDbColoursMap] = useState<Record<string, string>>({});
 
   const [formData, setFormData] = useState({
@@ -166,19 +165,14 @@ export default function CartDrawer() {
 
   const hasJewelleryItems = cart.some((item) => item?.department === 'jewellery');
 
-  // Total weight in grams (default 250g per item if weight not specified)
   const totalWeightGrams = cart.reduce((acc, item: any) => {
     const itemWeight = Number(item.weight) || Number(item.weight_grams) || 250;
     return acc + itemWeight * (item.qty || 1);
   }, 0);
 
-  // Weight units in 500g slabs
   const weightSlabs = Math.max(1, Math.ceil(totalWeightGrams / 500));
-
-  // Dynamic Total: Bag view displays only subtotal; Address/Payment view includes shipping
   const finalPayableAmount = activeStep === 'cart' ? subtotal : subtotal + (shippingCharge || 0);
 
-  // 1. Fetch Colours Table for Dynamic Hex Codes
   useEffect(() => {
     async function fetchColours() {
       try {
@@ -225,7 +219,6 @@ export default function CartDrawer() {
     return '#' + '00000'.substring(0, 6 - c.length) + c;
   };
 
-  // Fetch addresses directly from Supabase customer_addresses table
   const fetchAddressesFromDb = async () => {
     const customerId = customer?.id || customer?.mobile || user?.user_metadata?.whatsapp_number;
     const authId = user?.id;
@@ -371,7 +364,6 @@ export default function CartDrawer() {
     }
   }, [isCartOpen]);
 
-  // Recalculate shipping whenever user switches to address step
   useEffect(() => {
     if (activeStep === 'address' && savedAddresses.length > 0) {
       const target = savedAddresses.find((a) => a.id === selectedAddressId) || savedAddresses[0];
@@ -411,7 +403,6 @@ export default function CartDrawer() {
     closeCart();
   };
 
-  // Calculate Shipping based on Pincode and Product Weight
   const fetchShippingByPincode = async (pincode: string): Promise<number> => {
     const cleanPin = pincode.trim();
     if (cleanPin.length !== 6) return 0;
@@ -651,6 +642,7 @@ export default function CartDrawer() {
     }
   };
 
+  // ✅ PAYMENT SUCCESS & DEDUCT STOCK
   const handlePaymentSuccess = async (
     orderId: string,
     address: Address,
@@ -661,6 +653,13 @@ export default function CartDrawer() {
     const fullAddress = `${address.door_no}, ${
       address.building_name ? address.building_name + ', ' : ''
     }${address.street}, ${address.area}, ${address.city}, ${address.state} - ${address.pincode}`;
+
+    // 1. Database ఫంక్షన్ ద్వారా వెంటనే ఇన్వెంటరీ స్టాక్ తగ్గించడం
+    try {
+      await supabase.rpc('reduce_order_inventory', { order_items: itemsSnapshot });
+    } catch (invErr) {
+      console.error('Failed to deduct stock from inventory:', invErr);
+    }
 
     setConfirmedOrder({
       orderId,
@@ -677,7 +676,7 @@ export default function CartDrawer() {
     setPaymentResult({
       type: 'success',
       title: 'Thank You for Shopping!',
-      message: 'Your payment was successful and your imperial order is confirmed.',
+      message: 'Your payment was successful and your order is confirmed.',
       orderId,
     });
 
@@ -704,6 +703,7 @@ export default function CartDrawer() {
     setActiveStep('order_result');
   };
 
+  // ✅ PAYMENT FAILURE OR CANCELLATION
   const handlePaymentFailure = async (
     orderId: string,
     errorMsg: string,
