@@ -29,6 +29,7 @@ import { load } from '@cashfreepayments/cashfree-js';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
+import CringeLoader from '../common/CringeLoader';
 
 interface Address {
   id: string;
@@ -66,29 +67,6 @@ interface PaymentStatusState {
   message: string;
   orderId?: string;
 }
-
-const COLOR_HEX_MAP: Record<string, string> = {
-  pink: '#e83e8c',
-  magenta: '#d63384',
-  beige: '#f5e1d5',
-  skin: '#e8beac',
-  nude: '#d2b48c',
-  black: '#1f2937',
-  white: '#ffffff',
-  red: '#dc2626',
-  maroon: '#800000',
-  wine: '#722f37',
-  navy: '#0f172a',
-  blue: '#2563eb',
-  green: '#16a34a',
-  purple: '#9333ea',
-  yellow: '#eab308',
-  grey: '#4b5563',
-  teal: '#008080',
-  'teal blue': '#006d77',
-  gold: '#d4af37',
-  silver: '#c0c0c0',
-};
 
 async function generateOrderNumber(): Promise<string> {
   const PREFIX = 'KFOD';
@@ -160,6 +138,9 @@ export default function CartDrawer() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [isAddressModalOpen, setIsAddressModalOpen] = useState<boolean>(false);
 
+  // Dynamic database colors dictionary
+  const [dbColoursMap, setDbColoursMap] = useState<Record<string, string>>({});
+
   const [formData, setFormData] = useState({
     name: customer?.name || user?.user_metadata?.name || '',
     whatsapp_number: customer?.mobile || user?.user_metadata?.whatsapp_number || '',
@@ -196,6 +177,53 @@ export default function CartDrawer() {
 
   // Dynamic Total: Bag view displays only subtotal; Address/Payment view includes shipping
   const finalPayableAmount = activeStep === 'cart' ? subtotal : subtotal + (shippingCharge || 0);
+
+  // 1. Fetch Colours Table for Dynamic Hex Codes
+  useEffect(() => {
+    async function fetchColours() {
+      try {
+        const { data, error } = await supabase
+          .from('colours')
+          .select('name, hex_code')
+          .eq('active', true);
+
+        if (!error && data) {
+          const map: Record<string, string> = {};
+          data.forEach((item: any) => {
+            if (item.name && item.hex_code) {
+              map[item.name.toLowerCase().trim()] = item.hex_code.trim();
+            }
+          });
+          setDbColoursMap(map);
+        }
+      } catch (err) {
+        console.error('Error fetching colours:', err);
+      }
+    }
+    if (isCartOpen) {
+      fetchColours();
+    }
+  }, [isCartOpen]);
+
+  const resolveColorHex = (colorName?: string): string => {
+    if (!colorName) return '#475569';
+    const clean = colorName.toLowerCase().trim();
+
+    if (dbColoursMap[clean]) return dbColoursMap[clean];
+
+    for (const [name, hex] of Object.entries(dbColoursMap)) {
+      if (clean.includes(name) || name.includes(clean)) {
+        return hex;
+      }
+    }
+
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) {
+      hash = clean.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+    return '#' + '00000'.substring(0, 6 - c.length) + c;
+  };
 
   // Fetch addresses directly from Supabase customer_addresses table
   const fetchAddressesFromDb = async () => {
@@ -1211,8 +1239,7 @@ export default function CartDrawer() {
               ) : (
                 <div className="space-y-3">
                   {cart.map((item) => {
-                    const itemColor = (item?.color || '').toLowerCase();
-                    const hex = COLOR_HEX_MAP[itemColor] || itemColor || '#e83e8c';
+                    const resolvedHex = resolveColorHex(item?.color);
                     const isJewelleryItem = item?.department === 'jewellery';
 
                     return (
@@ -1256,8 +1283,8 @@ export default function CartDrawer() {
                               {item.color && (
                                 <span className="inline-flex items-center gap-1 text-[10px] text-neutral-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
                                   <span
-                                    className="w-2 h-2 rounded-full border border-black/20 shrink-0"
-                                    style={{ backgroundColor: hex }}
+                                    className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                                    style={{ backgroundColor: resolvedHex }}
                                   />
                                   <span className="capitalize">{item.color}</span>
                                 </span>
@@ -1336,10 +1363,7 @@ export default function CartDrawer() {
               </div>
 
               {loadingAddresses ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-2 text-neutral-400">
-                  <Loader2 className="w-6 h-6 animate-spin text-[#00f5d4]" />
-                  <span className="text-xs">Loading addresses from server...</span>
-                </div>
+                <CringeLoader size="md" />
               ) : savedAddresses.length === 0 ? (
                 <div className="py-10 text-center border-2 border-dashed border-white/15 rounded-2xl p-6 space-y-3">
                   <MapPin className="w-8 h-8 text-neutral-500 mx-auto" />
@@ -1714,7 +1738,7 @@ export default function CartDrawer() {
                     placeholder="e.g. Bhanugundi"
                     value={formData.area}
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
+                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-neutral-300 focus:outline-hidden focus:border-[#00f5d4]"
                   />
                 </div>
               </div>
