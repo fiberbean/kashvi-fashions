@@ -4,15 +4,14 @@ import {
   Check,
   X,
   RefreshCw,
-  Eye,
   Camera,
   HardDrive,
   Pipette,
   Tag,
   Trash2,
-  Sparkles,
-  Layers
+  Sparkles
 } from 'lucide-react';
+import { optimizeAndUploadToR2 } from '../../utils/imageOptimizer';
 
 export interface TaggedColor {
   id: string;
@@ -29,7 +28,6 @@ interface ImageOptimizerModalProps {
   categoryName?: string;
 }
 
-// Basic color namer helper for intuitive labels
 function getApproxColorName(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -50,10 +48,10 @@ export default function ImageOptimizerModal({
   onClose,
   onAcceptImage,
 }: ImageOptimizerModalProps) {
-  const [originalImage, setOriginalImage] = useState<string | null>(null);
-  const [optimizedImage, setOptimizedImage] = useState<string | null>(null);
+  const [optimizedImageUrl, setOptimizedImageUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [fileSizeInfo, setFileSizeInfo] = useState<{ original: string; optimized: string } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Color Tagging State
   const [colorTags, setColorTags] = useState<TaggedColor[]>([]);
@@ -63,82 +61,39 @@ export default function ImageOptimizerModal({
   const imageContainerRef = useRef<HTMLDivElement | null>(null);
   const imageElementRef = useRef<HTMLImageElement | null>(null);
 
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-  };
-
-  const handleSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Handle Photo Select:
+   * Strict < 100 KB WebP auto-compression and direct Cloudflare R2 Upload
+   */
+  const handleSelectFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const originalSizeStr = formatSize(file.size);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      setOriginalImage(dataUrl);
-      setColorTags([]); // reset tags for new image
-      compressAndOptimize(dataUrl, originalSizeStr);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Local HD WebP Compression (<150KB, 1400px Max, 100% Quality/Color preservation)
-  const compressAndOptimize = (src: string, origSizeStr: string) => {
     setIsProcessing(true);
+    setErrorMessage(null);
+    setColorTags([]);
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = src;
+    try {
+      // Products strict limit (< 100 KB) tho R2 ki direct upload
+      const result = await optimizeAndUploadToR2(file, 'products');
 
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        setIsProcessing(false);
-        return;
-      }
-
-      const maxSize = 1400;
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height) {
-        if (width > maxSize) {
-          height = Math.round((height * maxSize) / width);
-          width = maxSize;
-        }
-      } else {
-        if (height > maxSize) {
-          width = Math.round((width * maxSize) / height);
-          height = maxSize;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-
-      // Draw real pixels directly (zero filters)
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // WebP HD output
-      const webpOutput = canvas.toDataURL('image/webp', 0.88);
-      const approxCompressedBytes = Math.round((webpOutput.length * 3) / 4);
-
+      setOptimizedImageUrl(result.url);
       setFileSizeInfo({
-        original: origSizeStr,
-        optimized: formatSize(approxCompressedBytes)
+        original: result.originalSize,
+        optimized: result.compressedSize
       });
-
-      setOptimizedImage(webpOutput);
+    } catch (err: any) {
+      console.error('R2 Optimization failed:', err);
+      setErrorMessage(err.message || 'Image upload & optimization failed.');
+    } finally {
       setIsProcessing(false);
-    };
+      e.target.value = '';
+    }
   };
 
   // Interactive Click to Tag Color on Image
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
-    if (!activePickerMode || !optimizedImage || !imageElementRef.current) return;
+    if (!activePickerMode || !optimizedImageUrl || !imageElementRef.current) return;
 
     const rect = imageElementRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
@@ -147,7 +102,7 @@ export default function ImageOptimizerModal({
     const xPercent = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
     const yPercent = Math.max(0, Math.min(100, (clickY / rect.height) * 100));
 
-    // Sample pixel from invisible canvas
+    // Sample pixel using canvas
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     const img = imageElementRef.current;
@@ -187,14 +142,13 @@ export default function ImageOptimizerModal({
   };
 
   const handleConfirm = () => {
-    if (!optimizedImage) return;
-    onAcceptImage(optimizedImage, colorTags);
+    if (!optimizedImageUrl) return;
+    onAcceptImage(optimizedImageUrl, colorTags);
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-center justify-center p-3 sm:p-6 bg-[#0a0e17]/85 backdrop-blur-xl select-none font-sans animate-in fade-in">
-      {/* Floating Glassmorphic Container with Neon Accent Glow */}
       <div className="bg-[#101628]/95 backdrop-blur-2xl rounded-3xl p-5 sm:p-6 max-w-5xl w-full max-h-[94vh] overflow-y-auto shadow-[0_20px_50px_rgba(0,0,0,0.7),0_0_30px_rgba(109,74,255,0.2)] border border-white/10 flex flex-col gap-4 text-xs relative">
         
         {/* Ambient Top Glow Line */}
@@ -209,12 +163,12 @@ export default function ImageOptimizerModal({
             <div>
               <h2 className="text-base font-extrabold text-white flex items-center gap-2 tracking-tight">
                 <span>HD Product Image Optimizer</span>
-                <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white text-[9px] font-mono tracking-wider uppercase shadow-xs">
-                  WebP + Color Tagging
+                <span className="px-2.5 py-0.5 rounded-full bg-[#00ff9d]/15 text-[#00ff9d] border border-[#00ff9d]/30 text-[9px] font-mono tracking-wider uppercase font-bold">
+                  &lt; 100 KB Strict R2
                 </span>
               </h2>
               <p className="text-[10px] text-[#8b9bb4]">
-                Lossless local compression with point-and-click color spectrum detection.
+                Strict WebP compression to Cloudflare R2 with point-and-click color spectrum detection.
               </p>
             </div>
           </div>
@@ -227,8 +181,14 @@ export default function ImageOptimizerModal({
           </button>
         </div>
 
-        {/* 1. Upload State */}
-        {!originalImage ? (
+        {errorMessage && (
+          <div className="p-3 bg-[#ff6b6b]/15 border border-[#ff6b6b]/30 text-[#ff6b6b] rounded-2xl font-bold">
+            {errorMessage}
+          </div>
+        )}
+
+        {/* 1. Upload Box State */}
+        {!optimizedImageUrl && !isProcessing ? (
           <div className="min-h-[320px] flex flex-col items-center justify-center border-2 border-dashed border-[#6d4aff]/30 rounded-3xl bg-[#0a0e17]/50 p-8 text-center relative group">
             <input
               ref={fileInputRef}
@@ -245,20 +205,20 @@ export default function ImageOptimizerModal({
               Upload Product Photo
             </h3>
             <p className="text-[11px] text-[#8b9bb4] max-w-sm mt-1 mb-5 leading-relaxed">
-              Select product image. Compresses locally to lightweight WebP (&lt;150KB) and lets you point-and-click to tag real gemstone and polish colors.
+              Select product image. It will strictly compress to lightweight WebP (&lt;100KB) and save in Cloudflare R2.
             </p>
             <label
               htmlFor="raw-optimize-upload"
               className="px-7 py-3 rounded-2xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold text-xs shadow-lg shadow-[#6d4aff]/35 transition-all cursor-pointer flex items-center gap-2 hover:-translate-y-0.5 active:translate-y-0"
             >
               <Camera className="w-4 h-4 text-[#00d9ff]" />
-              <span>Choose Photo to Optimize & Tag</span>
+              <span>Choose Photo to Optimize (&lt;100KB)</span>
             </label>
           </div>
         ) : (
           <div className="space-y-4">
             
-            {/* Top Toolbar: File Size & Color Tagging Switch */}
+            {/* Top Toolbar */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-[#0a0e17]/60 rounded-2xl border border-white/10 backdrop-blur-md">
               <div className="flex items-center gap-3">
                 <span className="font-extrabold text-[11px] text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -282,31 +242,31 @@ export default function ImageOptimizerModal({
                   <span className="text-[10px] text-[#8b9bb4] line-through">
                     Raw: {fileSizeInfo.original}
                   </span>
-                  <span className="text-[10.5px] text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-2.5 py-0.5 rounded-lg font-bold shadow-xs">
-                    Optimized WebP: {fileSizeInfo.optimized}
+                  <span className="text-[10.5px] text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-2.5 py-0.5 rounded-lg font-bold shadow-xs flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-[#00d9ff]" /> R2 WebP: {fileSizeInfo.optimized}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Main Interactive Preview & Tagging Area */}
+            {/* Main Interactive Preview */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               
-              {/* Left 2 Cols: Optimized HD Image with Interactive Pins */}
               <div
                 ref={imageContainerRef}
                 className="lg:col-span-2 rounded-2xl border border-white/10 bg-[#0a0e17]/50 min-h-[380px] max-h-[520px] flex items-center justify-center p-4 relative overflow-hidden backdrop-blur-md"
               >
                 {isProcessing ? (
                   <div className="flex flex-col items-center justify-center gap-2 text-center">
-                    <RefreshCw className="w-7 h-7 animate-spin text-[#6d4aff]" />
-                    <span className="text-xs font-bold text-white">Optimizing image in full HD...</span>
+                    <RefreshCw className="w-7 h-7 animate-spin text-[#00d9ff]" />
+                    <span className="text-xs font-bold text-white">Compressing &lt; 100KB & uploading to R2...</span>
                   </div>
-                ) : optimizedImage ? (
+                ) : optimizedImageUrl ? (
                   <div className="relative inline-block max-h-full max-w-full">
                     <img
                       ref={imageElementRef}
-                      src={optimizedImage}
+                      crossOrigin="anonymous"
+                      src={optimizedImageUrl}
                       alt="Optimized product for tagging"
                       onClick={handleImageClick}
                       className={`max-h-[460px] max-w-full object-contain rounded-2xl shadow-2xl select-none ${
@@ -314,7 +274,7 @@ export default function ImageOptimizerModal({
                       }`}
                     />
 
-                    {/* Render Color Pin Markers on Image */}
+                    {/* Color Pin Markers */}
                     {colorTags.map((tag, idx) => (
                       <div
                         key={tag.id}
@@ -338,7 +298,7 @@ export default function ImageOptimizerModal({
                 ) : null}
               </div>
 
-              {/* Right Col: Tagged Colors List & Naming */}
+              {/* Tagged Colors List */}
               <div className="rounded-2xl border border-white/10 bg-[#101628]/70 p-4 flex flex-col justify-between backdrop-blur-md">
                 <div>
                   <div className="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3">
@@ -358,14 +318,14 @@ export default function ImageOptimizerModal({
 
                   <p className="text-[10px] text-[#8b9bb4] mb-3">
                     {activePickerMode
-                      ? '👉 Click anywhere on the image (stones, gold polish, beads) to tag a color.'
-                      : 'Click "Point-and-Click ON" above to add more tags.'}
+                      ? '👉 Click anywhere on the image to tag a real shade.'
+                      : 'Click "Point-and-Click ON" above to add tags.'}
                   </p>
 
                   <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                     {colorTags.length === 0 ? (
                       <div className="text-center py-8 text-[#8b9bb4]/70 text-[11px]">
-                        No colors tagged yet.<br />Click on the jewellery to pick colors.
+                        No colors tagged yet.<br />Click on the product image to pick colors.
                       </div>
                     ) : (
                       colorTags.map((tag) => (
@@ -403,7 +363,7 @@ export default function ImageOptimizerModal({
 
                 <div className="pt-3 border-t border-white/10 mt-3">
                   <span className="text-[9.5px] text-[#8b9bb4] block text-center">
-                    These color tags attach directly to product specs for customer filter search.
+                    Direct Cloudflare R2 WebP link saves with color tags.
                   </span>
                 </div>
               </div>
@@ -437,12 +397,12 @@ export default function ImageOptimizerModal({
                 </button>
                 <button
                   type="button"
-                  disabled={!optimizedImage || isProcessing}
+                  disabled={!optimizedImageUrl || isProcessing}
                   onClick={handleConfirm}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#667eea] to-[#764ba2] hover:from-[#764ba2] hover:to-[#6d4aff] text-white font-bold flex items-center gap-1.5 shadow-lg shadow-[#6d4aff]/30 transition-all cursor-pointer disabled:opacity-50"
                 >
                   <Check className="w-4 h-4 text-[#00ff9d]" />
-                  <span>Accept Image & Colors</span>
+                  <span>Accept R2 Image & Colors</span>
                 </button>
               </div>
             </div>

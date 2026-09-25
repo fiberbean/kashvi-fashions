@@ -16,7 +16,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import { compressImageToWebP } from '../../utils/imageOptimizer';
+import { optimizeAndUploadToR2 } from '../../utils/imageOptimizer';
 import { Category } from '../../types';
 
 interface CategoryMasterModalProps {
@@ -29,7 +29,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
   const [loadingList, setLoadingList] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Form State - ID is fully editable now
   const [categoryCode, setCategoryCode] = useState<string>('');
   const [originalId, setOriginalId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -38,8 +37,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
   const [isActive, setIsActive] = useState<boolean>(true);
   const [editingMode, setEditingMode] = useState<boolean>(false);
 
-  // Image Compression & File State
-  const [optimizedBlob, setOptimizedBlob] = useState<Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [compressionStats, setCompressionStats] = useState<{ original: string; optimized: string } | null>(null);
   const [isCompressing, setIsCompressing] = useState(false);
@@ -47,7 +44,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 1. Fetch Categories sorted strictly by display_order
   const loadCategories = async () => {
     setLoadingList(true);
     setFetchError(null);
@@ -75,7 +71,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
     }
   };
 
-  // 2. Generate Next Code in CAT0001 series
   const generateCategoryCode = async () => {
     try {
       const { data } = await supabase
@@ -112,14 +107,12 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
     setName('');
     setImageUrl('');
     setImagePreview(null);
-    setOptimizedBlob(null);
     setCompressionStats(null);
     setDisplayOrder(categories.length > 0 ? categories.length + 1 : 1);
     setIsActive(true);
     generateCategoryCode();
   };
 
-  // Select card to edit and allow ID modification
   const handleSelectCard = (cat: Category) => {
     setEditingMode(true);
     setOriginalId(cat.id);
@@ -127,12 +120,14 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
     setName(cat.name);
     setImageUrl(cat.image_url || '');
     setImagePreview(cat.image_url || null);
-    setOptimizedBlob(null);
     setCompressionStats(null);
     setDisplayOrder((cat as any).display_order ?? 0);
     setIsActive(cat.active ?? true);
   };
 
+  /**
+   * Category Image Select - Strictly < 50 KB WebP & Cloudflare R2 Upload
+   */
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -140,23 +135,29 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
     setIsCompressing(true);
     setErrorMsg(null);
     try {
-      const result = await compressImageToWebP(file, 1400, 0.88);
-      setOptimizedBlob(result.blob);
-      setImagePreview(result.dataUrl);
+      // Produces: CAT0001_01.webp
+      const result = await optimizeAndUploadToR2(
+        file,
+        'categories',
+        categoryCode.trim() || 'CAT0001',
+        1
+      );
+      setImageUrl(result.url);
+      setImagePreview(result.url);
       setCompressionStats({
-        original: result.originalSizeFormatted,
-        optimized: result.sizeFormatted
+        original: result.originalSize,
+        optimized: result.compressedSize
       });
     } catch (err: any) {
-      console.error('Image compression failed:', err);
-      setErrorMsg('Failed to process image format.');
+      console.error('Category R2 upload failed:', err);
+      setErrorMsg(err.message || 'Failed to process and upload category image to R2.');
     } finally {
       setIsCompressing(false);
+      e.target.value = '';
     }
   };
 
   const handleRemoveImage = () => {
-    setOptimizedBlob(null);
     setImagePreview(null);
     setImageUrl('');
     setCompressionStats(null);
@@ -178,7 +179,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
     }
   };
 
-  // Save changes with support for Primary Key (ID) update
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -192,26 +192,7 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
     }
 
     try {
-      let finalImageUrl = imageUrl.trim();
-
-      if (optimizedBlob) {
-        const fileName = `${targetId.toLowerCase()}_${Date.now()}.webp`;
-        const filePath = `categories/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('store_assets')
-          .upload(filePath, optimizedBlob, {
-            contentType: 'image/webp',
-            upsert: true
-          });
-
-        if (!uploadError) {
-          const { data } = supabase.storage.from('store_assets').getPublicUrl(filePath);
-          finalImageUrl = data.publicUrl;
-        } else {
-          finalImageUrl = imagePreview || '';
-        }
-      }
+      const finalImageUrl = imageUrl.trim();
 
       const slug = name
         .trim()
@@ -220,15 +201,12 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
         .replace(/(^-|-$)+/g, '');
 
       if (editingMode && originalId) {
-        // Check if ID was customized/changed
         if (targetId !== originalId) {
-          // Check if new ID already exists
           const { data: exists } = await supabase.from('categories').select('id').eq('id', targetId).maybeSingle();
           if (exists) {
             throw new Error(`Category ID "${targetId}" already exists. Pick another ID.`);
           }
 
-          // Insert new record with updated ID
           const { error: insertErr } = await supabase.from('categories').insert([{
             id: targetId,
             name: name.trim(),
@@ -240,13 +218,9 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
           }]);
           if (insertErr) throw insertErr;
 
-          // Cascade update sub_categories referencing old ID
           await supabase.from('sub_categories').update({ category_id: targetId }).eq('category_id', originalId);
-
-          // Delete old record
           await supabase.from('categories').delete().eq('id', originalId);
         } else {
-          // Standard Update
           const { error: updateErr } = await supabase
             .from('categories')
             .update({
@@ -261,7 +235,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
           if (updateErr) throw updateErr;
         }
       } else {
-        // Insert new record
         const { error: insertErr } = await supabase.from('categories').insert([{
           id: targetId,
           name: name.trim(),
@@ -307,7 +280,7 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Card view sorted by display order with custom ID override support
+                Card view sorted by display order with strict &lt; 50 KB R2 Pipeline
               </span>
             </div>
           </div>
@@ -334,7 +307,7 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
         {/* Dual Pane Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mt-4 flex-1 overflow-y-auto pr-1">
           
-          {/* LEFT PANE: EXISTING CATEGORIES IN CARD MODEL (7 COLS) */}
+          {/* LEFT PANE: CARDS (7 COLS) */}
           <div className="lg:col-span-7 flex flex-col space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-mono font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -356,7 +329,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
               </div>
             )}
 
-            {/* CARDS GRID */}
             <div className="flex-1 overflow-y-auto max-h-[58vh] pr-1.5 custom-scrollbar">
               {loadingList ? (
                 <div className="flex items-center justify-center p-12 text-[#8b9bb4]">
@@ -380,12 +352,10 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                             : 'bg-[#0a0e17]/80 border-white/10 hover:border-[#00d9ff]/50 hover:bg-[#151c33]/70'
                         }`}
                       >
-                        {/* Order Badge (Top-Left) */}
                         <div className="absolute top-2 left-2 z-10 bg-black/75 px-1.5 py-0.5 rounded-md text-[9px] font-mono font-bold text-[#00ff9d] border border-white/10 backdrop-blur-md">
                           #{cat.display_order ?? 0}
                         </div>
 
-                        {/* Delete Button (Top-Right on Hover) */}
                         <button
                           type="button"
                           onClick={(e) => handleDeleteCategory(e, cat.id, cat.name)}
@@ -395,7 +365,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                           <Trash2 className="w-3 h-3" />
                         </button>
 
-                        {/* 1. Category Image */}
                         <div className="w-full h-24 sm:h-28 bg-[#151c33] relative overflow-hidden flex items-center justify-center">
                           {cat.image_url ? (
                             <img
@@ -409,13 +378,11 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                           <div className="absolute inset-0 bg-gradient-to-t from-[#0a0e17] via-transparent to-transparent opacity-80" />
                         </div>
 
-                        {/* 2. Image Kinda: Name and ID */}
                         <div className="p-2.5 flex flex-col items-center text-center space-y-1 bg-[#101628]/60 flex-1 justify-between">
                           <h3 className="font-bold text-white text-[12px] truncate w-full" title={cat.name}>
                             {cat.name}
                           </h3>
 
-                          {/* Name Kinda: Category ID */}
                           <div className="font-mono text-[9.5px] font-extrabold px-2 py-0.5 rounded-md bg-[#00d9ff]/10 text-[#00d9ff] border border-[#00d9ff]/30 tracking-wider">
                             {cat.id}
                           </div>
@@ -434,7 +401,7 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
             </div>
           </div>
 
-          {/* RIGHT PANE: FORM TO CREATE / EDIT WITH CUSTOM ID (5 COLS) */}
+          {/* RIGHT PANE: FORM (5 COLS) */}
           <div className="lg:col-span-5 bg-[#0a0e17]/60 p-4 rounded-3xl border border-white/10 space-y-3.5">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <span className="font-mono font-bold text-[#00d9ff] text-[11px] uppercase tracking-wider flex items-center gap-1.5">
@@ -459,7 +426,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
             )}
 
             <form onSubmit={handleSave} className="space-y-3">
-              {/* Category Custom ID */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1 flex items-center justify-between">
                   <span>Category ID (Custom Editable) *</span>
@@ -475,7 +441,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                 />
               </div>
 
-              {/* Category Name */}
               <div>
                 <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
                   Category Name *
@@ -490,11 +455,11 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                 />
               </div>
 
-              {/* Image Upload & WebP Compression */}
+              {/* Strict < 50 KB WebP Category Photo */}
               <div className="p-3 bg-[#101628] rounded-2xl border border-white/10 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1">
-                    <ImageIcon className="w-3 h-3" /> Category Photo
+                    <ImageIcon className="w-3 h-3" /> Category Photo (R2 &lt; 50KB)
                   </span>
                   {compressionStats && (
                     <span className="text-[8.5px] font-mono text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-1">
@@ -526,8 +491,14 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                   <div className="flex-1 space-y-1">
                     <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white text-[10px] font-bold cursor-pointer transition-all">
                       <Upload className="w-3 h-3 text-[#00ff9d]" />
-                      <span>Upload & Auto-Compress</span>
-                      <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+                      <span>{isCompressing ? 'Optimizing (<50KB)...' : 'Upload & Auto-Compress'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleImageSelect} 
+                        disabled={isCompressing} 
+                        className="hidden" 
+                      />
                     </label>
                     <input
                       type="url"
@@ -543,7 +514,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                 </div>
               </div>
 
-              {/* Display Order & Active Status */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
@@ -576,7 +546,6 @@ export default function CategoryMasterModal({ onClose, onSuccess }: CategoryMast
                 </div>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={submitting || isCompressing}

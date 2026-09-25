@@ -19,7 +19,7 @@ import {
   Lock
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
-import { compressImageToWebP } from '../../utils/imageOptimizer';
+import { optimizeAndUploadToR2 } from '../../utils/imageOptimizer';
 import { Category, SubCategoryRecord } from '../../types';
 
 interface SubCategoryMasterModalProps {
@@ -47,8 +47,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
   const [isActive, setIsActive] = useState<boolean>(true);
   const [editingMode, setEditingMode] = useState<boolean>(false);
 
-  // Image Compression & File State
-  const [optimizedBlob, setOptimizedBlob] = useState<Blob | null>(null);
+  // Cloudflare R2 Image Upload State
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [compressionStats, setCompressionStats] = useState<{ original: string; optimized: string } | null>(null);
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
@@ -130,7 +129,6 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     setName('');
     setImageUrl('');
     setImagePreview(null);
-    setOptimizedBlob(null);
     setCompressionStats(null);
     setDisplayOrder(subCategories.length > 0 ? subCategories.length + 1 : 1);
     setIsActive(true);
@@ -147,13 +145,14 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     setName(sub.name);
     setImageUrl(sub.image_url || '');
     setImagePreview(sub.image_url || null);
-    setOptimizedBlob(null);
     setCompressionStats(null);
     setDisplayOrder(Number(sub.display_order) || 0);
     setIsActive(sub.active ?? true);
   };
 
-  // Auto WebP Compression on file selection
+  /**
+   * Sub-Category Image Select - Strictly < 50 KB WebP & Cloudflare R2 Pipeline
+   */
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -161,23 +160,29 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     setIsCompressing(true);
     setErrorMsg(null);
     try {
-      const result = await compressImageToWebP(file, 1400, 0.88);
-      setOptimizedBlob(result.blob);
-      setImagePreview(result.dataUrl);
+      // Produces: SUBCAT0001_01.webp
+      const result = await optimizeAndUploadToR2(
+        file,
+        'subcategories',
+        subCategoryCode.trim() || 'SUBCAT0001',
+        1
+      );
+      setImageUrl(result.url);
+      setImagePreview(result.url);
       setCompressionStats({
-        original: result.originalSizeFormatted,
-        optimized: result.sizeFormatted
+        original: result.originalSize,
+        optimized: result.compressedSize
       });
     } catch (err: any) {
-      console.error('Image compression failed:', err);
-      setErrorMsg('Failed to process image format.');
+      console.error('Sub-Category R2 upload failed:', err);
+      setErrorMsg(err.message || 'Failed to process and upload sub-category image to R2.');
     } finally {
       setIsCompressing(false);
+      e.target.value = '';
     }
   };
 
   const handleRemoveImage = () => {
-    setOptimizedBlob(null);
     setImagePreview(null);
     setImageUrl('');
     setCompressionStats(null);
@@ -226,26 +231,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
     }
 
     try {
-      let finalImageUrl = imageUrl.trim();
-
-      if (optimizedBlob) {
-        const fileName = `${targetId.toLowerCase()}_${Date.now()}.webp`;
-        const filePath = `subcategories/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('store_assets')
-          .upload(filePath, optimizedBlob, {
-            contentType: 'image/webp',
-            upsert: true
-          });
-
-        if (!uploadError) {
-          const { data } = supabase.storage.from('store_assets').getPublicUrl(filePath);
-          finalImageUrl = data.publicUrl;
-        } else {
-          finalImageUrl = imagePreview || '';
-        }
-      }
+      const finalImageUrl = imageUrl.trim();
 
       const slug = name
         .trim()
@@ -349,7 +335,7 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                 </span>
               </h2>
               <span className="text-[10px] text-[#8b9bb4]">
-                Link to Parent Category & manage sub-catalog cards
+                Strict &lt; 50 KB WebP R2 pipeline tho linked Sub-Catalog Cards
               </span>
             </div>
           </div>
@@ -611,11 +597,11 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                 />
               </div>
 
-              {/* Image Upload & WebP Compression */}
+              {/* Strict < 50 KB WebP Image Upload via Cloudflare R2 */}
               <div className="p-3 bg-[#101628] rounded-2xl border border-white/10 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-mono font-bold text-[#00d9ff] uppercase flex items-center gap-1">
-                    <ImageIcon className="w-3 h-3" /> Sub-Category Photo
+                    <ImageIcon className="w-3 h-3" /> Sub-Category Photo (R2 &lt; 50KB)
                   </span>
                   {compressionStats && (
                     <span className="text-[8.5px] font-mono text-[#00ff9d] bg-[#00ff9d]/10 border border-[#00ff9d]/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-1">
@@ -647,8 +633,14 @@ export default function SubCategoryMasterModal({ onClose, onSuccess }: SubCatego
                   <div className="flex-1 space-y-1">
                     <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white text-[10px] font-bold cursor-pointer transition-all">
                       <Upload className="w-3 h-3 text-[#00ff9d]" />
-                      <span>Upload & Auto-Compress</span>
-                      <input type="file" accept="image/*" onChange={handleImageSelect} className="hidden" />
+                      <span>{isCompressing ? 'Optimizing (<50KB)...' : 'Upload & Auto-Compress'}</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleImageSelect} 
+                        disabled={isCompressing} 
+                        className="hidden" 
+                      />
                     </label>
                     <input
                       type="url"

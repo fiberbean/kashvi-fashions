@@ -20,11 +20,12 @@ import {
   Square,
   Edit3,
   IndianRupee,
-  Lock
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { CategoryRecord, SubCategoryRecord, ColourRecord, SizeRecord, FabricRecord, UnitRecord } from '../../types';
-import { compressImageToWebP } from '../../utils/imageOptimizer';
+import { optimizeAndUploadToR2, deleteFromR2 } from '../../utils/imageOptimizer';
 
 interface ProductMasterModalProps {
   onClose: () => void;
@@ -150,7 +151,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [images, setImages] = useState<TaggedImage[]>([]);
 
-  // Pricing fields mapping directly to table columns
+  // Pricing fields
   const [sellingPrice, setSellingPrice] = useState<number | string>(0);
   const [mrp, setMrp] = useState<number | string>(0);
   const [costPrice, setCostPrice] = useState<number | string>(0);
@@ -238,7 +239,6 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
         setImages(initialProduct.images);
       }
     } else {
-      // Create mode defaults
       setSelectedColors([]);
       const generateProductCode = async () => {
         setCodeLoading(true);
@@ -385,50 +385,62 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
     }
   };
 
+  /**
+   * Strictly < 100 KB WebP Compression & Cloudflare R2 Upload Pipeline
+   */
   const handleQuickImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsCompressingQuickUpload(true);
+    setErrorMsg(null);
+
     try {
       const defaultTag = selectedColors[0] || 'Universal';
+      const existingCount = images.length;
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const result = await compressImageToWebP(file, 1400, 0.88);
+        const nextIndex = existingCount + i + 1;
 
-        const fileName = `prod_${Date.now()}_${i}.webp`;
-        const filePath = `products/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('store_assets')
-          .upload(filePath, result.blob, {
-            contentType: 'image/webp',
-            upsert: true
-          });
-
-        let finalUrl = result.dataUrl;
-        if (!uploadError) {
-          const { data } = supabase.storage.from('store_assets').getPublicUrl(filePath);
-          finalUrl = data.publicUrl;
-        }
+        const uploadResult = await optimizeAndUploadToR2(
+          file,
+          'products',
+          productCode.trim(),
+          nextIndex
+        );
 
         setImages((prev) => [
           ...prev,
           {
             id: `${Date.now()}_${i}`,
-            url: finalUrl,
+            url: uploadResult.url,
             color_tag: defaultTag,
-            size_bytes: result.sizeFormatted
+            size_bytes: uploadResult.compressedSize
           }
         ]);
       }
     } catch (err: any) {
-      console.error('Quick upload compression failed:', err);
-      setErrorMsg('Image compression failed.');
+      console.error('R2 Product Upload failed:', err);
+      setErrorMsg(err.message || 'Product image upload failed.');
     } finally {
       setIsCompressingQuickUpload(false);
       e.target.value = '';
+    }
+  };
+
+  /**
+   * Direct Cloudflare R2 & State Deletion
+   */
+  const handleRemoveProductImage = async (imgId: string, imgUrl: string) => {
+    setImages((prev) => prev.filter((im) => im.id !== imgId));
+
+    if (imgUrl) {
+      try {
+        await deleteFromR2(imgUrl);
+      } catch (err) {
+        console.error('Failed to delete image from R2:', err);
+      }
     }
   };
 
@@ -455,7 +467,6 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
       const selectedUnitObj = units.find((u) => u.id === selectedUnit || u.name === selectedUnit);
       const unitValue = selectedUnitObj?.name || selectedUnit || 'Piece';
 
-      // Preserving linked colors in edit mode, empty/null on create mode
       const colorsToSave = isEditMode ? selectedColors : [];
 
       const payload: any = {
@@ -819,7 +830,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
               <Layers className="w-3.5 h-3.5" /> Product Variants Matrix
             </span>
             
-            {/* Colours Section: Shown ONLY in Edit Mode as View-Only (No Delete/Deselect) */}
+            {/* Colours Section */}
             {isEditMode && (
               <div className="p-3 bg-[#101628]/80 rounded-2xl border border-white/10 space-y-2">
                 <div className="flex items-center justify-between">
@@ -978,10 +989,10 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
           <div className="p-4 bg-[#0a0e17]/60 rounded-3xl border border-white/10 space-y-3.5">
             <div>
               <span className="text-[11px] font-mono font-bold text-white block uppercase tracking-wider flex items-center gap-1.5">
-                <HardDrive className="w-3.5 h-3.5 text-[#00d9ff]" /> Product Assets & HD WebP Compression
+                <HardDrive className="w-3.5 h-3.5 text-[#00d9ff]" /> Cloudflare R2 Media Storage
               </span>
               <p className="text-[10px] text-[#8b9bb4] mt-0.5">
-                Images are automatically compressed to lossless WebP (&lt;150KB) and stored in Supabase.
+                Images are strictly compressed to &lt; 100 KB WebP HD and directly saved in Cloudflare R2.
               </p>
             </div>
 
@@ -992,7 +1003,7 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
                 ) : (
                   <Upload className="w-4 h-4 text-[#00ff9d]" />
                 )}
-                <span>Fast Upload (Auto-WebP)</span>
+                <span>Fast Upload (R2 &lt; 100KB)</span>
                 <input
                   type="file"
                   multiple
@@ -1010,15 +1021,20 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
                   <div key={img.id} className="rounded-2xl border border-white/10 bg-[#151c33] overflow-hidden shadow-lg">
                     <div className="relative h-28 bg-[#0a0e17]">
                       <img src={img.url} alt="Variant" className="w-full h-full object-cover" />
+                      
+                      {/* Direct R2 Deletion Button */}
                       <button
                         type="button"
-                        onClick={() => setImages(images.filter((im) => im.id !== img.id))}
+                        onClick={() => handleRemoveProductImage(img.id, img.url)}
                         className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/70 text-white hover:bg-[#ff6b6b] transition-colors cursor-pointer"
+                        title="Delete photo from Cloudflare R2"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
+                      
                       {img.size_bytes && (
-                        <span className="absolute bottom-1.5 left-1.5 text-[8.5px] font-mono bg-black/75 text-[#00ff9d] px-1.5 py-0.5 rounded-md border border-white/10">
+                        <span className="absolute bottom-1.5 left-1.5 text-[8.5px] font-mono bg-black/75 text-[#00ff9d] px-1.5 py-0.5 rounded-md border border-white/10 flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 text-[#00d9ff]" />
                           {img.size_bytes}
                         </span>
                       )}

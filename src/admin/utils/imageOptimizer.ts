@@ -1,7 +1,12 @@
 /**
- * Client-side High-Definition WebP Image Compressor
- * Converts any image format into a high-clarity, lightweight WebP blob & dataUrl (<150KB, 1400px max)
+ * Strict WebP Image Optimizer & Cloudflare R2 Uploader
+ * Rules:
+ * - Categories & Sub-Categories: Strictly < 50 KB (Max 800px)
+ * - Products: Strictly < 100 KB (Max 1200px)
+ * - Banners: Strictly < 150 KB (Max 1920px)
+ * Naming Format: Code_ImageNo.webp (e.g. KF0001_01.webp, CAT0001_01.webp)
  */
+
 export interface OptimizedImageResult {
   dataUrl: string;
   blob: Blob;
@@ -9,12 +14,24 @@ export interface OptimizedImageResult {
   originalSizeFormatted: string;
 }
 
+export interface OptimizedUploadResult {
+  url: string;
+  originalSize: string;
+  compressedSize: string;
+  dimensions: { width: number; height: number };
+}
+
+export type UploadTargetType = 'categories' | 'subcategories' | 'products' | 'banners';
+
 export const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 };
 
+/**
+ * Backward compatibility helper for legacy components
+ */
 export const compressImageToWebP = (
   file: File,
   maxDimension = 1400,
@@ -69,7 +86,7 @@ export const compressImageToWebP = (
               dataUrl,
               blob,
               sizeFormatted: formatBytes(blob.size),
-              originalSizeFormatted: originalSizeStr
+              originalSizeFormatted: originalSizeStr,
             });
           },
           'image/webp',
@@ -83,4 +100,179 @@ export const compressImageToWebP = (
     reader.onerror = () => reject(new Error('Failed to read image file.'));
     reader.readAsDataURL(file);
   });
+};
+
+/**
+ * Dynamic resolution & quality compression loop
+ */
+const compressToTargetLimit = async (
+  file: File,
+  targetMaxBytes: number,
+  initialMaxDim: number
+): Promise<{ blob: Blob; width: number; height: number }> => {
+  const img = new Image();
+  const objectUrl = URL.createObjectURL(file);
+
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = objectUrl;
+  });
+
+  URL.revokeObjectURL(objectUrl);
+
+  let currentMaxDim = initialMaxDim;
+  let quality = 0.85;
+  let finalBlob: Blob | null = null;
+  let finalWidth = 0;
+  let finalHeight = 0;
+
+  for (let attempt = 0; attempt < 7; attempt++) {
+    let width = img.width;
+    let height = img.height;
+
+    if (width > height) {
+      if (width > currentMaxDim) {
+        height = Math.round((height * currentMaxDim) / width);
+        width = currentMaxDim;
+      }
+    } else {
+      if (height > currentMaxDim) {
+        width = Math.round((width * currentMaxDim) / height);
+        height = currentMaxDim;
+      }
+    }
+
+    finalWidth = width;
+    finalHeight = height;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) throw new Error('Canvas context initialize avvaledu');
+
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/webp', quality)
+    );
+
+    if (!blob) throw new Error('WebP conversion fail aindi');
+
+    finalBlob = blob;
+
+    if (blob.size <= targetMaxBytes) {
+      break;
+    }
+
+    quality -= 0.12;
+    currentMaxDim = Math.round(currentMaxDim * 0.82);
+    if (quality < 0.40) quality = 0.40;
+  }
+
+  return { blob: finalBlob!, width: finalWidth, height: finalHeight };
+};
+
+/**
+ * Cloudflare R2 Upload Pipeline with Clean Code_Index Naming
+ */
+export const optimizeAndUploadToR2 = async (
+  file: File,
+  type: UploadTargetType = 'products',
+  customCode?: string,
+  imageIndex: number = 1
+): Promise<OptimizedUploadResult> => {
+  const originalSizeStr = formatBytes(file.size);
+
+  let maxBytes = 100 * 1024;
+  let initialMaxDim = 1200;
+
+  if (type === 'categories' || type === 'subcategories') {
+    maxBytes = 50 * 1024; // Strict < 50 KB
+    initialMaxDim = 800;
+  } else if (type === 'banners') {
+    maxBytes = 150 * 1024; // Strict < 150 KB
+    initialMaxDim = 1920;
+  } else {
+    maxBytes = 100 * 1024; // Strict < 100 KB
+    initialMaxDim = 1200;
+  }
+
+  const { blob, width, height } = await compressToTargetLimit(file, maxBytes, initialMaxDim);
+
+  // Exact Name: Code_ImageNo.webp (e.g. KF0001_01.webp)
+  const idxStr = String(imageIndex).padStart(2, '0');
+  let baseName = '';
+
+  if (customCode && customCode.trim()) {
+    const cleanCode = customCode.trim().replace(/[^a-zA-Z0-9-_]/g, '_');
+    baseName = `${cleanCode}_${idxStr}`;
+  } else {
+    const cleanBaseName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^a-zA-Z0-9-_]/g, '_');
+    baseName = `${cleanBaseName}_${idxStr}`;
+  }
+
+  const webpFile = new File([blob], `${baseName}.webp`, {
+    type: 'image/webp',
+  });
+
+  const formData = new FormData();
+  formData.append('file', webpFile);
+  formData.append('folder', type);
+
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase environment variables missing unnaayi.');
+  }
+
+  const response = await fetch(`${supabaseUrl}/functions/v1/upload-to-r2`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${supabaseAnonKey}`,
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok || !data.url) {
+    throw new Error(data.error || 'R2 image upload fail aindi');
+  }
+
+  return {
+    url: data.url,
+    originalSize: originalSizeStr,
+    compressedSize: formatBytes(blob.size),
+    dimensions: { width, height },
+  };
+};
+
+/**
+ * Cloudflare R2 nunchi photo direct ga delete cheyadaniki helper
+ */
+export const deleteFromR2 = async (fileUrl: string): Promise<boolean> => {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/upload-to-r2`, {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fileUrl }),
+    });
+
+    return response.ok;
+  } catch (err) {
+    console.error("R2 Delete Error:", err);
+    return false;
+  }
 };
