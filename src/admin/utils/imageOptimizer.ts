@@ -7,7 +7,7 @@
  * Naming Format: Code_ImageNo.webp (e.g. KF0001_01.webp, CAT0001_01.webp)
  */
 
-import { supabase } from '../../../lib/supabase';
+import { supabase } from '../../lib/supabase';
 
 export interface OptimizedImageResult {
   dataUrl: string;
