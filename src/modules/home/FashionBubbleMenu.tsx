@@ -19,79 +19,36 @@ export default function FashionBubbleMenu() {
     async function loadFashionCategories() {
       setLoading(true);
       try {
-        // 1. Categories table nunchi A-Z order lo fetch cheyadam
-        const { data: catData } = await supabase
+        // Direct ga 'categories' table nunchi Fashion Categories thevali
+        const { data: catData, error } = await supabase
           .from('categories')
           .select('*')
           .eq('active', true)
           .order('name', { ascending: true });
 
-        // 2. Sub-categories table nunchi kooda fetch cheyadam
-        const { data: subData } = await supabase
-          .from('sub_categories')
-          .select('*')
-          .eq('active', true)
-          .order('name', { ascending: true });
+        if (error) throw error;
 
-        const combinedList: CategoryItem[] = [];
-        const seenNames = new Set<string>();
-
-        // Categories nunchi jewellery lenivi add cheyadam
-        (catData || []).forEach((c: any) => {
-          const dept = (c.department || '').toLowerCase().trim();
-          const name = (c.name || '').trim();
-          const cleanNameLower = name.toLowerCase();
-
-          const isJewel = 
-            dept.includes('jewel') || 
-            cleanNameLower.includes('jewel') || 
-            cleanNameLower.includes('bangle') || 
-            cleanNameLower.includes('choker') || 
-            cleanNameLower.includes('necklace') || 
-            cleanNameLower.includes('earring');
-
-          if (!isJewel && !seenNames.has(cleanNameLower)) {
-            seenNames.add(cleanNameLower);
-            combinedList.push({
+        if (catData && catData.length > 0) {
+          // Jewellery Category ni remove cheyadam
+          const fashionOnly = catData
+            .filter((c: any) => {
+              const dept = (c.department || '').toLowerCase().trim();
+              const name = (c.name || '').toLowerCase().trim();
+              const slug = (c.slug || '').toLowerCase().trim();
+              return !dept.includes('jewel') && !name.includes('jewel') && !slug.includes('jewel');
+            })
+            .map((c: any) => ({
               id: String(c.id),
-              name: c.name,
+              name: c.name.trim(),
               slug: c.slug || c.name.toLowerCase().replace(/\s+/g, '-'),
               image_url: c.image_url || 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80',
-            });
-          }
-        });
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
 
-        // Sub-categories nunchi add cheyadam
-        (subData || []).forEach((s: any) => {
-          const dept = (s.department || '').toLowerCase().trim();
-          const name = (s.name || '').trim();
-          const cleanNameLower = name.toLowerCase();
-
-          const isJewel = 
-            dept.includes('jewel') || 
-            cleanNameLower.includes('jewel') || 
-            cleanNameLower.includes('bangle') || 
-            cleanNameLower.includes('choker') || 
-            cleanNameLower.includes('necklace') || 
-            cleanNameLower.includes('earring');
-
-          if (!isJewel && !seenNames.has(cleanNameLower)) {
-            seenNames.add(cleanNameLower);
-            combinedList.push({
-              id: String(s.id),
-              name: s.name,
-              slug: s.slug || s.name.toLowerCase().replace(/\s+/g, '-'),
-              image_url: s.image_url || 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80',
-            });
-          }
-        });
-
-        // Complete Alphabetical (A to Z) Sorting
-        combinedList.sort((a, b) => a.name.localeCompare(b.name));
-
-        setCategories(combinedList);
+          setCategories(fashionOnly);
+        }
       } catch (err) {
-        console.error('Error loading fashion menu:', err);
+        console.error('Error loading fashion categories:', err);
       } finally {
         setLoading(false);
       }
