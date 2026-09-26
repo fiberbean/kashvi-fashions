@@ -22,6 +22,7 @@ export default function JewelleryBubbleMenu() {
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [scrollLeftState, setScrollLeftState] = useState(0);
+  const [hasMoved, setHasMoved] = useState(false);
 
   // Native wheel horizontal scroll
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function JewelleryBubbleMenu() {
 
   const handleScroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
-      const scrollAmount = direction === 'left' ? -300 : 300;
+      const scrollAmount = direction === 'left' ? -350 : 350;
       scrollRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
     }
   };
@@ -49,6 +50,7 @@ export default function JewelleryBubbleMenu() {
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!scrollRef.current) return;
     setIsDragging(true);
+    setHasMoved(false);
     setStartX(e.pageX - scrollRef.current.offsetLeft);
     setScrollLeftState(scrollRef.current.scrollLeft);
   };
@@ -58,6 +60,9 @@ export default function JewelleryBubbleMenu() {
     e.preventDefault();
     const x = e.pageX - scrollRef.current.offsetLeft;
     const walk = (x - startX) * 1.6;
+    if (Math.abs(walk) > 4) {
+      setHasMoved(true);
+    }
     scrollRef.current.scrollLeft = scrollLeftState - walk;
   };
 
@@ -144,7 +149,7 @@ export default function JewelleryBubbleMenu() {
   if (loading) {
     return (
       <div className="w-full py-8 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#e5c07b]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#D4AF37]"></div>
       </div>
     );
   }
@@ -152,102 +157,75 @@ export default function JewelleryBubbleMenu() {
   if (jewellerySubs.length === 0) return null;
 
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-2 pb-3 select-none relative z-10">
-      {/* 1. Header Navigation Arrows */}
-      <div className="flex items-center justify-end mb-2">
+    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-3 pb-4 select-none relative z-10 flex flex-col items-center">
+      {/* 1. Header Navigation Arrows with Royal Gold Glow */}
+      <div className="w-full flex items-center justify-end mb-2.5">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => handleScroll('left')}
-            className="p-1.5 rounded-lg bg-[#061e17]/90 hover:bg-[#e5c07b] text-[#e5c07b] hover:text-[#061e17] border border-[#e5c07b]/30 transition-all cursor-pointer shadow-md active:scale-95"
+            className="p-1.5 sm:p-2 rounded-full bg-white/95 hover:bg-[#D4AF37] text-stone-700 hover:text-black border-0 transition-all cursor-pointer shadow-[0_4px_14px_rgba(212,175,55,0.4)] hover:shadow-[0_4px_18px_rgba(212,175,55,0.7)] active:scale-95"
             aria-label="Scroll left"
           >
-            <ChevronLeft className="w-4 h-4 stroke-[2.5]" />
+            <ChevronLeft className="w-4 h-4 stroke-[2.2]" />
           </button>
           <button
             type="button"
             onClick={() => handleScroll('right')}
-            className="p-1.5 rounded-lg bg-[#061e17]/90 hover:bg-[#e5c07b] text-[#e5c07b] hover:text-[#061e17] border border-[#e5c07b]/30 transition-all cursor-pointer shadow-md active:scale-95"
+            className="p-1.5 sm:p-2 rounded-full bg-white/95 hover:bg-[#D4AF37] text-stone-700 hover:text-black border-0 transition-all cursor-pointer shadow-[0_4px_14px_rgba(212,175,55,0.4)] hover:shadow-[0_4px_18px_rgba(212,175,55,0.7)] active:scale-95"
             aria-label="Scroll right"
           >
-            <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+            <ChevronRight className="w-4 h-4 stroke-[2.2]" />
           </button>
         </div>
       </div>
 
-      {/* 2. Main Track: Centered Hanging Gold Ring Displays */}
+      {/* 2. Main Track: Seamless Arched Silhouette with Soft Royal Gold Shadow */}
       <div
         ref={scrollRef}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        className={`flex items-start justify-start md:justify-center gap-3.5 sm:gap-4 overflow-x-auto pb-3 pt-4 px-2 focus:outline-none scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
+        className={`w-full flex items-center justify-center overflow-x-auto pb-4 pt-1 px-2 focus:outline-none scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${
           isDragging ? 'cursor-grabbing select-none' : 'cursor-grab'
         }`}
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        {jewellerySubs.map((item, idx) => {
-          const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
-          const hangTilt = tilts[idx % tilts.length];
-
-          return (
+        <div className="flex items-start justify-center gap-3.5 sm:gap-5 min-w-max mx-auto">
+          {jewellerySubs.map((item) => (
             <Link
               key={item.id}
               to={`/category/jewellery?sub=${encodeURIComponent(item.name)}`}
-              className={`group shrink-0 flex flex-col items-center w-[88px] sm:w-[98px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
+              onClick={(e) => {
+                if (hasMoved) e.preventDefault();
+              }}
+              className="group shrink-0 flex flex-col items-center w-[84px] sm:w-[94px] cursor-pointer active:scale-95 transition-all duration-300 text-center"
             >
-              {/* Hanging Structure with Top Gold Ring */}
-              <div className="relative w-full flex flex-col items-center pt-2.5">
-                {/* Wall Pin Stud */}
-                <div className="absolute -top-2.5 w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-30 border border-[#b38728] flex items-center justify-center">
-                  <div className="w-0.5 h-0.5 rounded-full bg-[#3d2c0b]" />
-                </div>
-
-                {/* Hanging Gold Ring */}
-                <div
-                  className="absolute -top-2 w-6 h-6 rounded-full border-[2.5px] border-[#e5c07b] bg-transparent shadow-[0_2px_8px_rgba(229,192,123,0.45),inset_0_1px_2px_rgba(255,255,255,0.7)] z-20 group-hover:shadow-[0_0_12px_#e5c07b] transition-all"
-                  style={{
-                    background:
-                      'radial-gradient(circle, rgba(0,0,0,0) 55%, rgba(180,135,40,0.35) 100%)',
-                  }}
+              {/* Arched Window Shape */}
+              <div className="relative w-full h-[116px] sm:h-[126px] rounded-t-full rounded-b-2xl overflow-hidden bg-stone-100 shadow-[0_8px_20px_rgba(212,175,55,0.38),0_2px_6px_rgba(212,175,55,0.2)] group-hover:shadow-[0_12px_28px_rgba(212,175,55,0.65),0_4px_12px_rgba(212,175,55,0.4)] transition-all duration-300">
+                <img
+                  src={
+                    item.image_url ||
+                    'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80'
+                  }
+                  alt={item.name}
+                  className="w-full h-full object-cover object-center group-hover:scale-110 transition-transform duration-500 ease-out"
+                  loading="lazy"
+                  draggable={false}
                 />
-
-                {/* Small Hanging Link */}
-                <div className="absolute top-2.5 w-1 h-2 bg-gradient-to-b from-[#e5c07b] to-[#b38728] rounded-xs shadow-xs z-25" />
-
-                {/* Compact Jewellery Portrait Frame */}
-                <div className="relative w-full h-[98px] sm:h-[108px] rounded-lg p-[1.5px] bg-gradient-to-b from-[#e5c07b] via-[#946e20] to-[#e5c07b] shadow-[0_8px_18px_rgba(0,0,0,0.85)] group-hover:shadow-[0_12px_22px_rgba(229,192,123,0.3)] transition-all duration-300 flex flex-col mt-1.5">
-                  <div className="w-full h-full rounded-[6px] overflow-hidden bg-[#061e17] relative border border-[#0b3b2c] pointer-events-none">
-                    <img
-                      src={
-                        item.image_url ||
-                        'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=400&q=80'
-                      }
-                      alt={item.name}
-                      className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
-                      loading="lazy"
-                      draggable={false}
-                    />
-
-                    {/* Royal Shadow Gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#04120e]/90 via-transparent to-transparent opacity-75 group-hover:opacity-30 transition-opacity" />
-
-                    {/* Royal Gold Inner Rim */}
-                    <div className="absolute inset-0 border border-[#e5c07b]/30 rounded-[6px] pointer-events-none" />
-                  </div>
-                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/50 via-transparent to-transparent opacity-40 group-hover:opacity-15 transition-opacity" />
               </div>
 
-              {/* Title Tag */}
-              <div className="mt-2 w-full px-0.5 pointer-events-none min-h-[26px] flex items-center justify-center">
-                <span className="block text-[10px] font-serif font-bold text-[#f5ebd7] group-hover:text-[#e5c07b] transition-colors whitespace-normal break-words leading-tight bg-[#061e17]/95 border border-[#e5c07b]/30 group-hover:border-[#e5c07b] py-0.5 px-1 rounded-sm shadow-[0_3px_8px_rgba(0,0,0,0.8)] text-center w-full">
+              {/* Title Tag with Clean Text Wrap & Equal Height */}
+              <div className="mt-2 w-full px-0.5 min-h-[34px] flex items-center justify-center">
+                <span className="block text-[10.5px] sm:text-[11px] font-cinzel font-bold text-stone-800 group-hover:text-[#B8860B] transition-colors leading-snug text-center whitespace-normal break-words tracking-wide uppercase">
                   {item.name}
                 </span>
               </div>
             </Link>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </section>
   );

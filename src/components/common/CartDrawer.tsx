@@ -200,7 +200,7 @@ export default function CartDrawer() {
   }, [isCartOpen]);
 
   const resolveColorHex = (colorName?: string): string => {
-    if (!colorName) return '#475569';
+    if (!colorName) return '#94a3b8';
     const clean = colorName.toLowerCase().trim();
 
     if (dbColoursMap[clean]) return dbColoursMap[clean];
@@ -299,36 +299,7 @@ export default function CartDrawer() {
       ctx.openAuthModal();
       return;
     }
-    if (typeof ctx.setIsAuthOpen === 'function') {
-      ctx.setIsAuthOpen(true);
-      return;
-    }
-    if (typeof ctx.setIsAuthModalOpen === 'function') {
-      ctx.setIsAuthModalOpen(true);
-      return;
-    }
-    if (typeof ctx.setShowAuthModal === 'function') {
-      ctx.setShowAuthModal(true);
-      return;
-    }
-
     window.dispatchEvent(new CustomEvent('open-auth-modal'));
-
-    setTimeout(() => {
-      const selectors = [
-        '[aria-label="User Account"]',
-        '[aria-label="Account"]',
-        '[aria-label="User Profile"]',
-        'button:has(svg.lucide-user)',
-      ];
-      for (const sel of selectors) {
-        const btn = document.querySelector(sel) as HTMLButtonElement | null;
-        if (btn) {
-          btn.click();
-          break;
-        }
-      }
-    }, 50);
   };
 
   useEffect(() => {
@@ -642,7 +613,6 @@ export default function CartDrawer() {
     }
   };
 
-  // ✅ PAYMENT SUCCESS & DEDUCT STOCK
   const handlePaymentSuccess = async (
     orderId: string,
     address: Address,
@@ -654,7 +624,6 @@ export default function CartDrawer() {
       address.building_name ? address.building_name + ', ' : ''
     }${address.street}, ${address.area}, ${address.city}, ${address.state} - ${address.pincode}`;
 
-    // 1. Database ఫంక్షన్ ద్వారా వెంటనే ఇన్వెంటరీ స్టాక్ తగ్గించడం
     try {
       await supabase.rpc('reduce_order_inventory', { order_items: itemsSnapshot });
     } catch (invErr) {
@@ -703,7 +672,6 @@ export default function CartDrawer() {
     setActiveStep('order_result');
   };
 
-  // ✅ PAYMENT FAILURE OR CANCELLATION
   const handlePaymentFailure = async (
     orderId: string,
     errorMsg: string,
@@ -956,22 +924,22 @@ export default function CartDrawer() {
   const drawerContent = (
     <div
       onClick={handleCloseModal}
-      className="fixed inset-0 z-[999] flex justify-end bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
+      className="fixed inset-0 z-[999] flex justify-end bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-300"
     >
       <aside
         onClick={(e) => e.stopPropagation()}
-        className={`relative w-full max-w-md md:max-w-lg h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 border-l cursor-default ${
+        className={`relative w-full max-w-md md:max-w-lg h-full shadow-[0_0_50px_rgba(0,0,0,0.15)] flex flex-col animate-in slide-in-from-right duration-300 border-l cursor-default bg-white text-stone-900 ${
           hasJewelleryItems
-            ? 'bg-[#030907] border-[#e5c07b]/20 text-[#f5ebd7]'
-            : 'bg-[#080d1a] border-[#00f5d4]/20 text-white'
+            ? 'border-amber-100 font-cinzel'
+            : 'border-pink-100 font-sans'
         }`}
       >
         {/* Drawer Header */}
         <div
-          className={`px-5 py-4 border-b flex items-center justify-between sticky top-0 z-20 backdrop-blur-md transition-colors ${
+          className={`px-5 py-4 border-b flex items-center justify-between sticky top-0 z-20 backdrop-blur-md transition-colors bg-white/95 ${
             hasJewelleryItems
-              ? 'bg-[#04120e]/95 text-[#f5ebd7] border-[#e5c07b]/20 shadow-md'
-              : 'bg-[#060b18]/95 text-white border-[#00f5d4]/20 shadow-md'
+              ? 'border-amber-100 text-stone-900 shadow-xs'
+              : 'border-pink-100 text-stone-900 shadow-xs'
           }`}
         >
           <div className="flex items-center gap-2.5">
@@ -980,7 +948,7 @@ export default function CartDrawer() {
                 type="button"
                 onClick={() => setActiveStep('cart')}
                 className={`p-1.5 -ml-1 rounded-full transition-colors cursor-pointer ${
-                  hasJewelleryItems ? 'hover:bg-[#0b3b2c] text-[#e5c07b]' : 'hover:bg-white/10 text-white'
+                  hasJewelleryItems ? 'hover:bg-amber-50 text-[#b38728]' : 'hover:bg-pink-50 text-[#ff2d85]'
                 }`}
                 aria-label="Back to Cart"
               >
@@ -990,10 +958,10 @@ export default function CartDrawer() {
             <div className="flex items-center gap-2">
               <ShoppingBag
                 className={`w-5 h-5 ${
-                  hasJewelleryItems ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
+                  hasJewelleryItems ? 'text-[#b38728]' : 'text-[#ff2d85]'
                 }`}
               />
-              <h2 className="text-base sm:text-lg font-serif font-bold leading-none">
+              <h2 className="text-base sm:text-lg font-bold leading-none">
                 {activeStep === 'cart'
                   ? 'Your Shopping Bag'
                   : activeStep === 'address'
@@ -1005,10 +973,10 @@ export default function CartDrawer() {
             </div>
             {activeStep === 'cart' && totalItems > 0 && (
               <span
-                className={`text-[10px] font-mono font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                   hasJewelleryItems
-                    ? 'bg-[#e5c07b] text-[#061e17]'
-                    : 'bg-[#00f5d4] text-[#040814]'
+                    ? 'bg-amber-100 text-[#b38728]'
+                    : 'bg-pink-100 text-[#ff2d85]'
                 }`}
               >
                 {totalItems} item{totalItems > 1 ? 's' : ''}
@@ -1021,8 +989,8 @@ export default function CartDrawer() {
             onClick={handleCloseModal}
             className={`p-2 rounded-full transition-all cursor-pointer ${
               hasJewelleryItems
-                ? 'hover:bg-[#0b3b2c] text-[#e5c07b]'
-                : 'hover:bg-white/10 text-neutral-300 hover:text-white'
+                ? 'hover:bg-amber-50 text-stone-500 hover:text-stone-900'
+                : 'hover:bg-pink-50 text-stone-500 hover:text-stone-900'
             }`}
             aria-label="Close Cart"
           >
@@ -1036,44 +1004,44 @@ export default function CartDrawer() {
           {activeStep === 'order_result' && paymentResult && (
             <div className="space-y-4 animate-in zoom-in-95 duration-200">
               <div
-                className={`rounded-3xl p-5 text-center border relative overflow-hidden ${
+                className={`rounded-3xl p-6 text-center border relative overflow-hidden ${
                   paymentResult.type === 'success'
-                    ? 'bg-gradient-to-b from-emerald-950/40 via-[#0b1329] to-emerald-950/20 border-emerald-500/40'
+                    ? 'bg-emerald-50/60 border-emerald-200'
                     : paymentResult.type === 'pending'
-                    ? 'bg-gradient-to-b from-amber-950/40 via-[#0b1329] to-amber-950/20 border-amber-500/40'
-                    : 'bg-gradient-to-b from-rose-950/40 via-[#0b1329] to-rose-950/20 border-rose-500/40'
+                    ? 'bg-amber-50/60 border-amber-200'
+                    : 'bg-rose-50/60 border-rose-200'
                 }`}
               >
                 <div className="flex justify-center mb-2.5">
                   {paymentResult.type === 'success' && (
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-[#040814] flex items-center justify-center shadow-lg shadow-emerald-500/30">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
                       <CheckCircle2 className="w-8 h-8 stroke-[2.2]" />
                     </div>
                   )}
                   {paymentResult.type === 'failed' && (
-                    <div className="w-14 h-14 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-500/30">
+                    <div className="w-14 h-14 rounded-2xl bg-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-500/20">
                       <XCircle className="w-8 h-8 stroke-[2.2]" />
                     </div>
                   )}
                   {paymentResult.type === 'user_dropped' && (
-                    <div className="w-14 h-14 rounded-2xl bg-neutral-800 text-white flex items-center justify-center shadow-lg shadow-neutral-700/30">
+                    <div className="w-14 h-14 rounded-2xl bg-stone-700 text-white flex items-center justify-center shadow-lg shadow-stone-700/20">
                       <RotateCcw className="w-8 h-8 stroke-[2]" />
                     </div>
                   )}
                   {paymentResult.type === 'pending' && (
-                    <div className="w-14 h-14 rounded-2xl bg-amber-500 text-[#040814] flex items-center justify-center shadow-lg shadow-amber-500/30">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/20">
                       <Clock3 className="w-8 h-8 stroke-[2.2]" />
                     </div>
                   )}
                 </div>
 
                 <span
-                  className={`text-[10px] font-mono font-extrabold uppercase tracking-[0.2em] px-3 py-1 rounded-full border ${
+                  className={`text-[10px] font-bold uppercase tracking-[0.2em] px-3 py-1 rounded-full border ${
                     paymentResult.type === 'success'
-                      ? 'bg-emerald-900/60 text-emerald-300 border-emerald-500/50'
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                       : paymentResult.type === 'pending'
-                      ? 'bg-amber-900/60 text-amber-300 border-amber-500/50'
-                      : 'bg-rose-900/60 text-rose-300 border-rose-500/50'
+                      ? 'bg-amber-100 text-amber-800 border-amber-300'
+                      : 'bg-rose-100 text-rose-800 border-rose-300'
                   }`}
                 >
                   {paymentResult.type === 'success'
@@ -1085,19 +1053,19 @@ export default function CartDrawer() {
                     : 'Payment Declined'}
                 </span>
 
-                <h3 className="text-xl font-serif font-bold text-white mt-2.5">
+                <h3 className="text-xl font-bold text-stone-900 mt-2.5">
                   {paymentResult.title}
                 </h3>
-                <p className="text-xs text-neutral-400 mt-1 max-w-xs mx-auto leading-relaxed">
+                <p className="text-xs text-stone-600 mt-1 max-w-xs mx-auto leading-relaxed">
                   {paymentResult.message}
                 </p>
 
                 {paymentResult.orderId && (
-                  <div className="mt-3 inline-block bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
-                    <span className="text-[9px] text-neutral-400 uppercase tracking-widest block font-mono">
+                  <div className="mt-3 inline-block bg-white border border-stone-200 px-3.5 py-1.5 rounded-xl shadow-xs">
+                    <span className="text-[9px] text-stone-400 uppercase tracking-widest block font-bold">
                       Order Reference
                     </span>
-                    <span className="text-xs font-mono font-bold text-[#00f5d4]">
+                    <span className={`text-xs font-bold ${hasJewelleryItems ? 'text-[#b38728]' : 'text-[#ff2d85]'}`}>
                       {paymentResult.orderId}
                     </span>
                   </div>
@@ -1106,13 +1074,13 @@ export default function CartDrawer() {
 
               {paymentResult.type === 'success' && confirmedOrder && (
                 <div className="space-y-3">
-                  <div className="border border-white/10 rounded-2xl p-4 bg-white/5 space-y-3">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                      <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                        <ShoppingBag className="w-3.5 h-3.5 text-[#00f5d4]" />
+                  <div className="border border-stone-200 rounded-2xl p-4 bg-stone-50/70 space-y-3">
+                    <div className="flex items-center justify-between border-b border-stone-200 pb-2">
+                      <span className="text-xs font-bold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <ShoppingBag className={`w-3.5 h-3.5 ${hasJewelleryItems ? 'text-[#b38728]' : 'text-[#ff2d85]'}`} />
                         Items ({confirmedOrder.items.length})
                       </span>
-                      <span className="text-xs font-serif font-bold text-[#00f5d4]">
+                      <span className={`text-xs font-bold ${hasJewelleryItems ? 'text-[#b38728]' : 'text-[#ff2d85]'}`}>
                         ₹{confirmedOrder.totalAmount.toLocaleString('en-IN')}
                       </span>
                     </div>
@@ -1121,24 +1089,24 @@ export default function CartDrawer() {
                       {confirmedOrder.items.map((item: any, idx: number) => (
                         <div
                           key={idx}
-                          className="flex items-center gap-3 bg-neutral-900/80 p-2.5 rounded-xl border border-white/10 shadow-sm"
+                          className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-stone-200 shadow-xs"
                         >
                           <img
                             src={item.image}
                             alt={item.name}
-                            className="w-12 h-14 object-cover object-top rounded-lg border border-white/10 shrink-0"
+                            className="w-12 h-14 object-cover object-top rounded-lg border border-stone-200 shrink-0"
                           />
                           <div className="flex-1 min-w-0 text-xs">
-                            <h5 className="font-bold text-white truncate leading-tight">
+                            <h5 className="font-bold text-stone-900 truncate leading-tight">
                               {item.name}
                             </h5>
-                            <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-400">
+                            <div className="flex items-center gap-2 mt-1 text-[11px] text-stone-500">
                               {item.color && <span className="capitalize">{item.color}</span>}
                               {item.size && <span>• Size: {item.size}</span>}
                               <span>• Qty: {item.qty}</span>
                             </div>
                           </div>
-                          <span className="text-xs font-bold text-white shrink-0">
+                          <span className="text-xs font-bold text-stone-900 shrink-0">
                             ₹{(item.price * item.qty).toLocaleString('en-IN')}
                           </span>
                         </div>
@@ -1146,14 +1114,14 @@ export default function CartDrawer() {
                     </div>
                   </div>
 
-                  <div className="border border-white/10 rounded-2xl p-3 bg-white/5 text-xs space-y-0.5">
-                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block font-mono">
+                  <div className="border border-stone-200 rounded-2xl p-3 bg-stone-50/70 text-xs space-y-0.5">
+                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block">
                       Delivery Address
                     </span>
-                    <p className="font-bold text-white">
+                    <p className="font-bold text-stone-900">
                       {confirmedOrder.customerName} ({confirmedOrder.customerPhone})
                     </p>
-                    <p className="text-neutral-400 leading-relaxed text-[11px]">
+                    <p className="text-stone-600 leading-relaxed text-[11px]">
                       {confirmedOrder.deliveryAddress}
                     </p>
                   </div>
@@ -1166,10 +1134,10 @@ export default function CartDrawer() {
                     <button
                       type="button"
                       onClick={handleNavigateToOrders}
-                      className={`w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg active:scale-98 transition-all cursor-pointer ${
+                      className={`w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md active:scale-98 transition-all cursor-pointer text-white ${
                         hasJewelleryItems
-                          ? 'bg-gradient-to-r from-[#e5c07b] to-[#b38728] text-[#061e17] shadow-[#e5c07b]/30'
-                          : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
+                          ? 'bg-gradient-to-r from-[#D4AF37] to-[#B8860B] shadow-amber-200 hover:brightness-105'
+                          : 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] shadow-pink-200 hover:brightness-105'
                       }`}
                     >
                       <PackageCheck className="w-4 h-4" />
@@ -1178,7 +1146,7 @@ export default function CartDrawer() {
                     <button
                       type="button"
                       onClick={handleCloseModal}
-                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-white/20 text-neutral-300 hover:bg-white/10 transition-all cursor-pointer"
+                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-stone-200 text-stone-700 hover:bg-stone-50 transition-all cursor-pointer"
                     >
                       Continue Shopping
                     </button>
@@ -1188,10 +1156,10 @@ export default function CartDrawer() {
                     <button
                       type="button"
                       onClick={() => setActiveStep('address')}
-                      className={`w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer shadow-md ${
+                      className={`w-full py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 active:scale-98 transition-all cursor-pointer shadow-md text-white ${
                         hasJewelleryItems
-                          ? 'bg-[#e5c07b] text-[#061e17]'
-                          : 'bg-[#00f5d4] text-[#040814]'
+                          ? 'bg-gradient-to-r from-[#D4AF37] to-[#B8860B]'
+                          : 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f]'
                       }`}
                     >
                       <RotateCcw className="w-4 h-4" />
@@ -1201,9 +1169,9 @@ export default function CartDrawer() {
                       href="https://wa.me/918686353574?text=Hi%20Kashvi%20Support,%20I%20need%20help%20with%20my%20order"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-emerald-500/30 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      className="w-full py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                     >
-                      <MessageCircle className="w-4 h-4 text-emerald-400" />
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
                       <span>Support on WhatsApp</span>
                     </a>
                   </>
@@ -1217,20 +1185,20 @@ export default function CartDrawer() {
             <>
               {cart.length === 0 ? (
                 <div className="py-24 flex flex-col items-center justify-center text-center space-y-3">
-                  <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-neutral-500">
+                  <div className="w-16 h-16 rounded-full bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-400">
                     <ShoppingBag className="w-8 h-8" />
                   </div>
-                  <p className="text-white font-serif font-semibold text-base">Your bag is empty</p>
-                  <p className="text-xs text-neutral-400 max-w-xs">
-                    Explore our haute couture fashion and royal jewellery vaults to add your favorites.
+                  <p className="text-stone-900 font-bold text-base">Your bag is empty</p>
+                  <p className="text-xs text-stone-500 max-w-xs leading-relaxed">
+                    Explore our prêt boutique fashion and royal jewellery vaults to add your favorites.
                   </p>
                   <button
                     type="button"
                     onClick={handleCloseModal}
-                    className={`mt-2 px-6 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                    className={`mt-2 px-6 py-2.5 rounded-full text-xs font-bold uppercase tracking-wider transition-all cursor-pointer text-white shadow-sm ${
                       hasJewelleryItems
-                        ? 'bg-[#e5c07b] text-[#061e17] hover:brightness-110'
-                        : 'bg-[#00f5d4] text-[#040814] hover:bg-white'
+                        ? 'bg-gradient-to-r from-[#D4AF37] to-[#B8860B] hover:brightness-105'
+                        : 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] hover:brightness-105'
                     }`}
                   >
                     Start Shopping
@@ -1245,13 +1213,13 @@ export default function CartDrawer() {
                     return (
                       <div
                         key={item.id}
-                        className={`flex gap-3.5 p-3 rounded-2xl border transition-all duration-300 items-center ${
+                        className={`flex gap-3.5 p-3 rounded-2xl border transition-all duration-300 items-center bg-white shadow-xs ${
                           isJewelleryItem
-                            ? 'border-[#e5c07b]/25 bg-[#061e17]/80 hover:border-[#e5c07b]'
-                            : 'border-white/10 bg-[#0f172a]/80 hover:border-[#00f5d4]'
+                            ? 'border-amber-200/80 hover:shadow-[0_4px_16px_rgba(212,175,55,0.18)]'
+                            : 'border-pink-200/80 hover:shadow-[0_4px_16px_rgba(255,45,133,0.15)]'
                         }`}
                       >
-                        <div className="w-16 h-20 rounded-xl overflow-hidden bg-neutral-900 shrink-0 border border-white/10 p-0.5 shadow-sm">
+                        <div className="w-16 h-20 rounded-xl overflow-hidden bg-stone-100 shrink-0 border border-stone-200 p-0.5 shadow-2xs">
                           <img
                             src={item.image}
                             alt={item.name}
@@ -1264,7 +1232,7 @@ export default function CartDrawer() {
                             <div className="flex items-start justify-between gap-2">
                               <h4
                                 className={`text-xs font-bold truncate leading-snug ${
-                                  isJewelleryItem ? 'font-serif text-[#f5ebd7]' : 'font-sans text-white'
+                                  isJewelleryItem ? 'font-cinzel text-stone-900' : 'font-sans text-stone-900'
                                 }`}
                               >
                                 {item.name}
@@ -1272,7 +1240,7 @@ export default function CartDrawer() {
                               <button
                                 type="button"
                                 onClick={() => removeFromCart(item.id)}
-                                className="text-neutral-400 hover:text-rose-400 transition-colors p-0.5 cursor-pointer"
+                                className="text-stone-400 hover:text-rose-500 transition-colors p-0.5 cursor-pointer"
                                 title="Remove Item"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1281,21 +1249,21 @@ export default function CartDrawer() {
 
                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                               {item.color && (
-                                <span className="inline-flex items-center gap-1 text-[10px] text-neutral-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
+                                <span className="inline-flex items-center gap-1 text-[10px] text-stone-700 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-md font-medium">
                                   <span
-                                    className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                                    className="w-2.5 h-2.5 rounded-full border border-black/10 shrink-0"
                                     style={{ backgroundColor: resolvedHex }}
                                   />
                                   <span className="capitalize">{item.color}</span>
                                 </span>
                               )}
                               {item.size && (
-                                <span className="text-[10px] font-bold text-neutral-300 bg-white/5 border border-white/10 px-2 py-0.5 rounded-md">
+                                <span className="text-[10px] font-bold text-stone-700 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-md">
                                   Size: {item.size}
                                 </span>
                               )}
                               {item.fabric && (
-                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-md bg-white/10 text-neutral-300 font-semibold font-mono">
+                                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded-md bg-stone-100 text-stone-600 font-semibold">
                                   {item.fabric}
                                 </span>
                               )}
@@ -1303,22 +1271,22 @@ export default function CartDrawer() {
                           </div>
 
                           <div className="flex items-center justify-between pt-2">
-                            <div className="inline-flex items-center gap-1 bg-white/5 border border-white/15 rounded-full px-2 py-0.5">
+                            <div className="inline-flex items-center gap-1 bg-stone-50 border border-stone-200 rounded-full px-2 py-0.5">
                               <button
                                 type="button"
                                 onClick={() => updateQty(item.id, -1)}
-                                className="text-neutral-400 hover:text-white transition-colors p-0.5 cursor-pointer"
+                                className="text-stone-500 hover:text-stone-900 transition-colors p-0.5 cursor-pointer"
                                 aria-label="Decrease quantity"
                               >
                                 <Minus className="w-2.5 h-2.5" />
                               </button>
-                              <span className="text-xs font-bold text-white w-4 text-center font-mono">
+                              <span className="text-xs font-bold text-stone-900 w-4 text-center">
                                 {item.qty}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => updateQty(item.id, 1)}
-                                className="text-neutral-400 hover:text-white transition-colors p-0.5 cursor-pointer"
+                                className="text-stone-500 hover:text-stone-900 transition-colors p-0.5 cursor-pointer"
                                 aria-label="Increase quantity"
                               >
                                 <Plus className="w-2.5 h-2.5" />
@@ -1327,7 +1295,7 @@ export default function CartDrawer() {
 
                             <span
                               className={`text-sm font-bold ${
-                                isJewelleryItem ? 'text-[#e5c07b]' : 'text-white'
+                                isJewelleryItem ? 'text-[#b38728]' : 'text-stone-950'
                               }`}
                             >
                               ₹{(item.price * item.qty).toLocaleString('en-IN')}
@@ -1346,7 +1314,7 @@ export default function CartDrawer() {
           {activeStep === 'address' && (
             <div className="space-y-4 animate-in fade-in duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-300 uppercase tracking-wider font-mono">
+                <span className="text-xs font-bold text-stone-600 uppercase tracking-wider">
                   Deliver To
                 </span>
                 <button
@@ -1354,8 +1322,8 @@ export default function CartDrawer() {
                   onClick={handleOpenAddAddressModal}
                   className={`text-xs font-bold hover:underline cursor-pointer flex items-center gap-1 px-3 py-1.5 rounded-full border ${
                     hasJewelleryItems
-                      ? 'text-[#e5c07b] bg-[#0b3b2c] border-[#e5c07b]/30'
-                      : 'text-[#00f5d4] bg-[#00f5d4]/10 border-[#00f5d4]/30'
+                      ? 'text-[#b38728] bg-amber-50 border-amber-200'
+                      : 'text-[#ff2d85] bg-pink-50 border-pink-200'
                   }`}
                 >
                   <Plus className="w-3.5 h-3.5" /> Add New
@@ -1365,14 +1333,14 @@ export default function CartDrawer() {
               {loadingAddresses ? (
                 <CringeLoader size="md" />
               ) : savedAddresses.length === 0 ? (
-                <div className="py-10 text-center border-2 border-dashed border-white/15 rounded-2xl p-6 space-y-3">
-                  <MapPin className="w-8 h-8 text-neutral-500 mx-auto" />
-                  <p className="text-xs text-neutral-400">No delivery address saved yet.</p>
+                <div className="py-10 text-center border-2 border-dashed border-stone-200 rounded-2xl p-6 space-y-3 bg-stone-50/50">
+                  <MapPin className="w-8 h-8 text-stone-400 mx-auto" />
+                  <p className="text-xs text-stone-500">No delivery address saved yet.</p>
                   <button
                     type="button"
                     onClick={handleOpenAddAddressModal}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer ${
-                      hasJewelleryItems ? 'bg-[#e5c07b] text-[#061e17]' : 'bg-[#00f5d4] text-[#040814]'
+                    className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer text-white shadow-xs ${
+                      hasJewelleryItems ? 'bg-[#D4AF37]' : 'bg-[#ff2d85]'
                     }`}
                   >
                     + Add New Delivery Address
@@ -1394,9 +1362,9 @@ export default function CartDrawer() {
                         className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-start gap-3.5 relative group ${
                           isSelected
                             ? hasJewelleryItems
-                              ? 'border-[#e5c07b] bg-[#061e17] shadow-lg shadow-[#e5c07b]/10'
-                              : 'border-[#00f5d4] bg-[#0f172a] shadow-lg shadow-[#00f5d4]/10'
-                            : 'border-white/10 bg-white/5 hover:border-white/20'
+                              ? 'border-[#D4AF37] bg-amber-50/40 shadow-sm'
+                              : 'border-[#ff2d85] bg-pink-50/40 shadow-sm'
+                            : 'border-stone-200 bg-white hover:border-stone-300'
                         }`}
                       >
                         <input
@@ -1405,30 +1373,30 @@ export default function CartDrawer() {
                           checked={isSelected}
                           onChange={() => handleSelectExistingAddress(addr)}
                           className={`mt-1 cursor-pointer ${
-                            hasJewelleryItems ? 'accent-[#e5c07b]' : 'accent-[#00f5d4]'
+                            hasJewelleryItems ? 'accent-[#D4AF37]' : 'accent-[#ff2d85]'
                           }`}
                         />
 
                         <div className="flex-1 text-xs space-y-1">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-white text-sm">{addr.name}</span>
-                              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-white/10 text-neutral-300 border border-white/10 flex items-center gap-1 font-mono">
+                              <span className="font-bold text-stone-900 text-sm">{addr.name}</span>
+                              <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600 border border-stone-200 flex items-center gap-1">
                                 {addr.address_type === 'Work' && <Briefcase className="w-2.5 h-2.5" />}
                                 {addr.address_type === 'Home' && <Home className="w-2.5 h-2.5" />}
-                                {addr.address_type === 'Others' && <Bookmark className="w-2.5 h-2.5 text-[#00f5d4]" />}
+                                {addr.address_type === 'Others' && <Bookmark className="w-2.5 h-2.5 text-[#ff2d85]" />}
                                 <span>{displayLabel}</span>
                               </span>
                             </div>
 
                             <div className="flex items-center gap-1.5">
-                              <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                              <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                                 WA: {addr.whatsapp_number}
                               </span>
                               <button
                                 type="button"
                                 onClick={(e) => handleDeleteAddress(addr.id, e)}
-                                className="text-neutral-400 hover:text-rose-400 p-1 rounded-md hover:bg-white/10 transition-colors"
+                                className="text-stone-400 hover:text-rose-500 p-1 rounded-md hover:bg-stone-100 transition-colors"
                                 title="Delete Address"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1436,17 +1404,21 @@ export default function CartDrawer() {
                             </div>
                           </div>
 
-                          <p className="text-neutral-300 leading-relaxed pt-0.5">
+                          <p className="text-stone-600 leading-relaxed pt-0.5">
                             {addr.door_no}, {addr.building_name ? `${addr.building_name}, ` : ''}
                             {addr.street}, {addr.area}
                           </p>
 
                           <div className="flex items-center justify-between pt-1">
-                            <p className="font-semibold text-neutral-200">
-                              {addr.city}, {addr.state} — <span className="font-bold text-white">{addr.pincode}</span>
+                            <p className="font-semibold text-stone-700">
+                              {addr.city}, {addr.state} — <span className="font-bold text-stone-900">{addr.pincode}</span>
                             </p>
                             {isSelected && pincodeStatus?.zoneType && (
-                              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-[#00f5d4] bg-[#00f5d4]/10 border border-[#00f5d4]/30 px-2 py-0.5 rounded-md">
+                              <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                                hasJewelleryItems
+                                  ? 'text-[#b38728] bg-amber-50 border-amber-200'
+                                  : 'text-[#ff2d85] bg-pink-50 border-pink-200'
+                              }`}>
                                 {pincodeStatus.zoneType}
                               </span>
                             )}
@@ -1464,35 +1436,31 @@ export default function CartDrawer() {
         {/* Bottom Checkout & Action Area */}
         {cart.length > 0 && activeStep !== 'order_result' && (
           <div
-            className={`p-5 border-t space-y-3 shrink-0 shadow-2xl backdrop-blur-md ${
-              hasJewelleryItems
-                ? 'bg-[#04120e]/95 border-[#e5c07b]/20'
-                : 'bg-[#060b18]/95 border-[#00f5d4]/20'
-            }`}
+            className="p-5 border-t space-y-3 shrink-0 shadow-lg bg-white border-stone-100"
           >
-            <div className="space-y-1.5 text-xs text-neutral-300">
+            <div className="space-y-1.5 text-xs text-stone-600">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span className="font-bold text-white">₹{subtotal.toLocaleString('en-IN')}</span>
+                <span className="font-bold text-stone-900">₹{subtotal.toLocaleString('en-IN')}</span>
               </div>
 
               {activeStep === 'address' && (
                 <div className="flex justify-between items-center animate-in fade-in duration-150">
-                  <span className="flex items-center gap-1">
-                    <Truck className="w-3.5 h-3.5 text-[#00f5d4]" />
+                  <span className="flex items-center gap-1 text-stone-600">
+                    <Truck className={`w-3.5 h-3.5 ${hasJewelleryItems ? 'text-[#b38728]' : 'text-[#ff2d85]'}`} />
                     Delivery Charge {pincodeStatus?.zoneType ? `(${pincodeStatus.zoneType} • ${totalWeightGrams}g)` : ''}
                   </span>
-                  <span className="font-bold text-white">
+                  <span className="font-bold text-stone-900">
                     {pincodeLoading ? '...' : `₹${shippingCharge}`}
                   </span>
                 </div>
               )}
 
-              <div className="flex justify-between text-sm font-bold text-white pt-2 border-t border-white/10">
+              <div className="flex justify-between text-sm font-bold text-stone-900 pt-2 border-t border-stone-100">
                 <span>{activeStep === 'cart' ? 'Subtotal Due' : 'Total Due'}</span>
                 <span
                   className={`text-lg font-bold ${
-                    hasJewelleryItems ? 'text-[#e5c07b]' : 'text-white'
+                    hasJewelleryItems ? 'text-[#b38728]' : 'text-stone-950'
                   }`}
                 >
                   ₹{finalPayableAmount.toLocaleString('en-IN')}
@@ -1504,10 +1472,10 @@ export default function CartDrawer() {
               <button
                 type="button"
                 onClick={handleProceedToAddress}
-                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all duration-300 active:scale-98 cursor-pointer ${
+                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-98 cursor-pointer text-white ${
                   hasJewelleryItems
-                    ? 'bg-gradient-to-r from-[#e5c07b] to-[#b38728] text-[#061e17] shadow-[#e5c07b]/30 hover:brightness-110'
-                    : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
+                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#B8860B] shadow-amber-200 hover:brightness-105'
+                    : 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] shadow-pink-200 hover:brightness-105'
                 }`}
               >
                 {!user ? (
@@ -1528,10 +1496,10 @@ export default function CartDrawer() {
                 type="button"
                 disabled={!selectedAddressId || isCheckingOut}
                 onClick={handleInstantCheckout}
-                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition-all duration-300 active:scale-98 cursor-pointer disabled:opacity-50 ${
+                className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-98 cursor-pointer text-white disabled:opacity-50 ${
                   hasJewelleryItems
-                    ? 'bg-gradient-to-r from-[#e5c07b] via-[#f7e7b4] to-[#b38728] text-[#061e17] shadow-[#e5c07b]/40 hover:brightness-110'
-                    : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/40 hover:bg-white'
+                    ? 'bg-gradient-to-r from-[#D4AF37] via-[#DFBF58] to-[#B8860B] shadow-amber-200 hover:brightness-105'
+                    : 'bg-gradient-to-r from-[#ff2d85] via-[#ff4d94] to-[#ff639f] shadow-pink-200 hover:brightness-105'
                 }`}
               >
                 {isCheckingOut ? (
@@ -1548,8 +1516,8 @@ export default function CartDrawer() {
               </button>
             )}
 
-            <div className="flex items-center justify-center gap-1.5 text-[10px] text-neutral-400 pt-0.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
+            <div className="flex items-center justify-center gap-1.5 text-[10px] text-stone-400 pt-0.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-stone-400" />
               <span>100% Secure Encrypted Checkout with {activeGatewayName}</span>
             </div>
           </div>
@@ -1560,19 +1528,15 @@ export default function CartDrawer() {
       {isAddressModalOpen && (
         <div
           onClick={() => setIsAddressModalOpen(false)}
-          className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+          className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className={`relative w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border cursor-default my-auto animate-in zoom-in-95 duration-200 p-6 space-y-4 ${
-              hasJewelleryItems
-                ? 'bg-[#051611] text-[#f5ebd7] border-[#e5c07b]/30'
-                : 'bg-[#0b1329] text-white border-white/15'
-            }`}
+            className="relative w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-stone-100 cursor-default my-auto animate-in zoom-in-95 duration-200 p-6 space-y-4 bg-white text-stone-900"
           >
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-stone-100 pb-3">
               <div className="flex items-center gap-2">
-                <MapPin className={`w-5 h-5 ${hasJewelleryItems ? 'text-[#e5c07b]' : 'text-[#00f5d4]'}`} />
+                <MapPin className={`w-5 h-5 ${hasJewelleryItems ? 'text-[#b38728]' : 'text-[#ff2d85]'}`} />
                 <h3 className="text-sm font-bold uppercase tracking-wider">
                   Add New Delivery Address
                 </h3>
@@ -1580,7 +1544,7 @@ export default function CartDrawer() {
               <button
                 type="button"
                 onClick={() => setIsAddressModalOpen(false)}
-                className="p-1 rounded-full hover:bg-white/10 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                className="p-1 rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-700 transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1588,7 +1552,7 @@ export default function CartDrawer() {
 
             <form onSubmit={handleSaveNewAddress} className="space-y-3">
               <div>
-                <label className="text-[11px] font-semibold text-neutral-300 block mb-1.5">
+                <label className="text-[11px] font-semibold text-stone-600 block mb-1.5">
                   Save Address As:
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -1606,9 +1570,9 @@ export default function CartDrawer() {
                         className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                           isSelected
                             ? hasJewelleryItems
-                              ? 'bg-[#e5c07b] text-[#061e17] border-[#e5c07b] shadow-xs'
-                              : 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
-                            : 'bg-white/5 text-neutral-300 border-white/10 hover:border-white/20'
+                              ? 'bg-[#D4AF37] text-stone-950 border-[#D4AF37] shadow-xs'
+                              : 'bg-[#ff2d85] text-white border-[#ff2d85] shadow-xs'
+                            : 'bg-stone-50 text-stone-600 border-stone-200 hover:border-stone-300'
                         }`}
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -1621,7 +1585,7 @@ export default function CartDrawer() {
 
               {formData.address_type === 'Others' && (
                 <div className="animate-in fade-in duration-200">
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Address Label Name * (e.g. Mom's House, Boutique)
                   </label>
                   <input
@@ -1630,14 +1594,14 @@ export default function CartDrawer() {
                     placeholder="Enter Custom Address Name"
                     value={formData.custom_label}
                     onChange={(e) => setFormData({ ...formData, custom_label: e.target.value })}
-                    className="w-full bg-white/5 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4] font-medium"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85] font-medium"
                   />
                 </div>
               )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Full Name *
                   </label>
                   <input
@@ -1646,12 +1610,12 @@ export default function CartDrawer() {
                     placeholder="e.g. Abhilash"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Mobile WhatsApp No. *
                   </label>
                   <input
@@ -1666,13 +1630,13 @@ export default function CartDrawer() {
                         whatsapp_number: e.target.value.replace(/\D/g, ''),
                       })
                     }
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                   Email Address (For Invoices & Tracking)
                 </label>
                 <input
@@ -1680,13 +1644,13 @@ export default function CartDrawer() {
                   placeholder="e.g. yourname@gmail.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
+                  className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Door / House / Flat No. *
                   </label>
                   <input
@@ -1695,12 +1659,12 @@ export default function CartDrawer() {
                     placeholder="e.g. 2-1-65/2"
                     value={formData.door_no}
                     onChange={(e) => setFormData({ ...formData, door_no: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Building Name / House Name
                   </label>
                   <input
@@ -1710,14 +1674,14 @@ export default function CartDrawer() {
                     onChange={(e) =>
                       setFormData({ ...formData, building_name: e.target.value })
                     }
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Street Name / Road
                   </label>
                   <input
@@ -1725,12 +1689,12 @@ export default function CartDrawer() {
                     placeholder="e.g. Bhanugundi Junction"
                     value={formData.street}
                     onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4]"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Area / Landmark
                   </label>
                   <input
@@ -1738,14 +1702,14 @@ export default function CartDrawer() {
                     placeholder="e.g. Bhanugundi"
                     value={formData.area}
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-neutral-300 focus:outline-hidden focus:border-[#00f5d4]"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-2 pt-1">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     Pincode *
                   </label>
                   <input
@@ -1755,12 +1719,12 @@ export default function CartDrawer() {
                     placeholder="533003"
                     value={formData.pincode}
                     onChange={(e) => handlePincodeChange(e.target.value)}
-                    className="w-full bg-white/5 border border-white/15 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-[#00f5d4] font-bold"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85] font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     City (Auto)
                   </label>
                   <input
@@ -1769,12 +1733,12 @@ export default function CartDrawer() {
                     readOnly
                     placeholder={pincodeLoading ? '...' : 'City'}
                     value={formData.city}
-                    className="w-full bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-xs text-neutral-300 font-medium cursor-not-allowed"
+                    className="w-full bg-stone-100 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-500 font-medium cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-300 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-600 block mb-1">
                     State (Auto)
                   </label>
                   <input
@@ -1783,7 +1747,7 @@ export default function CartDrawer() {
                     readOnly
                     placeholder={pincodeLoading ? '...' : 'State'}
                     value={formData.state}
-                    className="w-full bg-white/10 border border-white/10 rounded-xl px-3 py-2 text-xs text-neutral-300 font-medium cursor-not-allowed"
+                    className="w-full bg-stone-100 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-500 font-medium cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -1791,12 +1755,12 @@ export default function CartDrawer() {
               {pincodeStatus && (
                 <div className="text-[11px] flex items-center gap-1.5 pt-1">
                   {pincodeStatus.deliveryAvailable ? (
-                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                    <span className="text-emerald-600 font-bold flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       Delivery Available ({pincodeStatus.zoneType} — ₹{shippingCharge})
                     </span>
                   ) : (
-                    <span className="text-rose-400 font-semibold flex items-center gap-1">
+                    <span className="text-rose-600 font-semibold flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5" />
                       {pincodeStatus.message}
                     </span>
@@ -1808,17 +1772,17 @@ export default function CartDrawer() {
                 <button
                   type="button"
                   onClick={() => setIsAddressModalOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-white/20 text-neutral-300 text-xs font-bold uppercase tracking-wider hover:bg-white/10 transition-all cursor-pointer"
+                  className="flex-1 py-2.5 rounded-xl border border-stone-200 text-stone-600 text-xs font-bold uppercase tracking-wider hover:bg-stone-50 transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingAddress || pincodeStatus?.deliveryAvailable === false}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-all cursor-pointer shadow-md flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-all cursor-pointer shadow-sm text-white flex items-center justify-center gap-1.5 ${
                     hasJewelleryItems
-                      ? 'bg-[#e5c07b] text-[#061e17] hover:brightness-110'
-                      : 'bg-[#00f5d4] text-[#040814] hover:bg-white'
+                      ? 'bg-[#D4AF37] hover:brightness-105'
+                      : 'bg-[#ff2d85] hover:brightness-105'
                   }`}
                 >
                   {savingAddress ? (

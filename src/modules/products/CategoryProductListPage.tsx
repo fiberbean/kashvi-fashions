@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useTransition } from 'react';
-import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   Filter,
   ArrowUpDown,
   ChevronRight,
   Heart,
   Share2,
-  ArrowLeft,
   X,
   Plus,
   Minus,
@@ -20,15 +19,9 @@ import {
   Eye,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import HeaderBagButton from '../../components/common/HeaderBagButton';
-import HeaderUserButton from '../../components/common/HeaderUserButton';
-import HeaderHeartButton from '../../components/common/HeaderHeartButton';
 import CringeLoader from '../../components/common/CringeLoader';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
-
-import fashionLogo from '../../assets/fashion-logo.png';
-import jewelleryLogo from '../../assets/jewellery-logo.png';
 
 interface Product {
   id: string;
@@ -97,10 +90,9 @@ const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'je
 export default function CategoryProductListPage() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const selectedSub = searchParams.get('sub');
 
-  const { addToCart, openCart } = useCart();
+  const { addToCart, openCartDrawer, openCart } = useCart() as any;
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
   const [isSwitching, startTransition] = useTransition();
@@ -139,10 +131,7 @@ export default function CategoryProductListPage() {
       (selectedSub || '').toLowerCase().includes(j)
     );
 
-  const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
-  const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
-
-  // 1. Database nunchi Colours retrieve cheyadam
+  // 1. Fetch Colours from DB
   useEffect(() => {
     async function fetchColours() {
       try {
@@ -168,7 +157,7 @@ export default function CategoryProductListPage() {
   }, []);
 
   const resolveColorHex = (colorName: string): string => {
-    if (!colorName) return '#475569';
+    if (!colorName) return '#94a3b8';
     const clean = colorName.toLowerCase().trim();
 
     if (dbColoursMap[clean]) return dbColoursMap[clean];
@@ -365,7 +354,7 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 4. Reliable Dynamic Sub-Category Filtering
+  // 4. Dynamic Sub-Category Filtering
   useEffect(() => {
     if (!selectedSub) {
       setFilteredProducts(rawProducts);
@@ -684,44 +673,53 @@ export default function CategoryProductListPage() {
     setComboList((prev) => prev.filter((item) => item.id !== id));
   };
 
+  // ROBUST CART CHECKOUT ACTION (Supports both Single Item & Array Batching with full property compatibility)
   const handleFinalCheckoutAction = (shouldOpenCart: boolean = false) => {
     if (!activeProduct) return;
     const finalPrice = activeProduct.selling_price || activeProduct.price || 0;
 
+    const buildPayload = (sizeVal?: string, colorVal?: string, quantityNum: number = 1) => {
+      const s = sizeVal || 'Free Size';
+      const c = colorVal || 'Standard';
+      return {
+        id: `${activeProduct.id}-${s}-${c}`,
+        productId: activeProduct.id,
+        product_id: activeProduct.id,
+        name: activeProduct.name,
+        price: finalPrice,
+        selling_price: finalPrice,
+        mrp: activeProduct.mrp || undefined,
+        image: selectedImage,
+        image_url: selectedImage,
+        color: c,
+        size: s,
+        variant_color: c,
+        variant_size: s,
+        fabric: activeProduct.fabric || undefined,
+        quantity: quantityNum,
+        qty: quantityNum,
+        department: isJewellery ? 'jewellery' : 'fashions',
+      };
+    };
+
     if (comboList.length > 0) {
-      const itemsToAdd = comboList.map((item) => ({
-        id: `${activeProduct.id}-${item.size || 'std'}-${item.color || 'orig'}`,
-        productId: activeProduct.id,
-        name: activeProduct.name,
-        price: finalPrice,
-        mrp: activeProduct.mrp,
-        image: selectedImage,
-        color: item.color || undefined,
-        size: item.size || undefined,
-        fabric: item.fabric,
-        qty: item.qty,
-        department: isJewellery ? 'jewellery' : 'fashions',
-      }));
-      addToCart(itemsToAdd);
-    } else {
-      addToCart({
-        id: `${activeProduct.id}-${selectedSize || 'std'}-${selectedColor || 'orig'}`,
-        productId: activeProduct.id,
-        name: activeProduct.name,
-        price: finalPrice,
-        mrp: activeProduct.mrp,
-        image: selectedImage,
-        color: selectedColor || undefined,
-        size: selectedSize || undefined,
-        fabric: activeProduct.fabric,
-        qty: singleQty,
-        department: isJewellery ? 'jewellery' : 'fashions',
+      comboList.forEach((item) => {
+        const payload = buildPayload(item.size, item.color, item.qty);
+        addToCart(payload);
       });
+    } else {
+      const payload = buildPayload(selectedSize, selectedColor, singleQty);
+      addToCart(payload);
     }
 
     setActiveProduct(null);
+
     if (shouldOpenCart) {
-      openCart();
+      if (typeof openCartDrawer === 'function') {
+        openCartDrawer();
+      } else if (typeof openCart === 'function') {
+        openCart();
+      }
     }
   };
 
@@ -756,92 +754,53 @@ export default function CategoryProductListPage() {
   const totalComboPrice = totalComboItems * activeSellingPrice;
 
   return (
-    <div className={`min-h-screen ${isJewellery ? 'bg-[#030907] text-[#f5ebd7]' : 'bg-[#080d1a] text-white'}`}>
-      {/* 1. Global Header */}
-      <header
-        className={`w-full sticky top-0 z-40 backdrop-blur-md transition-all duration-300 border-b ${
-          isJewellery
-            ? 'bg-[#04120e]/95 border-[#e5c07b]/20 shadow-md'
-            : 'bg-[#060b18]/95 border-[#00f5d4]/20 shadow-md'
-        }`}
-      >
-        <div className="w-full max-w-7xl mx-auto px-4 py-2 sm:py-2.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className={`p-2 rounded-full transition-colors cursor-pointer ${
-                isJewellery ? 'hover:bg-[#0b3b2c] text-[#e5c07b]' : 'hover:bg-white/10 text-white'
-              }`}
-              title="Go Back"
-              aria-label="Go Back"
-            >
-              <ArrowLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
-
-            <Link to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`} className="inline-flex items-center group py-0.5">
-              <div
-                className={`relative h-12 w-12 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-sm border flex items-center justify-center shrink-0 ${
-                  isJewellery
-                    ? 'bg-[#061e17] border-[#e5c07b]/40 shadow-[#061e17]/40'
-                    : 'bg-[#080d1a] border-[#00f5d4]/40 shadow-[#00f5d4]/10'
-                }`}
-              >
-                <img
-                  src={currentLogo}
-                  alt={brandAlt}
-                  className="w-full h-full object-contain transition-transform duration-300 group-hover:scale-105"
-                />
-              </div>
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-2">
-            <HeaderUserButton isJewellery={isJewellery} />
-            <HeaderHeartButton isJewellery={isJewellery} />
-            <HeaderBagButton isJewellery={isJewellery} />
-          </div>
-        </div>
-      </header>
-
-      {/* 2. Sub-Category Track & Header */}
+    <div
+      className={`min-h-screen transition-colors duration-500 pb-16 ${
+        isJewellery ? 'bg-[#FBF9F5] text-stone-900 font-cinzel' : 'bg-[#FAF8F5] text-stone-900 font-sans'
+      }`}
+    >
+      {/* 1. Page Header & Arched Sub-Category Track */}
       <div
         className={`w-full py-4 sm:py-6 px-4 md:px-8 border-b transition-all duration-300 ${
           isJewellery
-            ? 'bg-gradient-to-b from-[#0b3b2c]/25 via-transparent to-transparent border-[#e5c07b]/15'
-            : 'bg-gradient-to-b from-[#ff3385]/15 via-transparent to-transparent border-[#00f5d4]/15'
+            ? 'bg-gradient-to-b from-amber-50/40 via-transparent to-transparent border-amber-100/60'
+            : 'bg-gradient-to-b from-pink-50/50 via-transparent to-transparent border-pink-100/60'
         }`}
       >
-        <div className="max-w-7xl mx-auto space-y-3">
+        <div className="max-w-7xl mx-auto space-y-4">
+          
           {/* Breadcrumb Navigation */}
-          <div className="flex items-center gap-2 text-xs text-neutral-400">
-            <Link to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`} className="hover:underline font-medium text-neutral-300">
+          <div className="flex items-center gap-2 text-xs text-stone-500">
+            <Link
+              to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`}
+              className="hover:underline font-medium text-stone-700"
+            >
               Home
             </Link>
-            <ChevronRight className="w-3.5 h-3.5 text-neutral-600" />
+            <ChevronRight className="w-3 h-3 text-stone-400" />
             <span className="capitalize">{isJewellery ? 'jewellery' : department}</span>
-            <ChevronRight className="w-3.5 h-3.5 text-neutral-600" />
+            <ChevronRight className="w-3 h-3 text-stone-400" />
             <span
               className={`font-semibold capitalize ${
-                isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
+                isJewellery ? 'text-[#b38728]' : 'text-[#ff2d85]'
               }`}
             >
               {categoryName || (isJewellery ? 'Jewellery' : 'Collection')}
             </span>
             {selectedSub && (
               <>
-                <ChevronRight className="w-3.5 h-3.5 text-neutral-600" />
-                <span className="text-white font-medium">{selectedSub}</span>
+                <ChevronRight className="w-3 h-3 text-stone-400" />
+                <span className="text-stone-900 font-bold">{selectedSub}</span>
               </>
             )}
           </div>
 
-          {/* Title & Items Counter with Compact Inline CringeLoader */}
+          {/* Title & Items Counter */}
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-1.5">
             <div className="flex items-center gap-3">
               <h1
                 className={`text-2xl sm:text-3xl font-bold capitalize ${
-                  isJewellery ? 'font-serif text-[#f5ebd7]' : 'font-sans text-white tracking-tight'
+                  isJewellery ? 'font-cinzel text-stone-900 tracking-wider' : 'font-sans text-stone-950 tracking-tight'
                 }`}
               >
                 {selectedSub || categoryName || (isJewellery ? 'Jewellery Collection' : 'Collection')}
@@ -849,132 +808,75 @@ export default function CategoryProductListPage() {
               {isSwitching && <CringeLoader size="sm" />}
             </div>
 
-            <span className="text-xs text-neutral-400 font-mono">
+            <span className="text-xs text-stone-500 font-medium">
               {productsLoading || isSwitching ? (
-                <span className="inline-block w-20 h-4 bg-neutral-800 animate-pulse rounded-md"></span>
+                <span className="inline-block w-20 h-4 bg-stone-200 animate-pulse rounded-md"></span>
               ) : (
                 `Showing ${sortedProducts.length} items`
               )}
             </span>
           </div>
 
-          {/* SCROLLABLE SUB-CATEGORY TRACK */}
-          <div className="w-full overflow-x-auto pb-3 pt-3 px-1 no-scrollbar scroll-smooth">
-            <div className="flex items-start justify-start sm:justify-center gap-3 sm:gap-4 min-w-max mx-auto px-2">
+          {/* SUB-CATEGORY TRACK: Stroke-Free Arched Windows with Baby Pink / Gold Shadow */}
+          <div className="w-full flex items-center justify-center overflow-x-auto pb-4 pt-2 px-2 no-scrollbar scroll-smooth">
+            <div className="flex items-start justify-center gap-4 sm:gap-5 min-w-max mx-auto">
               {headerLoading && subCategories.length === 0 ? (
                 <>
-                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                  {[1, 2, 3, 4].map((i) => (
                     <div
                       key={i}
-                      className="w-[64px] h-[85px] rounded-lg bg-neutral-800/60 animate-pulse border border-neutral-700/50 shrink-0"
+                      className="w-[84px] h-[116px] rounded-t-full rounded-b-2xl bg-stone-200/70 animate-pulse shrink-0"
                     />
                   ))}
                 </>
               ) : (
-                subCategories.map((sub, idx) => {
+                subCategories.map((sub) => {
                   const isActive = cleanStr(selectedSub) === cleanStr(sub.name);
-                  const tilts = ['rotate-[-1.5deg]', 'rotate-[1.5deg]', 'rotate-[-1deg]', 'rotate-[1.2deg]'];
-                  const hangTilt = tilts[idx % tilts.length];
 
-                  // 2A. JEWELLERY: COMPACT WALL STUD + HANGING GOLD RING
-                  if (isJewellery) {
-                    return (
-                      <button
-                        key={sub.id}
-                        type="button"
-                        onClick={() => handleSubSelect(sub.name)}
-                        className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[72px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
-                      >
-                        <div className="relative w-full flex flex-col items-center pt-2">
-                          <div className="absolute -top-2 w-2 h-2 rounded-full bg-gradient-to-tr from-[#785918] via-[#e5c07b] to-[#fff] shadow-[0_2px_4px_rgba(0,0,0,0.8)] z-30 border border-[#b38728] flex items-center justify-center">
-                            <div className="w-0.5 h-0.5 rounded-full bg-[#3d2c0b]" />
-                          </div>
-
-                          <div
-                            className={`absolute -top-1.5 w-4.5 h-4.5 rounded-full border-[2px] bg-transparent z-20 transition-all ${
-                              isActive
-                                ? 'border-[#fef08a] shadow-[0_0_12px_#fde68a]'
-                                : 'border-[#e5c07b] shadow-[0_2px_6px_rgba(229,192,123,0.45)] group-hover:shadow-[0_0_10px_#e5c07b]'
-                            }`}
-                          />
-
-                          <div className="absolute top-2 w-0.5 h-1.5 bg-gradient-to-b from-[#e5c07b] to-[#b38728] rounded-xs shadow-xs z-25" />
-
-                          <div
-                            className={`relative w-full h-[74px] sm:h-[82px] rounded-md p-[1px] shadow-[0_6px_14px_rgba(0,0,0,0.85)] transition-all duration-300 flex flex-col mt-1 ${
-                              isActive
-                                ? 'bg-gradient-to-b from-[#fde68a] via-[#e5c07b] to-[#fde68a] ring-2 ring-[#e5c07b] shadow-[0_0_15px_rgba(229,192,123,0.5)]'
-                                : 'bg-gradient-to-b from-[#e5c07b] via-[#946e20] to-[#e5c07b] group-hover:shadow-[0_8px_18px_rgba(229,192,123,0.3)]'
-                            }`}
-                          >
-                            <div className="w-full h-full rounded-[4px] overflow-hidden bg-[#061e17] relative border border-[#0b3b2c] pointer-events-none">
-                              <img
-                                src={
-                                  sub.image_url ||
-                                  'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'
-                                }
-                                alt={sub.name}
-                                className="w-full h-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
-                                loading="lazy"
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-[#04120e]/90 via-transparent to-transparent opacity-75 group-hover:opacity-30 transition-opacity" />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-1.5 w-full px-0.5 pointer-events-none min-h-[22px] flex items-center justify-center">
-                          <span
-                            className={`block text-[9px] font-serif font-bold transition-colors whitespace-normal break-words leading-tight py-0.5 px-1 rounded-xs text-center w-full shadow-xs ${
-                              isActive
-                                ? 'bg-[#e5c07b] text-[#061e17] border border-[#fde68a]'
-                                : 'bg-[#061e17]/95 border border-[#e5c07b]/30 text-[#f5ebd7] group-hover:text-[#e5c07b] group-hover:border-[#e5c07b]'
-                            }`}
-                          >
-                            {sub.name}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  }
-
-                  // 2B. FASHIONS: COMPACT TAPED PAPER POSTER
                   return (
                     <button
                       key={sub.id}
                       type="button"
                       onClick={() => handleSubSelect(sub.name)}
-                      className={`group shrink-0 flex flex-col items-center w-[66px] sm:w-[74px] text-center transition-all duration-300 active:scale-95 cursor-pointer focus:outline-hidden ${hangTilt} hover:rotate-0 hover:scale-105 hover:z-20`}
+                      className="group shrink-0 flex flex-col items-center w-[84px] sm:w-[94px] text-center cursor-pointer active:scale-95 transition-all duration-300"
                     >
-                      <div className="relative w-full flex flex-col items-center pt-1.5">
-                        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-6 h-2.5 bg-white/45 backdrop-blur-xs border-y border-white/60 shadow-xs z-30 transform -rotate-2 group-hover:rotate-0 transition-transform pointer-events-none" />
-
-                        <div
-                          className={`relative w-full h-[76px] sm:h-[84px] rounded-xs p-0.5 bg-[#161c2e] border transition-all duration-300 flex flex-col shadow-[0_8px_16px_rgba(0,0,0,0.85)] ${
-                            isActive
-                              ? 'border-[#00f5d4] ring-2 ring-[#00f5d4]/50 shadow-[0_0_15px_rgba(0,245,212,0.4)]'
-                              : 'border-white/20 group-hover:border-[#ff3385] group-hover:shadow-[0_8px_18px_rgba(255,51,133,0.3)]'
-                          }`}
-                        >
-                          <div className="w-full h-full rounded-xs overflow-hidden bg-[#0a0f1d] relative pointer-events-none">
-                            <img
-                              src={
-                                sub.image_url ||
-                                'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80'
-                              }
-                              alt={sub.name}
-                              className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-110 filter brightness-95 group-hover:brightness-105"
-                              loading="lazy"
-                            />
-                          </div>
-                        </div>
+                      {/* Arched Window Shape */}
+                      <div
+                        className={`relative w-full h-[116px] sm:h-[126px] rounded-t-full rounded-b-2xl overflow-hidden bg-stone-100 transition-all duration-300 ${
+                          isJewellery
+                            ? isActive
+                              ? 'shadow-[0_12px_28px_rgba(212,175,55,0.7),0_4px_12px_rgba(212,175,55,0.4)] ring-2 ring-[#D4AF37]'
+                              : 'shadow-[0_8px_20px_rgba(212,175,55,0.38),0_2px_6px_rgba(212,175,55,0.2)] group-hover:shadow-[0_12px_28px_rgba(212,175,55,0.65)]'
+                            : isActive
+                            ? 'shadow-[0_12px_28px_rgba(255,140,165,0.8),0_4px_12px_rgba(255,182,193,0.5)] ring-2 ring-[#ff2d85]'
+                            : 'shadow-[0_8px_20px_rgba(255,182,193,0.55),0_2px_6px_rgba(255,192,203,0.3)] group-hover:shadow-[0_12px_28px_rgba(255,150,175,0.75)]'
+                        }`}
+                      >
+                        <img
+                          src={
+                            sub.image_url ||
+                            (isJewellery
+                              ? 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'
+                              : 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=300&q=80')
+                          }
+                          alt={sub.name}
+                          className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-110"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent opacity-40 group-hover:opacity-15 transition-opacity" />
                       </div>
 
-                      <div className="mt-1.5 w-full px-0.5 pointer-events-none min-h-[22px] flex items-center justify-center">
+                      {/* Text Tag with Multi-line Text Wrap and Equal Height */}
+                      <div className="mt-2 w-full px-0.5 min-h-[34px] flex items-center justify-center">
                         <span
-                          className={`block text-[9px] font-mono font-bold uppercase transition-colors whitespace-normal break-words leading-tight py-0.5 px-0.5 rounded-xs text-center w-full shadow-xs ${
-                            isActive
-                              ? 'bg-[#00f5d4] text-[#060b18] border border-[#00f5d4]'
-                              : 'bg-[#0d1426] border border-white/20 text-neutral-200 group-hover:text-[#ff3385] group-hover:border-[#ff3385]'
+                          className={`block text-[11px] leading-snug whitespace-normal break-words text-center transition-colors ${
+                            isJewellery
+                              ? `font-cinzel font-bold uppercase tracking-wide ${
+                                  isActive ? 'text-[#b38728]' : 'text-stone-800 group-hover:text-[#b38728]'
+                                }`
+                              : `font-sans font-semibold tracking-tight ${
+                                  isActive ? 'text-[#ff2d85]' : 'text-stone-800 group-hover:text-[#ff2d85]'
+                                }`
                           }`}
                         >
                           {sub.name}
@@ -989,26 +891,26 @@ export default function CategoryProductListPage() {
         </div>
       </div>
 
-      {/* 3. Toolbar */}
+      {/* 2. Filter & Sort Toolbar */}
       <div
         className={`max-w-7xl mx-auto px-4 md:px-8 py-3.5 flex items-center justify-between border-b ${
-          isJewellery ? 'border-[#e5c07b]/15' : 'border-white/10'
+          isJewellery ? 'border-amber-100/70' : 'border-stone-200/80'
         }`}
       >
-        <div className="flex items-center gap-2 text-xs text-neutral-400">
-          <Filter className="w-3.5 h-3.5" />
+        <div className="flex items-center gap-2 text-xs text-stone-500">
+          <Filter className="w-3.5 h-3.5 text-stone-600" />
           <span>
-            Filters Active: <b className="text-white">{selectedSub || categoryName || 'All'}</b>
+            Filters Active: <b className="text-stone-900">{selectedSub || categoryName || 'All'}</b>
           </span>
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <ArrowUpDown className="w-3.5 h-3.5 text-neutral-400" />
+          <ArrowUpDown className="w-3.5 h-3.5 text-stone-500" />
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className={`bg-[#0c1427] border rounded-lg px-2.5 py-1 text-xs text-white focus:outline-hidden cursor-pointer ${
-              isJewellery ? 'border-[#e5c07b]/30' : 'border-white/20'
+            className={`bg-white border rounded-xl px-3 py-1.5 text-xs text-stone-800 focus:outline-hidden cursor-pointer shadow-xs ${
+              isJewellery ? 'border-amber-200/80' : 'border-stone-200'
             }`}
           >
             <option value="featured">Featured</option>
@@ -1018,17 +920,17 @@ export default function CategoryProductListPage() {
         </div>
       </div>
 
-      {/* 4. Products Grid with Reusable CringeLoader */}
+      {/* 3. Products Grid */}
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 min-h-[380px]">
         {productsLoading || isSwitching ? (
           <CringeLoader size="lg" />
         ) : sortedProducts.length === 0 ? (
           <div className="py-24 text-center space-y-3">
-            <p className="text-neutral-400 text-sm">No products found in this collection.</p>
+            <p className="text-stone-500 text-sm">No products found in this collection.</p>
             <Link
               to={`/?tab=${isJewellery ? 'jewellery' : 'fashions'}`}
               className={`inline-block text-xs font-bold underline ${
-                isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
+                isJewellery ? 'text-[#b38728]' : 'text-[#ff2d85]'
               }`}
             >
               Return to Home
@@ -1048,26 +950,27 @@ export default function CategoryProductListPage() {
                 <div
                   key={product.id}
                   onClick={() => handleOpenPopModel(product)}
-                  className={`group relative rounded-2xl overflow-hidden border transition-all duration-300 flex flex-col cursor-pointer shadow-lg hover:shadow-2xl animate-in fade-in duration-150 ${
+                  className={`group relative rounded-2xl overflow-hidden bg-white border transition-all duration-300 flex flex-col cursor-pointer ${
                     isJewellery
-                      ? 'bg-[#061e17]/90 border-[#e5c07b]/25 hover:border-[#e5c07b]'
-                      : 'bg-[#0f172a]/90 border-[#1e293b] hover:border-[#00f5d4]'
+                      ? 'border-amber-100/70 shadow-[0_6px_20px_rgba(212,175,55,0.12)] hover:shadow-[0_12px_28px_rgba(212,175,55,0.25)] hover:border-amber-300'
+                      : 'border-stone-200/80 shadow-[0_6px_20px_rgba(0,0,0,0.04)] hover:shadow-[0_12px_28px_rgba(255,45,133,0.18)] hover:border-pink-300'
                   }`}
                 >
-                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-neutral-900">
+                  <div className="relative aspect-[3/4] w-full overflow-hidden bg-stone-100">
                     <img
                       src={imageUrl}
                       alt={product.name}
-                      className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-108"
+                      className="w-full h-full object-cover object-top transition-transform duration-700 ease-out group-hover:scale-105"
                       loading="lazy"
                     />
 
-                    <div className="absolute top-3 right-3 flex items-center gap-1.5 z-20">
+                    {/* Floating Controls */}
+                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-20">
                       <button
                         type="button"
                         aria-label="Share Product"
                         onClick={(e) => handleShareProduct(e, product)}
-                        className={`w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white transition-all flex items-center justify-center border border-white/10 ${
+                        className={`w-8 h-8 rounded-full bg-white/85 hover:bg-white text-stone-700 transition-all flex items-center justify-center shadow-sm backdrop-blur-xs ${
                           isCopied ? 'bg-emerald-600 text-white' : ''
                         }`}
                         title="Share Product"
@@ -1079,42 +982,42 @@ export default function CategoryProductListPage() {
                         type="button"
                         aria-label={isFav ? 'Remove from Wishlist' : 'Add to Wishlist'}
                         onClick={(e) => handleWishlistToggle(e, product)}
-                        className="w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white transition-all flex items-center justify-center border border-white/10"
+                        className="w-8 h-8 rounded-full bg-white/85 hover:bg-white text-stone-700 transition-all flex items-center justify-center shadow-sm backdrop-blur-xs"
                       >
                         <Heart
                           className={`w-3.5 h-3.5 ${
                             isFav
                               ? isJewellery
-                                ? 'fill-[#e5c07b] text-[#e5c07b]'
-                                : 'fill-[#ff3385] text-[#ff3385]'
-                              : 'text-neutral-400 hover:text-white'
+                                ? 'fill-[#D4AF37] text-[#D4AF37]'
+                                : 'fill-[#ff2d85] text-[#ff2d85]'
+                              : 'text-stone-500 hover:text-stone-900'
                           }`}
                         />
                       </button>
                     </div>
 
-                    <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-10">
+                    <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10">
                       {discountPercent > 0 && (
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shadow-md backdrop-blur-md ${
+                          className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-wider shadow-xs backdrop-blur-md ${
                             isJewellery
-                              ? 'bg-[#0b3b2c] text-[#e5c07b] border border-[#e5c07b]/40'
-                              : 'bg-[#ff3385] text-white border border-[#ff3385]/50'
+                              ? 'bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-stone-950'
+                              : 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] text-white'
                           }`}
                         >
                           {discountPercent}% OFF
                         </span>
                       )}
                       {product.fabric && (
-                        <span className="px-2 py-0.5 rounded-md text-[9px] font-medium bg-black/70 text-white backdrop-blur-xs w-max border border-white/10">
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-semibold bg-white/80 text-stone-800 backdrop-blur-xs w-max border border-stone-200/50">
                           {product.fabric}
                         </span>
                       )}
                     </div>
 
-                    <div className="absolute inset-x-0 bottom-0 py-2.5 px-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-center gap-1.5 text-white transform translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out">
+                    <div className="absolute inset-x-0 bottom-0 py-2.5 px-3 bg-gradient-to-t from-stone-900/80 via-stone-900/30 to-transparent flex items-center justify-center gap-1.5 text-white transform translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out">
                       <Eye className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-widest">
+                      <span className="text-[10px] font-bold uppercase tracking-widest">
                         Quick View
                       </span>
                     </div>
@@ -1124,8 +1027,8 @@ export default function CategoryProductListPage() {
                     <div>
                       {(product.sub_category || product.sub_category_name) && (
                         <span
-                          className={`text-[9px] uppercase tracking-[0.2em] font-mono font-bold block mb-1 ${
-                            isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
+                          className={`text-[9px] uppercase tracking-[0.2em] font-semibold block mb-1 ${
+                            isJewellery ? 'text-[#b38728] font-cinzel' : 'text-[#ff2d85]'
                           }`}
                         >
                           {product.sub_category || product.sub_category_name}
@@ -1134,35 +1037,35 @@ export default function CategoryProductListPage() {
                       <h3
                         className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug transition-colors ${
                           isJewellery
-                            ? 'font-serif text-[#f5ebd7]'
-                            : 'font-sans text-neutral-200 group-hover:text-white'
+                            ? 'font-cinzel text-stone-900'
+                            : 'font-sans text-stone-900 group-hover:text-[#ff2d85]'
                         }`}
                       >
                         {product.name}
                       </h3>
                     </div>
 
-                    <div className="pt-2 border-t border-white/10 flex items-baseline justify-between">
+                    <div className="pt-2 border-t border-stone-100 flex items-baseline justify-between">
                       <div className="flex items-baseline gap-2">
                         <span
                           className={`text-sm sm:text-base font-bold ${
-                            isJewellery ? 'text-[#e5c07b]' : 'text-white'
+                            isJewellery ? 'text-[#b38728]' : 'text-stone-950'
                           }`}
                         >
                           ₹{currentPrice.toLocaleString('en-IN')}
                         </span>
                         {originalPrice && (
-                          <span className="text-[11px] text-neutral-400 line-through">
+                          <span className="text-[11px] text-stone-400 line-through">
                             ₹{originalPrice.toLocaleString('en-IN')}
                           </span>
                         )}
                       </div>
 
                       <span
-                        className={`text-[10px] font-mono font-bold uppercase tracking-wider py-1 px-2.5 rounded-full transition-all ${
+                        className={`text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-full transition-all ${
                           isJewellery
-                            ? 'bg-[#0b3b2c] text-[#e5c07b] border border-[#e5c07b]/40 group-hover:bg-[#e5c07b] group-hover:text-[#061e17]'
-                            : 'bg-white/10 text-[#00f5d4] border border-[#00f5d4]/40 group-hover:bg-[#00f5d4] group-hover:text-[#040814]'
+                            ? 'bg-amber-50 text-[#b38728] border border-amber-200 group-hover:bg-[#D4AF37] group-hover:text-stone-950'
+                            : 'bg-pink-50 text-[#ff2d85] border border-pink-200 group-hover:bg-[#ff2d85] group-hover:text-white'
                         }`}
                       >
                         Select
@@ -1176,24 +1079,20 @@ export default function CategoryProductListPage() {
         )}
       </div>
 
-      {/* 5. QUICK VIEW POP MODEL */}
+      {/* 4. QUICK VIEW POPUP MODAL */}
       {activeProduct && (
         <div
           onClick={() => setActiveProduct(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-stone-900/50 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className={`relative w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden border cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col ${
-              isJewellery
-                ? 'bg-[#051611] text-[#f5ebd7] border-[#e5c07b]/30'
-                : 'bg-[#0b1329] text-white border-white/15'
-            }`}
+            className="relative w-full max-w-4xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.25)] overflow-hidden bg-white border border-stone-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col text-stone-900"
           >
             <button
               type="button"
               onClick={() => setActiveProduct(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white text-white hover:text-black transition-all shadow-xs cursor-pointer z-30"
+              className="absolute top-4 right-4 p-2 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-700 transition-all cursor-pointer z-30"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
@@ -1209,12 +1108,12 @@ export default function CategoryProductListPage() {
                         key={idx}
                         type="button"
                         onClick={() => setSelectedImage(img.url)}
-                        className={`w-14 h-18 sm:w-16 sm:h-20 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer bg-neutral-900 flex items-center justify-center ${
+                        className={`w-14 h-18 sm:w-16 sm:h-20 rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer bg-stone-100 flex items-center justify-center ${
                           selectedImage === img.url
                             ? isJewellery
-                              ? 'border-[#e5c07b] ring-2 ring-[#e5c07b]/30'
-                              : 'border-[#00f5d4] ring-2 ring-[#00f5d4]/30'
-                            : 'border-white/20 hover:border-white/40'
+                              ? 'border-[#D4AF37] ring-2 ring-amber-200'
+                              : 'border-[#ff2d85] ring-2 ring-pink-200'
+                            : 'border-stone-200 hover:border-stone-300'
                         }`}
                       >
                         <img src={img.url} alt={`Preview ${idx + 1}`} className="w-full h-full object-cover object-top" />
@@ -1225,7 +1124,7 @@ export default function CategoryProductListPage() {
 
                 <div
                   onClick={() => setIsZoomOpen(true)}
-                  className="flex-1 w-full relative aspect-[3/4] max-h-[440px] rounded-2xl overflow-hidden bg-neutral-900 border border-white/10 group cursor-zoom-in shadow-md"
+                  className="flex-1 w-full relative aspect-[3/4] max-h-[440px] rounded-2xl overflow-hidden bg-stone-100 border border-stone-200/80 group cursor-zoom-in shadow-xs"
                 >
                   <img
                     src={selectedImage}
@@ -1245,8 +1144,8 @@ export default function CategoryProductListPage() {
                   <div>
                     {(activeProduct.sub_category || activeProduct.sub_category_name) && (
                       <span
-                        className={`text-[10px] font-mono font-bold uppercase tracking-wider ${
-                          isJewellery ? 'text-[#e5c07b]' : 'text-[#ff3385]'
+                        className={`text-[10px] font-bold uppercase tracking-wider ${
+                          isJewellery ? 'text-[#b38728] font-cinzel' : 'text-[#ff2d85]'
                         }`}
                       >
                         {activeProduct.sub_category || activeProduct.sub_category_name}
@@ -1254,7 +1153,7 @@ export default function CategoryProductListPage() {
                     )}
                     <h2
                       className={`text-xl sm:text-2xl font-bold mt-0.5 leading-snug ${
-                        isJewellery ? 'font-serif text-[#f5ebd7]' : 'font-sans text-white'
+                        isJewellery ? 'font-cinzel text-stone-900' : 'font-sans text-stone-950'
                       }`}
                     >
                       {activeProduct.name}
@@ -1265,21 +1164,21 @@ export default function CategoryProductListPage() {
                   <div className="flex items-baseline gap-2.5 pt-0.5">
                     <span
                       className={`text-xl sm:text-2xl font-bold ${
-                        isJewellery ? 'text-[#e5c07b]' : 'text-white'
+                        isJewellery ? 'text-[#b38728]' : 'text-stone-950'
                       }`}
                     >
                       ₹{activeSellingPrice.toLocaleString('en-IN')}
                     </span>
                     {activeMrp > activeSellingPrice && (
                       <>
-                        <span className="text-sm text-neutral-400 line-through">
+                        <span className="text-sm text-stone-400 line-through">
                           ₹{activeMrp.toLocaleString('en-IN')}
                         </span>
                         <span
                           className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
                             isJewellery
-                              ? 'text-[#e5c07b] bg-[#0b3b2c] border border-[#e5c07b]/30'
-                              : 'text-[#00f5d4] bg-[#00f5d4]/10 border border-[#00f5d4]/30'
+                              ? 'text-[#b38728] bg-amber-50 border border-amber-200'
+                              : 'text-[#ff2d85] bg-pink-50 border border-pink-200'
                           }`}
                         >
                           {activeDiscount}% OFF
@@ -1288,12 +1187,12 @@ export default function CategoryProductListPage() {
                     )}
                   </div>
 
-                  <hr className="border-white/10" />
+                  <hr className="border-stone-100" />
 
                   {/* Stock Check Alert */}
                   {isOutOfStock ? (
-                    <div className="py-2.5 px-3 rounded-xl bg-rose-500/10 border border-rose-500/30">
-                      <p className="text-xs font-bold text-rose-400 uppercase tracking-wider text-center">
+                    <div className="py-2.5 px-3 rounded-xl bg-rose-50 border border-rose-200">
+                      <p className="text-xs font-bold text-rose-600 uppercase tracking-wider text-center">
                         Out of Stock
                       </p>
                     </div>
@@ -1302,8 +1201,8 @@ export default function CategoryProductListPage() {
                       {/* 1. Database-driven Exact Color Shade Circles */}
                       {showColors.length > 0 && (
                         <div className="space-y-2">
-                          <span className="text-xs font-semibold text-neutral-300 block">
-                            Color Shade: <b className="capitalize text-white">{selectedColor}</b>
+                          <span className="text-xs font-semibold text-stone-600 block">
+                            Color Shade: <b className="capitalize text-stone-900">{selectedColor}</b>
                           </span>
 
                           <div className="flex flex-wrap items-center gap-3">
@@ -1318,20 +1217,15 @@ export default function CategoryProductListPage() {
                                   type="button"
                                   onClick={() => handleColorShadeClick(cName)}
                                   title={cName}
-                                  className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-md ${
+                                  className={`relative w-8 h-8 rounded-full transition-all flex items-center justify-center cursor-pointer shadow-xs ${
                                     isSelected
                                       ? isJewellery
-                                        ? 'ring-2 ring-offset-2 ring-offset-[#051611] ring-[#e5c07b] scale-110'
-                                        : 'ring-2 ring-offset-2 ring-offset-[#0b1329] ring-[#00f5d4] scale-110'
-                                      : 'hover:scale-105 border border-white/20'
+                                        ? 'ring-2 ring-offset-2 ring-offset-white ring-[#D4AF37] scale-110'
+                                        : 'ring-2 ring-offset-2 ring-offset-white ring-[#ff2d85] scale-110'
+                                      : 'hover:scale-105 border border-stone-300'
                                   }`}
                                   style={{
                                     backgroundColor: resolvedHex,
-                                    boxShadow: isSelected
-                                      ? isJewellery
-                                        ? '0 0 12px rgba(229, 192, 123, 0.4)'
-                                        : '0 0 12px rgba(0, 245, 212, 0.4)'
-                                      : undefined,
                                   }}
                                 >
                                   {isSelected && (
@@ -1351,8 +1245,8 @@ export default function CategoryProductListPage() {
                       {/* 2. Size Selection */}
                       {showSizes.length > 0 && (
                         <div className="space-y-2 pt-1">
-                          <span className="text-xs font-semibold text-neutral-300 block">
-                            Select Size: <b className="text-white">{selectedSize}</b>
+                          <span className="text-xs font-semibold text-stone-600 block">
+                            Select Size: <b className="text-stone-900">{selectedSize}</b>
                           </span>
 
                           <div className="flex flex-wrap gap-2">
@@ -1366,9 +1260,9 @@ export default function CategoryProductListPage() {
                                   className={`min-w-11 h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                                     isSelected
                                       ? isJewellery
-                                        ? 'bg-[#e5c07b] text-[#061e17] border-[#e5c07b] shadow-xs'
-                                        : 'bg-[#00f5d4] text-[#040814] border-[#00f5d4] shadow-xs'
-                                      : 'bg-white/5 text-neutral-200 border-white/20 hover:border-white/40'
+                                        ? 'bg-[#D4AF37] text-stone-950 border-[#D4AF37] shadow-xs'
+                                        : 'bg-[#ff2d85] text-white border-[#ff2d85] shadow-xs'
+                                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-stone-300'
                                   }`}
                                 >
                                   {sz}
@@ -1381,24 +1275,24 @@ export default function CategoryProductListPage() {
 
                       {/* 3. Quantity Counter */}
                       <div className="space-y-1.5 pt-1">
-                        <span className="text-xs font-semibold text-neutral-300 block">
+                        <span className="text-xs font-semibold text-stone-600 block">
                           Quantity:
                         </span>
-                        <div className="inline-flex items-center border border-white/20 rounded-xl p-1 bg-white/5">
+                        <div className="inline-flex items-center border border-stone-200 rounded-xl p-1 bg-stone-50">
                           <button
                             type="button"
                             onClick={() => setSingleQty((prev) => Math.max(1, prev - 1))}
-                            className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
+                            className="w-7 h-7 rounded-lg hover:bg-white flex items-center justify-center text-stone-600 transition-colors cursor-pointer"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
-                          <span className="w-8 text-center text-xs font-bold text-white">
+                          <span className="w-8 text-center text-xs font-bold text-stone-900">
                             {singleQty}
                           </span>
                           <button
                             type="button"
                             onClick={() => setSingleQty((prev) => prev + 1)}
-                            className="w-7 h-7 rounded-lg hover:bg-white/10 flex items-center justify-center text-neutral-300 transition-colors cursor-pointer"
+                            className="w-7 h-7 rounded-lg hover:bg-white flex items-center justify-center text-stone-600 transition-colors cursor-pointer"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
@@ -1413,8 +1307,8 @@ export default function CategoryProductListPage() {
                             onClick={handleAddVariant}
                             className={`w-full py-2.5 px-4 rounded-xl border-2 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98 ${
                               isJewellery
-                                ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b] hover:text-[#061e17]'
-                                : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4] hover:text-[#040814]'
+                                ? 'border-[#D4AF37] text-[#b38728] hover:bg-amber-50'
+                                : 'border-[#ff2d85] text-[#ff2d85] hover:bg-pink-50'
                             }`}
                           >
                             <Plus className="w-4 h-4" />
@@ -1428,7 +1322,7 @@ export default function CategoryProductListPage() {
                       {/* 5. Multi-Variants Combo List */}
                       {comboList.length > 0 && (
                         <div className="space-y-2 pt-1">
-                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block">
+                          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider block">
                             Selected Variants ({comboList.length})
                           </span>
 
@@ -1440,11 +1334,11 @@ export default function CategoryProductListPage() {
                               return (
                                 <div
                                   key={item.id}
-                                  style={{ backgroundColor: item.color ? hexBg : '#1e293b' }}
-                                  className={`flex items-center justify-between pl-2 pr-1 py-1 rounded-full shadow-xs transition-all duration-200 border border-black/20 text-[11px] ${
+                                  style={{ backgroundColor: item.color ? hexBg : '#e2e8f0' }}
+                                  className={`flex items-center justify-between pl-2 pr-1 py-1 rounded-full shadow-xs transition-all duration-200 border border-black/10 text-[11px] ${
                                     item.color
-                                      ? light ? 'text-neutral-900' : 'text-white'
-                                      : 'text-white'
+                                      ? light ? 'text-stone-900' : 'text-white'
+                                      : 'text-stone-900'
                                   }`}
                                 >
                                   <div className="flex items-center gap-1.5 min-w-0 pr-1 leading-none">
@@ -1459,7 +1353,7 @@ export default function CategoryProductListPage() {
                                   <div className="flex items-center gap-1 shrink-0">
                                     <div
                                       className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded-full backdrop-blur-xs ${
-                                        light ? 'bg-black/10 text-neutral-900' : 'bg-white/25 text-white'
+                                        light ? 'bg-black/10 text-stone-900' : 'bg-white/30 text-white'
                                       }`}
                                     >
                                       <button
@@ -1485,7 +1379,7 @@ export default function CategoryProductListPage() {
                                       type="button"
                                       onClick={() => removeComboItem(item.id)}
                                       className={`w-4 h-4 rounded-full flex items-center justify-center cursor-pointer ${
-                                        light ? 'hover:bg-black/20 text-neutral-800' : 'hover:bg-white/30 text-white'
+                                        light ? 'hover:bg-black/20 text-stone-800' : 'hover:bg-white/30 text-white'
                                       }`}
                                       title="Remove"
                                     >
@@ -1501,9 +1395,9 @@ export default function CategoryProductListPage() {
 
                       {/* 6. Total Bar */}
                       {totalComboItems > 0 && (
-                        <div className="p-3 rounded-xl bg-black/60 border border-white/10 text-white flex items-center justify-between animate-in fade-in duration-200">
+                        <div className="p-3 rounded-2xl bg-stone-50 border border-stone-200 text-stone-900 flex items-center justify-between animate-in fade-in duration-200">
                           <div>
-                            <span className="text-[9px] uppercase tracking-wider text-neutral-400 block font-bold">
+                            <span className="text-[9px] uppercase tracking-wider text-stone-500 block font-bold">
                               Total Items
                             </span>
                             <span className="text-xs font-semibold">
@@ -1513,7 +1407,7 @@ export default function CategoryProductListPage() {
                           <div className="text-right">
                             <span
                               className={`text-sm font-bold ${
-                                isJewellery ? 'text-[#e5c07b]' : 'text-[#00f5d4]'
+                                isJewellery ? 'text-[#b38728]' : 'text-[#ff2d85]'
                               }`}
                             >
                               ₹{totalComboPrice.toLocaleString('en-IN')}
@@ -1532,8 +1426,8 @@ export default function CategoryProductListPage() {
                       onClick={() => handleFinalCheckoutAction(false)}
                       className={`flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border shadow-xs transition-all active:scale-98 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                         isJewellery
-                          ? 'border-[#e5c07b] text-[#e5c07b] hover:bg-[#e5c07b]/10'
-                          : 'border-[#00f5d4] text-[#00f5d4] hover:bg-[#00f5d4]/10'
+                          ? 'border-[#D4AF37] text-[#b38728] hover:bg-amber-50'
+                          : 'border-[#ff2d85] text-[#ff2d85] hover:bg-pink-50'
                       }`}
                     >
                       <ShoppingBag className="w-4 h-4" />
@@ -1544,31 +1438,31 @@ export default function CategoryProductListPage() {
                       type="button"
                       disabled={isOutOfStock}
                       onClick={() => handleFinalCheckoutAction(true)}
-                      className={`relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-[#061e17] shadow-xl transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden disabled:opacity-40 disabled:cursor-not-allowed ${
+                      className={`relative flex-1 py-3.5 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 text-white shadow-md transition-all duration-300 active:scale-95 cursor-pointer overflow-hidden disabled:opacity-40 disabled:cursor-not-allowed ${
                         isJewellery
-                          ? 'bg-gradient-to-r from-[#e5c07b] via-[#f7e7b4] to-[#b38728] shadow-[#e5c07b]/30 hover:brightness-110'
-                          : 'bg-[#00f5d4] text-[#040814] shadow-[#00f5d4]/30 hover:bg-white'
+                          ? 'bg-gradient-to-r from-[#D4AF37] via-[#DFBF58] to-[#B8860B] text-stone-950 shadow-amber-200 hover:brightness-105'
+                          : 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] text-white shadow-pink-200 hover:brightness-105'
                       }`}
                     >
                       <Zap className="w-4 h-4 fill-current animate-bounce relative z-10 shrink-0" />
-                      <span className="relative z-10 tracking-widest font-black drop-shadow-xs">
+                      <span className="relative z-10 tracking-widest font-bold">
                         Instant Checkout
                       </span>
                     </button>
                   </div>
 
                   {/* Trust Badges */}
-                  <div className="pt-2 border-t border-white/10 grid grid-cols-3 gap-1 text-center text-neutral-400">
+                  <div className="pt-2 border-t border-stone-100 grid grid-cols-3 gap-1 text-center text-stone-500">
                     <div className="flex flex-col items-center gap-0.5">
-                      <ShieldCheck className="w-3.5 h-3.5 text-neutral-300" />
+                      <ShieldCheck className="w-3.5 h-3.5 text-stone-600" />
                       <span className="text-[9px]">100% Genuine</span>
                     </div>
                     <div className="flex flex-col items-center gap-0.5">
-                      <Truck className="w-3.5 h-3.5 text-neutral-300" />
+                      <Truck className="w-3.5 h-3.5 text-stone-600" />
                       <span className="text-[9px]">Fast Dispatch</span>
                     </div>
                     <div className="flex flex-col items-center gap-0.5">
-                      <RotateCcw className="w-3.5 h-3.5 text-neutral-300" />
+                      <RotateCcw className="w-3.5 h-3.5 text-stone-600" />
                       <span className="text-[9px]">Easy Returns</span>
                     </div>
                   </div>
@@ -1579,11 +1473,11 @@ export default function CategoryProductListPage() {
         </div>
       )}
 
-      {/* 6. Picture Zoom Lightbox Modal */}
+      {/* 5. Picture Zoom Lightbox Modal */}
       {isZoomOpen && (
         <div
           onClick={() => setIsZoomOpen(false)}
-          className="fixed inset-0 z-60 flex items-center justify-center bg-black/92 backdrop-blur-md p-4 animate-in fade-in duration-200 cursor-zoom-out"
+          className="fixed inset-0 z-60 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200 cursor-zoom-out"
         >
           <button
             type="button"
@@ -1600,10 +1494,10 @@ export default function CategoryProductListPage() {
             <img
               src={selectedImage}
               alt="Zoomed View"
-              className="max-h-[82vh] w-auto object-contain rounded-xl shadow-2xl animate-in zoom-in-95 duration-200"
+              className="max-h-[82vh] w-auto object-contain rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200"
             />
             {activeProduct && (
-              <p className="text-xs text-neutral-300 mt-2 font-medium">
+              <p className="text-xs text-white/90 mt-3 font-medium">
                 {activeProduct.name}
               </p>
             )}

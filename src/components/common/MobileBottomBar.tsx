@@ -37,10 +37,10 @@ export default function MobileBottomBar() {
 
   return (
     <nav
-      className={`md:hidden fixed bottom-0 inset-x-0 z-40 backdrop-blur-xl border-t transition-all duration-300 ${
+      className={`md:hidden fixed bottom-0 inset-x-0 z-40 backdrop-blur-xl border-t transition-all duration-300 bg-white/95 ${
         isJewelleryPage
-          ? 'bg-white/95 border-[#0b3b2c]/15 shadow-[0_-4px_20px_rgba(11,59,44,0.08)]'
-          : 'bg-white/95 border-[#ff4d6d]/15 shadow-[0_-4px_20px_rgba(255,77,109,0.08)]'
+          ? 'border-amber-100 shadow-[0_-4px_20px_rgba(212,175,55,0.08)]'
+          : 'border-pink-100 shadow-[0_-4px_20px_rgba(255,45,133,0.08)]'
       }`}
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}
     >
@@ -55,26 +55,26 @@ export default function MobileBottomBar() {
               className={`w-5 h-5 transition-colors ${
                 isActive('/') && !location.pathname.includes('/category')
                   ? isJewelleryPage
-                    ? 'text-[#0b3b2c] stroke-[2.4]'
-                    : 'text-[#ff4d6d] stroke-[2.4]'
-                  : 'text-neutral-400 stroke-[1.8]'
+                    ? 'text-[#b38728] stroke-[2.4]'
+                    : 'text-[#ff2d85] stroke-[2.4]'
+                  : 'text-stone-400 stroke-[1.8]'
               }`}
             />
           </div>
           <span
-            className={`text-[10px] font-medium tracking-tight ${
+            className={`text-[10px] tracking-tight ${
               isActive('/') && !location.pathname.includes('/category')
                 ? isJewelleryPage
-                  ? 'text-[#0b3b2c] font-bold'
-                  : 'text-[#ff4d6d] font-bold'
-                : 'text-neutral-400'
+                  ? 'text-[#b38728] font-bold'
+                  : 'text-[#ff2d85] font-bold'
+                : 'text-stone-400 font-medium'
             }`}
           >
             Home
           </span>
         </Link>
 
-        {/* 2. CATEGORIES / VAULT */}
+        {/* 2. CATEGORIES */}
         <Link
           to={`/category/${isJewelleryPage ? 'jewellery' : 'fashions'}`}
           className="flex flex-col items-center justify-center gap-1 py-1 transition-transform active:scale-90"
@@ -84,19 +84,19 @@ export default function MobileBottomBar() {
               className={`w-5 h-5 transition-colors ${
                 isActive('/category')
                   ? isJewelleryPage
-                    ? 'text-[#0b3b2c] stroke-[2.4]'
-                    : 'text-[#ff4d6d] stroke-[2.4]'
-                  : 'text-neutral-400 stroke-[1.8]'
+                    ? 'text-[#b38728] stroke-[2.4]'
+                    : 'text-[#ff2d85] stroke-[2.4]'
+                  : 'text-stone-400 stroke-[1.8]'
               }`}
             />
           </div>
           <span
-            className={`text-[10px] font-medium tracking-tight ${
+            className={`text-[10px] tracking-tight ${
               isActive('/category')
                 ? isJewelleryPage
-                  ? 'text-[#0b3b2c] font-bold'
-                  : 'text-[#ff4d6d] font-bold'
-                : 'text-neutral-400'
+                  ? 'text-[#b38728] font-bold'
+                  : 'text-[#ff2d85] font-bold'
+                : 'text-stone-400 font-medium'
             }`}
           >
             {isJewelleryPage ? 'Vault' : 'Boutique'}
@@ -117,22 +117,22 @@ export default function MobileBottomBar() {
               className={`w-5 h-5 transition-colors ${
                 wishlist.length > 0
                   ? isJewelleryPage
-                    ? 'text-[#0b3b2c] fill-[#0b3b2c]/10'
-                    : 'text-[#ff4d6d] fill-[#ff4d6d]/10'
-                  : 'text-neutral-400 stroke-[1.8]'
+                    ? 'text-[#D4AF37] fill-[#D4AF37]/20'
+                    : 'text-[#ff2d85] fill-[#ff2d85]/20'
+                  : 'text-stone-400 stroke-[1.8]'
               }`}
             />
             {wishlist.length > 0 && (
               <span
                 className={`absolute -top-1 -right-1.5 min-w-3.5 h-3.5 px-0.5 rounded-full text-[9px] font-black flex items-center justify-center text-white ${
-                  isJewelleryPage ? 'bg-[#0b3b2c]' : 'bg-[#ff4d6d]'
+                  isJewelleryPage ? 'bg-[#D4AF37]' : 'bg-[#ff2d85]'
                 }`}
               >
                 {wishlist.length > 9 ? '9+' : wishlist.length}
               </span>
             )}
           </div>
-          <span className="text-[10px] text-neutral-400 font-medium tracking-tight">
+          <span className="text-[10px] text-stone-400 font-medium tracking-tight">
             Wishlist
           </span>
         </button>
@@ -148,15 +148,15 @@ export default function MobileBottomBar() {
               className={`w-5 h-5 transition-colors ${
                 totalItems > 0
                   ? isJewelleryPage
-                    ? 'text-[#0b3b2c] fill-[#0b3b2c]/10 stroke-[2.2]'
-                    : 'text-[#ff4d6d] fill-[#ff4d6d]/10 stroke-[2.2]'
-                  : 'text-neutral-400 stroke-[1.8]'
+                    ? 'text-[#D4AF37] stroke-[2.2]'
+                    : 'text-[#ff2d85] stroke-[2.2]'
+                  : 'text-stone-400 stroke-[1.8]'
               }`}
             />
             {totalItems > 0 && (
               <span
                 className={`absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full text-[9px] font-black flex items-center justify-center text-white animate-in zoom-in-50 ${
-                  isJewelleryPage ? 'bg-[#0b3b2c]' : 'bg-[#ff4d6d]'
+                  isJewelleryPage ? 'bg-[#D4AF37]' : 'bg-[#ff2d85]'
                 }`}
               >
                 {totalItems}
@@ -167,16 +167,16 @@ export default function MobileBottomBar() {
             className={`text-[10px] tracking-tight ${
               totalItems > 0
                 ? isJewelleryPage
-                  ? 'text-[#0b3b2c] font-bold'
-                  : 'text-[#ff4d6d] font-bold'
-                : 'text-neutral-400 font-medium'
+                  ? 'text-[#b38728] font-bold'
+                  : 'text-[#ff2d85] font-bold'
+                : 'text-stone-400 font-medium'
             }`}
           >
             Bag
           </span>
         </button>
 
-        {/* 5. ACCOUNT / PROFILE */}
+        {/* 5. ACCOUNT */}
         <button
           type="button"
           onClick={openAuth}
@@ -187,9 +187,9 @@ export default function MobileBottomBar() {
               className={`w-5 h-5 transition-colors ${
                 user
                   ? isJewelleryPage
-                    ? 'text-[#0b3b2c] stroke-[2.4]'
-                    : 'text-[#ff4d6d] stroke-[2.4]'
-                  : 'text-neutral-400 stroke-[1.8]'
+                    ? 'text-[#b38728] stroke-[2.4]'
+                    : 'text-[#ff2d85] stroke-[2.4]'
+                  : 'text-stone-400 stroke-[1.8]'
               }`}
             />
             {user && (
@@ -200,9 +200,9 @@ export default function MobileBottomBar() {
             className={`text-[10px] tracking-tight ${
               user
                 ? isJewelleryPage
-                  ? 'text-[#0b3b2c] font-bold'
-                  : 'text-[#ff4d6d] font-bold'
-                : 'text-neutral-400 font-medium'
+                  ? 'text-[#b38728] font-bold'
+                  : 'text-[#ff2d85] font-bold'
+                : 'text-stone-400 font-medium'
             }`}
           >
             {user ? 'Account' : 'Login'}
