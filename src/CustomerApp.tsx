@@ -22,7 +22,7 @@ function HomePageContent() {
 
   return (
     <main
-      className={`min-h-screen pb-24 md:pb-20 w-full overflow-x-hidden relative transition-colors duration-500 overscroll-y-none select-none ${
+      className={`min-h-screen pb-28 md:pb-20 w-full overflow-x-hidden overflow-y-auto relative transition-colors duration-500 ${
         isJewellery
           ? 'bg-[#FBF9F5] text-stone-900 selection:bg-[#D4AF37] selection:text-black font-cinzel'
           : 'bg-[#FAF8F5] text-stone-900 selection:bg-[#ff2d85] selection:text-white font-sans'
@@ -65,7 +65,7 @@ export default function CustomerApp() {
     <AuthProvider>
       <WishlistProvider>
         <CartProvider>
-          <div className="relative min-h-screen bg-[#FAF8F5] text-stone-900 select-none touch-manipulation overscroll-none">
+          <div className="relative min-h-screen bg-[#FAF8F5] text-stone-900 overflow-x-hidden">
             {/* Top Navbar */}
             <Navbar />
 
