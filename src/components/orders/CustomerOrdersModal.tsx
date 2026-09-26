@@ -36,7 +36,7 @@ const ORDER_STAGES = [
 ];
 
 export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersModalProps) {
-  const { user, customer } = useAuth();
+  const { user, customer } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<'active' | 'past'>('active');
   const [searchTerm, setSearchTerm] = useState('');
@@ -135,7 +135,6 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
   // Filter Past Orders based on Search and Time Filter
   const filteredPastOrders = useMemo(() => {
     return pastOrdersRaw.filter((ord) => {
-      // 1. Search Query Filter (Matches Order ID or Item Names)
       const query = searchTerm.trim().toLowerCase();
       const matchesSearch =
         !query ||
@@ -145,7 +144,6 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
       if (!matchesSearch) return false;
 
-      // 2. Date Filter
       if (dateFilter === 'all') return true;
       const orderDate = new Date(ord.created_at).getTime();
       const now = Date.now();
@@ -159,7 +157,6 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
     });
   }, [pastOrdersRaw, searchTerm, dateFilter]);
 
-  // Set default expanded order when tab switches
   useEffect(() => {
     if (activeTab === 'active' && activeOrders.length > 0) {
       setExpandedOrderId(activeOrders[0].id);
@@ -191,34 +188,34 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
       <head>
         <title>Tax Invoice - ${order.id}</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1f2937; padding: 40px; margin: 0; }
-          .header { display: flex; justify-content: space-between; border-b: 2px solid #0b3b2c; padding-bottom: 20px; }
-          .brand { font-size: 24px; font-weight: 900; letter-spacing: 2px; color: #0b3b2c; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #1c1917; padding: 40px; margin: 0; }
+          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #ff2d85; padding-bottom: 20px; }
+          .brand { font-size: 24px; font-weight: 900; letter-spacing: 2px; color: #ff2d85; }
           .tagline { font-size: 10px; text-transform: uppercase; color: #b38728; letter-spacing: 1px; }
           .invoice-title { font-size: 20px; font-weight: bold; text-align: right; color: #111; }
           .meta-grid { display: flex; justify-content: space-between; margin: 30px 0; font-size: 12px; }
           .meta-col { width: 45%; }
           .meta-col strong { color: #111; font-size: 13px; }
           table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          th { background: #f8fafc; text-align: left; padding: 12px 10px; font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #e2e8f0; }
+          th { background: #fdf2f8; text-align: left; padding: 12px 10px; font-size: 11px; text-transform: uppercase; border-bottom: 2px solid #fbcfe8; }
           td { padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
           .totals-table { width: 40%; margin-left: auto; margin-top: 20px; font-size: 12px; }
           .totals-table td { border: none; padding: 6px 10px; }
-          .grand-total { font-weight: bold; font-size: 15px; color: #0b3b2c; border-top: 2px solid #0b3b2c !important; }
-          .footer { margin-top: 50px; text-align: center; font-size: 11px; color: #64748b; border-top: 1px dashed #cbd5e1; padding-top: 20px; }
+          .grand-total { font-weight: bold; font-size: 15px; color: #ff2d85; border-top: 2px solid #ff2d85 !important; }
+          .footer { margin-top: 50px; text-align: center; font-size: 11px; color: #78716c; border-top: 1px dashed #e7e5e4; padding-top: 20px; }
         </style>
       </head>
       <body>
         <div class="header">
           <div>
             <div class="brand">KASHVI FASHIONS</div>
-            <div class="tagline">Haute Couture & Royal Vault • Kakinada</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 5px;">GSTIN: 37AAEFK1234F1Z5 • Support: +91 8686353574</div>
+            <div class="tagline">Boutique Fashion & Royal Vault • Kakinada</div>
+            <div style="font-size: 11px; color: #78716c; margin-top: 5px;">GSTIN: 37AAEFK1234F1Z5 • Support: +91 8686353574</div>
           </div>
           <div class="invoice-title">
             TAX INVOICE
-            <div style="font-size: 12px; font-weight: normal; color: #64748b; margin-top: 4px;">Invoice ID: INV-${order.id}</div>
-            <div style="font-size: 12px; font-weight: normal; color: #64748b;">Date: ${formattedDate}</div>
+            <div style="font-size: 12px; font-weight: normal; color: #78716c; margin-top: 4px;">Invoice ID: INV-${order.id}</div>
+            <div style="font-size: 12px; font-weight: normal; color: #78716c;">Date: ${formattedDate}</div>
           </div>
         </div>
 
@@ -326,23 +323,23 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
   const modalContent = (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150 cursor-pointer overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-150 cursor-pointer overflow-y-auto"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-2xl bg-white rounded-3xl shadow-[0_25px_60px_-15px_rgba(255,182,193,0.35)] overflow-hidden border border-pink-100 cursor-default my-auto animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col text-stone-900"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-white sticky top-0 z-10">
+        <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-white sticky top-0 z-10">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#0b3b2c]/10 text-[#0b3b2c] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-pink-50 text-[#ff2d85] flex items-center justify-center shadow-xs">
               <PackageCheck className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-serif font-bold text-neutral-900 leading-tight">
+              <h2 className="text-base sm:text-lg font-bold text-stone-900 leading-tight">
                 My Orders
               </h2>
-              <p className="text-[10px] text-neutral-400 font-medium">
+              <p className="text-[10px] text-stone-400 font-medium">
                 Track live packages and download tax invoices
               </p>
             </div>
@@ -351,25 +348,25 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-500 hover:text-white transition-all cursor-pointer"
+            className="p-1.5 rounded-full bg-stone-100 hover:bg-pink-50 text-stone-500 hover:text-[#ff2d85] transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Selector: Active vs Past */}
-        <div className="px-6 pt-3 pb-2 bg-neutral-50/50 border-b border-neutral-100 flex items-center justify-between gap-2">
-          <div className="grid grid-cols-2 p-1 rounded-2xl bg-neutral-200/60 w-full sm:w-80">
+        <div className="px-6 pt-3 pb-2 bg-stone-50/50 border-b border-stone-100 flex items-center justify-between gap-2">
+          <div className="grid grid-cols-2 p-1 rounded-2xl bg-stone-200/60 w-full sm:w-80">
             <button
               type="button"
               onClick={() => setActiveTab('active')}
               className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 activeTab === 'active'
-                  ? 'bg-white text-neutral-950 shadow-xs'
-                  : 'text-neutral-600 hover:text-neutral-900'
+                  ? 'bg-white text-stone-950 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              <Truck className="w-3.5 h-3.5 text-[#0b3b2c]" />
+              <Truck className="w-3.5 h-3.5 text-[#ff2d85]" />
               <span>Active Orders ({activeOrders.length})</span>
             </button>
 
@@ -378,11 +375,11 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
               onClick={() => setActiveTab('past')}
               className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 activeTab === 'past'
-                  ? 'bg-white text-neutral-950 shadow-xs'
-                  : 'text-neutral-600 hover:text-neutral-900'
+                  ? 'bg-white text-stone-950 shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900'
               }`}
             >
-              <FileText className="w-3.5 h-3.5 text-[#ff4d6d]" />
+              <FileText className="w-3.5 h-3.5 text-[#D4AF37]" />
               <span>Past Orders ({pastOrdersRaw.length})</span>
             </button>
           </div>
@@ -390,26 +387,26 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
         {/* Filters for Past Orders */}
         {activeTab === 'past' && pastOrdersRaw.length > 0 && (
-          <div className="px-6 py-2.5 bg-neutral-50 border-b border-neutral-100 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-150">
+          <div className="px-6 py-2.5 bg-stone-50 border-b border-stone-100 flex flex-wrap items-center justify-between gap-2 animate-in fade-in duration-150">
             {/* Search Box */}
             <div className="relative flex-1 min-w-[180px]">
-              <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-2.5" />
+              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
               <input
                 type="text"
                 placeholder="Search by Order ID or item name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8.5 pr-3 py-1.5 text-xs rounded-xl border border-neutral-200 bg-white focus:outline-hidden focus:border-neutral-900"
+                className="w-full pl-8.5 pr-3 py-1.5 text-xs rounded-xl border border-stone-200 bg-white focus:outline-hidden focus:border-[#ff2d85]"
               />
             </div>
 
             {/* Time Filter Select */}
             <div className="flex items-center gap-1.5 text-xs">
-              <Filter className="w-3.5 h-3.5 text-neutral-500" />
+              <Filter className="w-3.5 h-3.5 text-stone-500" />
               <select
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value as any)}
-                className="bg-white border border-neutral-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-neutral-800 focus:outline-hidden cursor-pointer"
+                className="bg-white border border-stone-200 rounded-xl px-2.5 py-1.5 text-xs font-semibold text-stone-800 focus:outline-hidden cursor-pointer"
               >
                 <option value="all">All Time</option>
                 <option value="30days">Last 30 Days</option>
@@ -426,15 +423,15 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
           {loading && orders.length === 0 && (
             <div className="space-y-4 animate-pulse">
               {[1, 2].map((n) => (
-                <div key={n} className="border-2 border-neutral-100 rounded-3xl p-5 bg-neutral-50/50 space-y-3">
+                <div key={n} className="border-2 border-stone-100 rounded-3xl p-5 bg-stone-50/50 space-y-3">
                   <div className="flex justify-between items-center">
                     <div className="space-y-2">
-                      <div className="h-4 w-32 bg-neutral-200 rounded-md" />
-                      <div className="h-3 w-20 bg-neutral-200/60 rounded-md" />
+                      <div className="h-4 w-32 bg-stone-200 rounded-md" />
+                      <div className="h-3 w-20 bg-stone-200/60 rounded-md" />
                     </div>
-                    <div className="h-5 w-16 bg-neutral-200 rounded-md" />
+                    <div className="h-5 w-16 bg-stone-200 rounded-md" />
                   </div>
-                  <div className="h-16 bg-white rounded-2xl border border-neutral-100" />
+                  <div className="h-16 bg-white rounded-2xl border border-stone-100" />
                 </div>
               ))}
             </div>
@@ -462,14 +459,14 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                     style={{ animationDelay: `${index * 50}ms` }}
                     className={`border-2 rounded-3xl transition-all overflow-hidden animate-in fade-in slide-in-from-bottom-1 duration-200 ${
                       isExpanded
-                        ? 'border-[#0b3b2c] shadow-md bg-white'
-                        : 'border-neutral-200/90 bg-white hover:border-neutral-300 shadow-2xs'
+                        ? 'border-[#ff2d85] shadow-md shadow-pink-100 bg-white'
+                        : 'border-stone-200/90 bg-white hover:border-pink-200 shadow-2xs'
                     }`}
                   >
                     {/* Clickable Header */}
                     <div
                       onClick={() => setExpandedOrderId(isExpanded ? null : ord.id)}
-                      className="p-4 sm:p-5 cursor-pointer flex flex-wrap items-center justify-between gap-3 select-none bg-neutral-50/40 hover:bg-neutral-50/80 transition-colors"
+                      className="p-4 sm:p-5 cursor-pointer flex flex-wrap items-center justify-between gap-3 select-none bg-stone-50/40 hover:bg-stone-50/80 transition-colors"
                     >
                       <div className="flex items-center gap-3 min-w-0">
                         <div
@@ -477,20 +474,20 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                             orderDelivered
                               ? 'bg-emerald-100 text-emerald-800'
                               : isExpanded
-                              ? 'bg-[#0b3b2c] text-white shadow-xs'
-                              : 'bg-neutral-100 text-neutral-600'
+                              ? 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] text-white shadow-xs'
+                              : 'bg-stone-100 text-stone-600'
                           }`}
                         >
                           <Package className="w-5 h-5" />
                         </div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-neutral-900 text-xs sm:text-sm">
+                            <span className="font-mono font-bold text-stone-900 text-xs sm:text-sm">
                               {ord.id}
                             </span>
                             {renderStatusBadge(ord.order_status, ord.payment_status)}
                           </div>
-                          <p className="text-[10px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                          <p className="text-[10px] text-stone-400 flex items-center gap-1 mt-0.5">
                             <Calendar className="w-3 h-3" /> {orderDate}
                           </p>
                         </div>
@@ -498,14 +495,14 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
                       <div className="flex items-center gap-3 shrink-0 ml-auto">
                         <div className="text-right">
-                          <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">
+                          <span className="text-[10px] text-stone-400 uppercase tracking-wider block">
                             Total Paid
                           </span>
-                          <span className="font-serif font-black text-sm sm:text-base text-neutral-950">
+                          <span className="font-bold text-sm sm:text-base text-stone-950">
                             ₹{Number(ord.total_amount || ord.total || 0).toLocaleString('en-IN')}
                           </span>
                         </div>
-                        <div className="p-1.5 rounded-full bg-white border border-neutral-200 text-neutral-600">
+                        <div className="p-1.5 rounded-full bg-white border border-stone-200 text-stone-600">
                           {isExpanded ? (
                             <ChevronUp className="w-4 h-4" />
                           ) : (
@@ -517,12 +514,12 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
                     {/* Expandable Order Details & Tracking Timeline */}
                     {isExpanded && (
-                      <div className="p-4 sm:p-5 border-t border-neutral-100 space-y-5 animate-in fade-in duration-200">
-                        {/* Status Progress Tracker (Active Orders) */}
-                        <div className="bg-neutral-50/80 border border-neutral-200/80 rounded-2xl p-4">
+                      <div className="p-4 sm:p-5 border-t border-stone-100 space-y-5 animate-in fade-in duration-200">
+                        {/* Status Progress Tracker */}
+                        <div className="bg-stone-50/80 border border-stone-200/80 rounded-2xl p-4">
                           <div className="flex items-center justify-between mb-3">
-                            <span className="text-xs font-bold uppercase tracking-wider text-neutral-800 flex items-center gap-1.5">
-                              <Truck className="w-3.5 h-3.5 text-[#0b3b2c]" />
+                            <span className="text-xs font-bold uppercase tracking-wider text-stone-800 flex items-center gap-1.5">
+                              <Truck className="w-3.5 h-3.5 text-[#ff2d85]" />
                               Order Status Tracker
                             </span>
                             <span className="text-[10px] font-semibold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full capitalize">
@@ -531,9 +528,9 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                           </div>
 
                           <div className="relative flex items-center justify-between w-full px-2 pt-2 pb-1">
-                            <div className="absolute left-4 right-4 top-4.5 h-1 bg-neutral-200 -z-0" />
+                            <div className="absolute left-4 right-4 top-4.5 h-1 bg-stone-200 -z-0" />
                             <div
-                              className="absolute left-4 top-4.5 h-1 bg-emerald-600 transition-all duration-500 -z-0"
+                              className="absolute left-4 top-4.5 h-1 bg-[#ff2d85] transition-all duration-500 -z-0"
                               style={{
                                 width: `${(currentStageIdx / (ORDER_STAGES.length - 1)) * 90}%`,
                               }}
@@ -551,19 +548,19 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                                   <div
                                     className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
                                       isCompleted
-                                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/30'
-                                        : 'bg-white border-2 border-neutral-300 text-neutral-400'
-                                    } ${isCurrent ? 'ring-4 ring-emerald-100 scale-110' : ''}`}
+                                        ? 'bg-[#ff2d85] text-white shadow-md shadow-pink-200'
+                                        : 'bg-white border-2 border-stone-300 text-stone-400'
+                                    } ${isCurrent ? 'ring-4 ring-pink-100 scale-110' : ''}`}
                                   >
                                     {isCompleted ? '✓' : idx + 1}
                                   </div>
                                   <span
                                     className={`text-[9px] sm:text-[10px] mt-1.5 font-bold uppercase tracking-tight ${
                                       isCurrent
-                                        ? 'text-emerald-700'
+                                        ? 'text-[#ff2d85]'
                                         : isCompleted
-                                        ? 'text-neutral-800'
-                                        : 'text-neutral-400'
+                                        ? 'text-stone-800'
+                                        : 'text-stone-400'
                                     }`}
                                   >
                                     {stage.label}
@@ -575,26 +572,26 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
                           {/* Courier Tracking Details */}
                           {(ord.tracking_number || ord.courier_name) && (
-                            <div className="mt-4 pt-3 border-t border-neutral-200/80 flex flex-wrap items-center justify-between gap-2 text-xs bg-white p-3 rounded-xl">
+                            <div className="mt-4 pt-3 border-t border-stone-200/80 flex flex-wrap items-center justify-between gap-2 text-xs bg-white p-3 rounded-xl border border-stone-100">
                               <div>
-                                <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">
+                                <span className="text-[10px] text-stone-400 uppercase tracking-wider block">
                                   Courier Partner
                                 </span>
-                                <span className="font-bold text-neutral-900">
+                                <span className="font-bold text-stone-900">
                                   {ord.courier_name || 'India Post'}
                                 </span>
                               </div>
                               {ord.tracking_number ? (
                                 <div className="text-right">
-                                  <span className="text-[10px] text-neutral-400 uppercase tracking-wider block">
+                                  <span className="text-[10px] text-stone-400 uppercase tracking-wider block">
                                     Tracking ID (AWB)
                                   </span>
-                                  <span className="font-mono font-bold text-neutral-900 bg-neutral-100 px-2 py-0.5 rounded">
+                                  <span className="font-mono font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded">
                                     {ord.tracking_number}
                                   </span>
                                 </div>
                               ) : (
-                                <span className="text-[11px] text-neutral-400 italic">
+                                <span className="text-[11px] text-stone-400 italic">
                                   Tracking ID will be assigned upon dispatch
                                 </span>
                               )}
@@ -604,25 +601,25 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
                         {/* Items Breakdown */}
                         <div className="space-y-2">
-                          <span className="text-xs font-bold text-neutral-900 uppercase tracking-wider block">
+                          <span className="text-xs font-bold text-stone-900 uppercase tracking-wider block">
                             Items Ordered ({items.length})
                           </span>
                           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                             {items.map((item: any, idx: number) => (
                               <div
                                 key={idx}
-                                className="flex items-center gap-3 bg-neutral-50/60 p-2.5 rounded-2xl border border-neutral-100"
+                                className="flex items-center gap-3 bg-stone-50/60 p-2.5 rounded-2xl border border-stone-100"
                               >
                                 <img
                                   src={item.image}
                                   alt={item.name}
-                                  className="w-12 h-14 object-cover object-top rounded-xl border border-neutral-200/60 shrink-0"
+                                  className="w-12 h-14 object-cover object-top rounded-xl border border-stone-200/60 shrink-0"
                                 />
                                 <div className="flex-1 min-w-0 text-xs">
-                                  <h5 className="font-bold text-neutral-900 truncate leading-tight">
+                                  <h5 className="font-bold text-stone-900 truncate leading-tight">
                                     {item.name}
                                   </h5>
-                                  <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-500">
+                                  <div className="flex items-center gap-2 mt-1 text-[11px] text-stone-500">
                                     {item.color && (
                                       <span className="capitalize">Color: {item.color}</span>
                                     )}
@@ -630,7 +627,7 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                                     <span>• Qty: {item.qty}</span>
                                   </div>
                                 </div>
-                                <span className="text-xs font-bold text-neutral-900 shrink-0">
+                                <span className="text-xs font-bold text-stone-900 shrink-0">
                                   ₹{(item.price * item.qty).toLocaleString('en-IN')}
                                 </span>
                               </div>
@@ -640,20 +637,20 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
 
                         {/* Download Invoice Button for Delivered Orders */}
                         {orderDelivered && (
-                          <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center justify-between gap-3">
+                          <div className="p-3.5 bg-pink-50/60 border border-pink-200 rounded-2xl flex items-center justify-between gap-3">
                             <div className="space-y-0.5">
-                              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                              <span className="text-xs font-bold text-stone-950 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-4 h-4 text-[#ff2d85]" />
                                 Tax Invoice Available
                               </span>
-                              <p className="text-[11px] text-emerald-700">
+                              <p className="text-[11px] text-stone-600">
                                 Official invoice with GST details for your records.
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => handleDownloadInvoice(ord)}
-                              className="px-4 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm"
+                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#ff2d85] to-[#ff639f] hover:brightness-105 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm"
                             >
                               <Download className="w-3.5 h-3.5" />
                               <span>Download Invoice</span>
@@ -662,29 +659,29 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
                         )}
 
                         {/* Address & Payment Info */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1 border-t border-neutral-100">
-                          <div className="bg-neutral-50/60 p-3 rounded-2xl border border-neutral-100 space-y-1">
-                            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block flex items-center gap-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1 border-t border-stone-100">
+                          <div className="bg-stone-50/60 p-3 rounded-2xl border border-stone-100 space-y-1">
+                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block flex items-center gap-1">
                               <MapPin className="w-3 h-3" /> Delivered To
                             </span>
-                            <p className="text-neutral-700 leading-relaxed font-medium">
+                            <p className="text-stone-700 leading-relaxed font-medium">
                               {ord.shipping_address || 'Address on file'}
                             </p>
                           </div>
 
-                          <div className="bg-neutral-50/60 p-3 rounded-2xl border border-neutral-100 space-y-1">
-                            <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider block flex items-center gap-1">
+                          <div className="bg-stone-50/60 p-3 rounded-2xl border border-stone-100 space-y-1">
+                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider block flex items-center gap-1">
                               <ShieldCheck className="w-3 h-3" /> Payment Details
                             </span>
-                            <div className="space-y-0.5 text-neutral-600">
+                            <div className="space-y-0.5 text-stone-600">
                               <p>
-                                Method: <strong className="text-neutral-900">{ord.payment_method || 'Online'}</strong>
+                                Method: <strong className="text-stone-900">{ord.payment_method || 'Online'}</strong>
                               </p>
                               <p>
                                 Status: <strong className="text-emerald-700 capitalize">{ord.payment_status || 'Paid'}</strong>
                               </p>
                               {ord.payment_reference && (
-                                <p className="font-mono text-[10px] text-neutral-500 truncate">
+                                <p className="font-mono text-[10px] text-stone-500 truncate">
                                   Ref: {ord.payment_reference}
                                 </p>
                               )}
@@ -700,14 +697,14 @@ export default function CustomerOrdersModal({ isOpen, onClose }: CustomerOrdersM
           ) : (
             !loading && (
               <div className="py-20 text-center space-y-3">
-                <div className="w-16 h-16 rounded-3xl bg-neutral-50 border border-neutral-100 flex items-center justify-center text-neutral-300 mx-auto">
+                <div className="w-16 h-16 rounded-3xl bg-stone-50 border border-stone-100 flex items-center justify-center text-stone-300 mx-auto">
                   <ShoppingBag className="w-8 h-8" />
                 </div>
                 <div>
-                  <h4 className="font-serif font-bold text-neutral-800 text-base">
+                  <h4 className="font-bold text-stone-800 text-base">
                     {activeTab === 'active' ? 'No active orders right now' : 'No past orders match your filter'}
                   </h4>
-                  <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1">
+                  <p className="text-xs text-stone-400 max-w-xs mx-auto mt-1">
                     {activeTab === 'active'
                       ? 'Your placed orders will show up here until they are delivered to your doorstep.'
                       : 'Try changing the date filter or searching for another term.'}
