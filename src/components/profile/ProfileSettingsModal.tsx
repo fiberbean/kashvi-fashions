@@ -10,7 +10,6 @@ import {
   AlertCircle,
   Loader2,
   ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -21,7 +20,7 @@ interface ProfileSettingsModalProps {
 }
 
 export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSettingsModalProps) {
-  const { user, customer, refreshCustomer } = useAuth();
+  const { user, customer, refreshCustomer } = useAuth() as any;
 
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
   const [loading, setLoading] = useState(false);
@@ -80,7 +79,6 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
     try {
       if (!user) throw new Error('No authenticated user session');
 
-      // 1. Update Supabase Auth user metadata
       const { error: authError } = await supabase.auth.updateUser({
         data: {
           name: name.trim(),
@@ -89,7 +87,6 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
       });
       if (authError) throw authError;
 
-      // 2. Update public.customers table record
       const { error: dbError } = await supabase
         .from('customers')
         .update({
@@ -100,7 +97,9 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
 
       if (dbError) throw dbError;
 
-      await refreshCustomer();
+      if (typeof refreshCustomer === 'function') {
+        await refreshCustomer();
+      }
       setSuccessMsg('Profile updated successfully!');
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to update profile details');
@@ -144,23 +143,23 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
   const modalContent = (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 p-6 space-y-4"
+        className="relative w-full max-w-lg bg-white rounded-3xl shadow-[0_25px_60px_-15px_rgba(255,182,193,0.35)] overflow-hidden border border-pink-100 cursor-default my-auto animate-in zoom-in-95 duration-200 p-6 space-y-4 text-stone-900"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-[#0b3b2c]/10 text-[#0b3b2c] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-pink-50 text-[#ff2d85] flex items-center justify-center shadow-xs">
               <User className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-serif font-bold text-neutral-900 leading-tight">
+              <h2 className="text-base font-bold text-stone-900 leading-tight">
                 Profile Settings
               </h2>
-              <p className="text-[10px] text-neutral-400 font-medium">
+              <p className="text-[10px] text-stone-400 font-medium">
                 Manage personal credentials and security
               </p>
             </div>
@@ -169,14 +168,14 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-500 hover:text-white transition-all cursor-pointer"
+            className="p-1.5 rounded-full bg-stone-100 hover:bg-pink-50 text-stone-500 hover:text-[#ff2d85] transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Buttons */}
-        <div className="grid grid-cols-2 p-1 rounded-2xl bg-neutral-100 border border-neutral-200/80">
+        <div className="grid grid-cols-2 p-1 rounded-2xl bg-stone-100 border border-stone-200/80">
           <button
             type="button"
             onClick={() => {
@@ -186,8 +185,8 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
             }}
             className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'profile'
-                ? 'bg-white text-neutral-900 shadow-xs'
-                : 'text-neutral-500 hover:text-neutral-900'
+                ? 'bg-white text-stone-900 shadow-xs'
+                : 'text-stone-500 hover:text-stone-900'
             }`}
           >
             Personal Details
@@ -202,8 +201,8 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
             }}
             className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'password'
-                ? 'bg-white text-neutral-900 shadow-xs'
-                : 'text-neutral-500 hover:text-neutral-900'
+                ? 'bg-white text-stone-900 shadow-xs'
+                : 'text-stone-500 hover:text-stone-900'
             }`}
           >
             Security & Password
@@ -228,54 +227,54 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
         {activeTab === 'profile' && (
           <form onSubmit={handleUpdateProfile} className="space-y-3.5 animate-in fade-in duration-200">
             <div>
-              <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+              <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                 Full Name
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
+                <User className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your Full Name"
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-neutral-200 focus:outline-hidden focus:border-neutral-900"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-200 bg-stone-50 focus:outline-hidden focus:border-[#ff2d85]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+              <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                 Email Address (Primary Login ID)
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
+                <Mail className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
                 <input
                   type="email"
                   readOnly
                   disabled
                   value={email}
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-neutral-200 bg-neutral-100 text-neutral-500 cursor-not-allowed font-medium"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-200 bg-stone-100 text-stone-500 cursor-not-allowed font-medium"
                 />
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] font-semibold text-neutral-700">
+                <label className="text-[11px] font-semibold text-stone-700">
                   WhatsApp Mobile Number
                 </label>
                 <span className="text-[10px] text-emerald-600 font-bold">For Order Alerts</span>
               </div>
               <div className="relative">
-                <Phone className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
+                <Phone className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
                 <input
                   type="tel"
                   maxLength={10}
                   value={whatsappNumber}
                   onChange={(e) => setWhatsappNumber(e.target.value.replace(/\D/g, ''))}
                   placeholder="10-digit Mobile Number"
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-neutral-200 focus:outline-hidden focus:border-neutral-900 font-medium"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-200 bg-stone-50 focus:outline-hidden focus:border-[#ff2d85] font-medium"
                 />
               </div>
             </div>
@@ -283,7 +282,7 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 rounded-2xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+              className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#ff2d85] to-[#ff639f] hover:brightness-105 text-white text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Save Changes</span>}
             </button>
@@ -294,11 +293,11 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
         {activeTab === 'password' && (
           <form onSubmit={handleUpdatePassword} className="space-y-3.5 animate-in fade-in duration-200">
             <div>
-              <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+              <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                 New Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
                 <input
                   type="password"
                   required
@@ -306,17 +305,17 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Minimum 6 characters"
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-neutral-200 focus:outline-hidden focus:border-neutral-900"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-200 bg-stone-50 focus:outline-hidden focus:border-[#ff2d85]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+              <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                 Confirm New Password
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-neutral-400 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-3" />
                 <input
                   type="password"
                   required
@@ -324,7 +323,7 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Repeat new password"
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-neutral-200 focus:outline-hidden focus:border-neutral-900"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-stone-200 bg-stone-50 focus:outline-hidden focus:border-[#ff2d85]"
                 />
               </div>
             </div>
@@ -332,13 +331,13 @@ export default function ProfileSettingsModal({ isOpen, onClose }: ProfileSetting
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-2 py-3 rounded-2xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+              className="w-full mt-2 py-3 rounded-2xl bg-gradient-to-r from-[#ff2d85] to-[#ff639f] hover:brightness-105 text-white text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>Update Password</span>}
             </button>
 
-            <div className="flex items-center justify-center gap-1 text-[10px] text-neutral-400 pt-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-neutral-500" />
+            <div className="flex items-center justify-center gap-1 text-[10px] text-stone-400 pt-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-stone-400" />
               <span>Password updates will securely refresh your active sessions</span>
             </div>
           </form>

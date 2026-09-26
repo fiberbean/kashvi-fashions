@@ -41,7 +41,7 @@ interface CustomerAddressesModalProps {
 }
 
 export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddressesModalProps) {
-  const { user, customer } = useAuth();
+  const { user, customer } = useAuth() as any;
   const [addresses, setAddresses] = useState<AddressItem[]>(() => {
     try {
       const saved = localStorage.getItem('kashvi_saved_addresses');
@@ -217,7 +217,6 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
 
       const isFirst = addresses.length === 0;
 
-      // Prepare payload strictly matching public.customer_addresses schema
       const insertPayload: any = {
         customer_id: customerId,
         auth_user_id: authUserId,
@@ -326,23 +325,23 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
   const modalContent = (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-200 cursor-pointer overflow-y-auto"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-neutral-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[88vh] flex flex-col"
+        className="relative w-full max-w-xl bg-white rounded-3xl shadow-[0_25px_60px_-15px_rgba(255,182,193,0.35)] overflow-hidden border border-pink-100 cursor-default my-auto animate-in zoom-in-95 duration-200 max-h-[88vh] flex flex-col text-stone-900"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-white sticky top-0 z-10">
+        <div className="px-6 py-4 border-b border-stone-100 flex items-center justify-between bg-white sticky top-0 z-10">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#ff4d6d]/10 text-[#ff4d6d] flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-pink-50 text-[#ff2d85] flex items-center justify-center shadow-xs">
               <MapPin className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-serif font-bold text-neutral-900 leading-tight">
+              <h2 className="text-base sm:text-lg font-bold text-stone-900 leading-tight">
                 My Addresses
               </h2>
-              <p className="text-[10px] text-neutral-400 font-medium">
+              <p className="text-[10px] text-stone-400 font-medium">
                 Manage your saved delivery destinations
               </p>
             </div>
@@ -351,7 +350,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-900 text-neutral-500 hover:text-white transition-all cursor-pointer"
+            className="p-1.5 rounded-full bg-stone-100 hover:bg-pink-50 text-stone-500 hover:text-[#ff2d85] transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -362,38 +361,38 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
           {!isAddingNew ? (
             <>
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-neutral-600 uppercase tracking-wider">
+                <span className="text-xs font-bold text-stone-600 uppercase tracking-wider">
                   Saved Destinations ({addresses.length})
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsAddingNew(true)}
-                  className="text-xs font-bold text-[#ff4d6d] bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors cursor-pointer"
+                  className="text-xs font-bold text-[#ff2d85] bg-pink-50 hover:bg-pink-100 px-3 py-1.5 rounded-full flex items-center gap-1 transition-colors cursor-pointer border border-pink-200/60"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add New Address
                 </button>
               </div>
 
               {loading ? (
-                <div className="py-12 flex flex-col items-center justify-center gap-2 text-neutral-400">
-                  <Loader2 className="w-6 h-6 animate-spin text-neutral-600" />
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-stone-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#ff2d85]" />
                   <span className="text-xs">Loading saved addresses...</span>
                 </div>
               ) : addresses.length === 0 ? (
-                <div className="py-14 text-center border-2 border-dashed border-neutral-200 rounded-3xl p-6 space-y-3">
-                  <div className="w-14 h-14 rounded-2xl bg-neutral-50 flex items-center justify-center text-neutral-300 mx-auto">
+                <div className="py-14 text-center border-2 border-dashed border-stone-200 rounded-3xl p-6 space-y-3 bg-stone-50/50">
+                  <div className="w-14 h-14 rounded-2xl bg-white border border-stone-200 flex items-center justify-center text-stone-400 mx-auto shadow-xs">
                     <MapPin className="w-7 h-7" />
                   </div>
                   <div>
-                    <h4 className="font-serif font-bold text-neutral-800 text-sm">No addresses saved yet</h4>
-                    <p className="text-xs text-neutral-400 max-w-xs mx-auto mt-1">
+                    <h4 className="font-bold text-stone-800 text-sm">No addresses saved yet</h4>
+                    <p className="text-xs text-stone-400 max-w-xs mx-auto mt-1">
                       Add your shipping address for a seamless 1-click checkout experience.
                     </p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setIsAddingNew(true)}
-                    className="mt-2 px-5 py-2.5 rounded-xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 transition-all cursor-pointer shadow-md"
+                    className="mt-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ff2d85] to-[#ff639f] hover:brightness-105 text-white text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm"
                   >
                     + Add New Address
                   </button>
@@ -411,21 +410,21 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                         key={addr.id}
                         className={`p-4 rounded-2xl border-2 transition-all relative ${
                           addr.is_default
-                            ? 'border-neutral-900 bg-neutral-50/40'
-                            : 'border-neutral-200 bg-white hover:border-neutral-300'
+                            ? 'border-[#ff2d85] bg-pink-50/20 shadow-xs'
+                            : 'border-stone-200 bg-white hover:border-pink-200'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-neutral-900 text-sm">{addr.name}</span>
-                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-neutral-100 text-neutral-700 border border-neutral-200 flex items-center gap-1">
+                            <span className="font-bold text-stone-900 text-sm">{addr.name}</span>
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-700 border border-stone-200 flex items-center gap-1">
                               {addr.address_type === 'Work' && <Briefcase className="w-2.5 h-2.5" />}
                               {addr.address_type === 'Home' && <Home className="w-2.5 h-2.5" />}
-                              {addr.address_type === 'Others' && <Bookmark className="w-2.5 h-2.5 text-[#ff4d6d]" />}
+                              {addr.address_type === 'Others' && <Bookmark className="w-2.5 h-2.5 text-[#ff2d85]" />}
                               <span>{displayLabel}</span>
                             </span>
                             {addr.is_default && (
-                              <span className="text-[9px] uppercase font-black bg-neutral-900 text-white px-2 py-0.5 rounded-md">
+                              <span className="text-[9px] uppercase font-bold bg-[#ff2d85] text-white px-2 py-0.5 rounded-md">
                                 Default
                               </span>
                             )}
@@ -436,7 +435,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                               <button
                                 type="button"
                                 onClick={() => handleSetDefault(addr.id)}
-                                className="text-[10px] font-semibold text-neutral-500 hover:text-neutral-900 underline cursor-pointer px-1.5"
+                                className="text-[10px] font-semibold text-stone-500 hover:text-[#ff2d85] underline cursor-pointer px-1.5"
                               >
                                 Make Default
                               </button>
@@ -444,7 +443,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                             <button
                               type="button"
                               onClick={() => handleDeleteAddress(addr.id)}
-                              className="text-neutral-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
+                              className="text-stone-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
                               title="Delete Address"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -452,14 +451,14 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                           </div>
                         </div>
 
-                        <div className="pt-1.5 text-xs text-neutral-600 space-y-0.5">
+                        <div className="pt-1.5 text-xs text-stone-600 space-y-0.5">
                           <p>
                             {addr.door_no}
                             {addr.building_name ? `, ${addr.building_name}` : ''}
                             {addr.street ? `, ${addr.street}` : ''}
                             {addr.area ? `, ${addr.area}` : ''}
                           </p>
-                          <p className="font-semibold text-neutral-900 pt-0.5">
+                          <p className="font-semibold text-stone-900 pt-0.5">
                             {addr.city}, {addr.state} — <span className="font-bold">{addr.pincode}</span>
                           </p>
                           <div className="pt-1 text-[11px] text-emerald-700 font-medium flex items-center gap-1">
@@ -475,14 +474,14 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
             </>
           ) : (
             <form onSubmit={handleSaveAddress} className="space-y-3.5 animate-in fade-in duration-200">
-              <div className="flex items-center justify-between border-b border-neutral-100 pb-2">
-                <span className="text-xs font-bold text-neutral-800 uppercase tracking-wider">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                <span className="text-xs font-bold text-stone-800 uppercase tracking-wider">
                   New Address Details
                 </span>
                 <button
                   type="button"
                   onClick={() => setIsAddingNew(false)}
-                  className="text-xs font-semibold text-neutral-500 hover:underline cursor-pointer"
+                  className="text-xs font-semibold text-stone-500 hover:underline cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -490,7 +489,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
 
               {/* Tag Selector */}
               <div>
-                <label className="text-[11px] font-semibold text-neutral-700 block mb-1.5">
+                <label className="text-[11px] font-semibold text-stone-700 block mb-1.5">
                   Address Type:
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -507,8 +506,8 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                         onClick={() => setFormData({ ...formData, address_type: type as any })}
                         className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-neutral-900 text-white border-neutral-900 shadow-xs'
-                            : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100'
+                            ? 'bg-[#ff2d85] text-white border-[#ff2d85] shadow-xs'
+                            : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
                         }`}
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -521,7 +520,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
 
               {formData.address_type === 'Others' && (
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     Custom Label Name * (e.g. Boutique, Parents)
                   </label>
                   <input
@@ -530,7 +529,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     placeholder="Enter Label Name"
                     value={formData.custom_label}
                     onChange={(e) => setFormData({ ...formData, custom_label: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
               )}
@@ -538,7 +537,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
               {/* Contact Info */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     Contact Name *
                   </label>
                   <input
@@ -547,12 +546,12 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     placeholder="e.g. Abhilash"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     WhatsApp Number *
                   </label>
                   <input
@@ -567,7 +566,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                         whatsapp_number: e.target.value.replace(/\D/g, ''),
                       })
                     }
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
               </div>
@@ -575,7 +574,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
               {/* Door & Building */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     Flat / House / Door No. *
                   </label>
                   <input
@@ -584,12 +583,12 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     placeholder="e.g. 2-1-65/2"
                     value={formData.door_no}
                     onChange={(e) => setFormData({ ...formData, door_no: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     Apartment / Building Name
                   </label>
                   <input
@@ -599,7 +598,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     onChange={(e) =>
                       setFormData({ ...formData, building_name: e.target.value })
                     }
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
               </div>
@@ -607,7 +606,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
               {/* Street & Area */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     Street / Road
                   </label>
                   <input
@@ -615,12 +614,12 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     placeholder="e.g. Main Road"
                     value={formData.street}
                     onChange={(e) => setFormData({ ...formData, street: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     Area / Landmark
                   </label>
                   <input
@@ -628,7 +627,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     placeholder="e.g. Near Temple"
                     value={formData.area}
                     onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85]"
                   />
                 </div>
               </div>
@@ -636,7 +635,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
               {/* Pincode & City */}
               <div className="grid grid-cols-3 gap-2 pt-1">
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     Pincode *
                   </label>
                   <input
@@ -646,12 +645,12 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     placeholder="533003"
                     value={formData.pincode}
                     onChange={(e) => handlePincodeLookup(e.target.value)}
-                    className="w-full bg-white border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-900 focus:outline-hidden focus:border-neutral-900 font-bold"
+                    className="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-900 focus:outline-hidden focus:border-[#ff2d85] font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     City (Auto)
                   </label>
                   <input
@@ -660,12 +659,12 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     readOnly
                     placeholder={pincodeLoading ? '...' : 'City'}
                     value={formData.city}
-                    className="w-full bg-neutral-100 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-800 font-medium cursor-not-allowed"
+                    className="w-full bg-stone-100 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-500 font-medium cursor-not-allowed"
                   />
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-semibold text-neutral-700 block mb-1">
+                  <label className="text-[11px] font-semibold text-stone-700 block mb-1">
                     State (Auto)
                   </label>
                   <input
@@ -674,7 +673,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                     readOnly
                     placeholder={pincodeLoading ? '...' : 'State'}
                     value={formData.state}
-                    className="w-full bg-neutral-100 border border-neutral-200 rounded-xl px-3 py-2 text-xs text-neutral-800 font-medium cursor-not-allowed"
+                    className="w-full bg-stone-100 border border-stone-200 rounded-xl px-3 py-2 text-xs text-stone-500 font-medium cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -687,7 +686,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                       {pincodeStatus.message}
                     </span>
                   ) : (
-                    <span className="text-red-500 font-semibold flex items-center gap-1">
+                    <span className="text-rose-500 font-semibold flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5" />
                       {pincodeStatus.message}
                     </span>
@@ -699,7 +698,7 @@ export default function CustomerAddressesModal({ isOpen, onClose }: CustomerAddr
                 <button
                   type="submit"
                   disabled={saving || pincodeStatus?.deliveryAvailable === false}
-                  className="w-full py-3 rounded-2xl bg-neutral-900 text-white text-xs font-bold uppercase tracking-wider hover:bg-neutral-800 disabled:opacity-40 transition-all cursor-pointer shadow-md flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#ff2d85] to-[#ff639f] hover:brightness-105 text-white text-xs font-bold uppercase tracking-wider disabled:opacity-40 transition-all cursor-pointer shadow-sm flex items-center justify-center gap-2"
                 >
                   {saving ? (
                     <>
