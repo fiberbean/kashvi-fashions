@@ -21,7 +21,15 @@ export default function MobileBottomBar() {
     location.search.includes('tab=jewellery') ||
     location.pathname.toLowerCase().includes('jewel');
 
+  // Native Mobile Haptic Touch Feedback
+  const triggerHaptic = () => {
+    if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
+      navigator.vibrate(12);
+    }
+  };
+
   const openAuth = () => {
+    triggerHaptic();
     const userBtn = document.querySelector('[aria-label="User Account"]') as HTMLButtonElement | null;
     if (userBtn) {
       userBtn.click();
@@ -31,43 +39,54 @@ export default function MobileBottomBar() {
   };
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
+    if (path === '/') return location.pathname === '/' && !location.pathname.includes('/category');
     return location.pathname.startsWith(path);
   };
 
   return (
     <nav
-      className={`md:hidden fixed bottom-0 inset-x-0 z-40 backdrop-blur-xl border-t transition-all duration-300 bg-white/95 ${
+      className={`md:hidden fixed bottom-0 inset-x-0 z-50 transition-all duration-300 select-none ${
         isJewelleryPage
-          ? 'border-amber-100 shadow-[0_-4px_20px_rgba(212,175,55,0.08)]'
-          : 'border-pink-100 shadow-[0_-4px_20px_rgba(255,45,133,0.08)]'
+          ? 'bg-[#0f172a]/92 backdrop-blur-2xl border-t border-[#e5c07b]/25 shadow-[0_-8px_30px_rgba(0,0,0,0.85)]'
+          : 'bg-[#0b101e]/92 backdrop-blur-2xl border-t border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.85)]'
       }`}
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 8px)' }}
+      style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 8px), 8px)' }}
     >
-      <div className="grid grid-cols-5 items-center h-15 px-2">
+      <div className="grid grid-cols-5 items-center h-14 px-3 max-w-md mx-auto">
+        
         {/* 1. HOME */}
         <Link
           to={`/?tab=${isJewelleryPage ? 'jewellery' : 'fashions'}`}
-          className="flex flex-col items-center justify-center gap-1 py-1 transition-transform active:scale-90"
+          onClick={triggerHaptic}
+          className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] relative"
         >
-          <div className="relative">
+          {isActive('/') && (
+            <span
+              className={`absolute -top-1 w-6 h-0.5 rounded-full ${
+                isJewelleryPage
+                  ? 'bg-[#ffd700] shadow-[0_0_8px_#ffd700]'
+                  : 'bg-[#00f5d4] shadow-[0_0_8px_#00f5d4]'
+              }`}
+            />
+          )}
+          <div className="relative p-1">
             <Home
-              className={`w-5 h-5 transition-colors ${
-                isActive('/') && !location.pathname.includes('/category')
+              className={`w-5 h-5 transition-all ${
+                isActive('/')
                   ? isJewelleryPage
-                    ? 'text-[#b38728] stroke-[2.4]'
-                    : 'text-[#ff2d85] stroke-[2.4]'
-                  : 'text-stone-400 stroke-[1.8]'
+                    ? 'text-[#ffd700] stroke-[2.4] scale-110 drop-shadow-[0_0_6px_rgba(255,215,0,0.4)]'
+                    : 'text-[#00f5d4] stroke-[2.4] scale-110 drop-shadow-[0_0_6px_rgba(0,245,212,0.4)]'
+                  : 'text-slate-400 stroke-[1.8]'
               }`}
             />
           </div>
           <span
-            className={`text-[10px] tracking-tight ${
-              isActive('/') && !location.pathname.includes('/category')
+            className={`text-[9.5px] tracking-tight ${
+              isActive('/')
                 ? isJewelleryPage
-                  ? 'text-[#b38728] font-bold'
-                  : 'text-[#ff2d85] font-bold'
-                : 'text-stone-400 font-medium'
+                  ? 'text-[#ffd700] font-bold'
+                  : 'text-[#00f5d4] font-bold'
+                : 'text-slate-400 font-medium'
             }`}
           >
             Home
@@ -77,29 +96,39 @@ export default function MobileBottomBar() {
         {/* 2. CATEGORIES */}
         <Link
           to={`/category/${isJewelleryPage ? 'jewellery' : 'fashions'}`}
-          className="flex flex-col items-center justify-center gap-1 py-1 transition-transform active:scale-90"
+          onClick={triggerHaptic}
+          className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] relative"
         >
-          <div className="relative">
+          {isActive('/category') && (
+            <span
+              className={`absolute -top-1 w-6 h-0.5 rounded-full ${
+                isJewelleryPage
+                  ? 'bg-[#ffd700] shadow-[0_0_8px_#ffd700]'
+                  : 'bg-[#00f5d4] shadow-[0_0_8px_#00f5d4]'
+              }`}
+            />
+          )}
+          <div className="relative p-1">
             <LayoutGrid
-              className={`w-5 h-5 transition-colors ${
+              className={`w-5 h-5 transition-all ${
                 isActive('/category')
                   ? isJewelleryPage
-                    ? 'text-[#b38728] stroke-[2.4]'
-                    : 'text-[#ff2d85] stroke-[2.4]'
-                  : 'text-stone-400 stroke-[1.8]'
+                    ? 'text-[#ffd700] stroke-[2.4] scale-110 drop-shadow-[0_0_6px_rgba(255,215,0,0.4)]'
+                    : 'text-[#00f5d4] stroke-[2.4] scale-110 drop-shadow-[0_0_6px_rgba(0,245,212,0.4)]'
+                  : 'text-slate-400 stroke-[1.8]'
               }`}
             />
           </div>
           <span
-            className={`text-[10px] tracking-tight ${
+            className={`text-[9.5px] tracking-tight ${
               isActive('/category')
                 ? isJewelleryPage
-                  ? 'text-[#b38728] font-bold'
-                  : 'text-[#ff2d85] font-bold'
-                : 'text-stone-400 font-medium'
+                  ? 'text-[#ffd700] font-bold'
+                  : 'text-[#00f5d4] font-bold'
+                : 'text-slate-400 font-medium'
             }`}
           >
-            {isJewelleryPage ? 'Vault' : 'Boutique'}
+            {isJewelleryPage ? 'Vault' : 'Categories'}
           </span>
         </Link>
 
@@ -107,56 +136,60 @@ export default function MobileBottomBar() {
         <button
           type="button"
           onClick={() => {
+            triggerHaptic();
             const heartBtn = document.querySelector('[aria-label="Wishlist"]') as HTMLButtonElement | null;
             if (heartBtn) heartBtn.click();
           }}
-          className="flex flex-col items-center justify-center gap-1 py-1 transition-transform active:scale-90 cursor-pointer"
+          className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
         >
-          <div className="relative">
+          <div className="relative p-1">
             <Heart
-              className={`w-5 h-5 transition-colors ${
+              className={`w-5 h-5 transition-all ${
                 wishlist.length > 0
                   ? isJewelleryPage
-                    ? 'text-[#D4AF37] fill-[#D4AF37]/20'
-                    : 'text-[#ff2d85] fill-[#ff2d85]/20'
-                  : 'text-stone-400 stroke-[1.8]'
+                    ? 'text-[#ffd700] fill-[#ffd700]/30 stroke-[2]'
+                    : 'text-[#ff2d85] fill-[#ff2d85]/30 stroke-[2]'
+                  : 'text-slate-400 stroke-[1.8]'
               }`}
             />
             {wishlist.length > 0 && (
               <span
-                className={`absolute -top-1 -right-1.5 min-w-3.5 h-3.5 px-0.5 rounded-full text-[9px] font-black flex items-center justify-center text-white ${
-                  isJewelleryPage ? 'bg-[#D4AF37]' : 'bg-[#ff2d85]'
+                className={`absolute top-0 right-0 min-w-3.5 h-3.5 px-1 rounded-full text-[8.5px] font-black flex items-center justify-center text-white ${
+                  isJewelleryPage ? 'bg-[#ffd700] text-black font-extrabold' : 'bg-[#ff2d85]'
                 }`}
               >
                 {wishlist.length > 9 ? '9+' : wishlist.length}
               </span>
             )}
           </div>
-          <span className="text-[10px] text-stone-400 font-medium tracking-tight">
-            Wishlist
+          <span className="text-[9.5px] text-slate-400 font-medium tracking-tight">
+            Saved
           </span>
         </button>
 
         {/* 4. BAG / CART */}
         <button
           type="button"
-          onClick={openCart}
-          className="flex flex-col items-center justify-center gap-1 py-1 transition-transform active:scale-90 cursor-pointer"
+          onClick={() => {
+            triggerHaptic();
+            openCart();
+          }}
+          className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
         >
-          <div className="relative">
+          <div className="relative p-1">
             <ShoppingBag
-              className={`w-5 h-5 transition-colors ${
+              className={`w-5 h-5 transition-all ${
                 totalItems > 0
                   ? isJewelleryPage
-                    ? 'text-[#D4AF37] stroke-[2.2]'
-                    : 'text-[#ff2d85] stroke-[2.2]'
-                  : 'text-stone-400 stroke-[1.8]'
+                    ? 'text-[#ffd700] stroke-[2.2] scale-110 drop-shadow-[0_0_6px_rgba(255,215,0,0.5)]'
+                    : 'text-[#00f5d4] stroke-[2.2] scale-110 drop-shadow-[0_0_6px_rgba(0,245,212,0.5)]'
+                  : 'text-slate-400 stroke-[1.8]'
               }`}
             />
             {totalItems > 0 && (
               <span
-                className={`absolute -top-1 -right-2 min-w-4 h-4 px-1 rounded-full text-[9px] font-black flex items-center justify-center text-white animate-in zoom-in-50 ${
-                  isJewelleryPage ? 'bg-[#D4AF37]' : 'bg-[#ff2d85]'
+                className={`absolute -top-0.5 -right-1 min-w-4 h-4 px-1 rounded-full text-[8.5px] font-black flex items-center justify-center text-white animate-in zoom-in-75 ${
+                  isJewelleryPage ? 'bg-[#ffd700] text-black font-extrabold' : 'bg-[#00f5d4] text-black font-black'
                 }`}
               >
                 {totalItems}
@@ -164,12 +197,12 @@ export default function MobileBottomBar() {
             )}
           </div>
           <span
-            className={`text-[10px] tracking-tight ${
+            className={`text-[9.5px] tracking-tight ${
               totalItems > 0
                 ? isJewelleryPage
-                  ? 'text-[#b38728] font-bold'
-                  : 'text-[#ff2d85] font-bold'
-                : 'text-stone-400 font-medium'
+                  ? 'text-[#ffd700] font-bold'
+                  : 'text-[#00f5d4] font-bold'
+                : 'text-slate-400 font-medium'
             }`}
           >
             Bag
@@ -180,34 +213,35 @@ export default function MobileBottomBar() {
         <button
           type="button"
           onClick={openAuth}
-          className="flex flex-col items-center justify-center gap-1 py-1 transition-transform active:scale-90 cursor-pointer"
+          className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
         >
-          <div className="relative">
+          <div className="relative p-1">
             <User
-              className={`w-5 h-5 transition-colors ${
+              className={`w-5 h-5 transition-all ${
                 user
                   ? isJewelleryPage
-                    ? 'text-[#b38728] stroke-[2.4]'
-                    : 'text-[#ff2d85] stroke-[2.4]'
-                  : 'text-stone-400 stroke-[1.8]'
+                    ? 'text-[#ffd700] stroke-[2.4]'
+                    : 'text-[#00f5d4] stroke-[2.4]'
+                  : 'text-slate-400 stroke-[1.8]'
               }`}
             />
             {user && (
-              <span className="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+              <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-[#00ff9d] ring-2 ring-[#0b101e]" />
             )}
           </div>
           <span
-            className={`text-[10px] tracking-tight ${
+            className={`text-[9.5px] tracking-tight ${
               user
                 ? isJewelleryPage
-                  ? 'text-[#b38728] font-bold'
-                  : 'text-[#ff2d85] font-bold'
-                : 'text-stone-400 font-medium'
+                  ? 'text-[#ffd700] font-bold'
+                  : 'text-[#00f5d4] font-bold'
+                : 'text-slate-400 font-medium'
             }`}
           >
-            {user ? 'Account' : 'Login'}
+            {user ? 'Profile' : 'Login'}
           </span>
         </button>
+
       </div>
     </nav>
   );

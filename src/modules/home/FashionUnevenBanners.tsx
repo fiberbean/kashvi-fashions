@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
@@ -7,19 +7,19 @@ const FASHION_DEFAULT_BANNERS = [
     id: 'fsh-def-1',
     title: 'Heritage Kanchipuram Silks',
     image: 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=1600&h=900&fit=crop&q=80',
-    link: '/category/fashions?sub=sarees',
+    link: '',
   },
   {
     id: 'fsh-def-2',
     title: 'Designer Lehengas',
     image: 'https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=960&h=540&fit=crop&q=80',
-    link: '/category/fashions?sub=lehengas',
+    link: '',
   },
   {
     id: 'fsh-def-3',
     title: 'Contemporary Kurtis',
     image: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=960&h=540&fit=crop&q=80',
-    link: '/category/fashions?sub=kurtis',
+    link: '',
   },
 ];
 
@@ -35,6 +35,10 @@ export default function FashionUnevenBanners() {
   const [rightTop, setRightTop] = useState<BannerItem>(FASHION_DEFAULT_BANNERS[1]);
   const [rightBottom, setRightBottom] = useState<BannerItem>(FASHION_DEFAULT_BANNERS[2]);
   const [currentSlide, setCurrentSlide] = useState(0);
+
+  // Touch Swipe State for Native App Gesture
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
 
   useEffect(() => {
     const fetchBanners = async () => {
@@ -54,7 +58,7 @@ export default function FashionUnevenBanners() {
               id: b.id,
               title: b.title || 'Fashion Collection',
               image: b.image_url,
-              link: b.redirect_link || b.link_url || '/category/fashions',
+              link: b.redirect_link || b.link_url || '',
             }));
 
           const rt = data.find((b) => b.placement === 'right_top');
@@ -66,7 +70,7 @@ export default function FashionUnevenBanners() {
               id: rt.id,
               title: rt.title || 'Fashion Trending',
               image: rt.image_url,
-              link: rt.redirect_link || rt.link_url || '/category/fashions',
+              link: rt.redirect_link || rt.link_url || '',
             });
           }
           if (rb && rb.image_url) {
@@ -74,7 +78,7 @@ export default function FashionUnevenBanners() {
               id: rb.id,
               title: rb.title || 'Fashion Promo',
               image: rb.image_url,
-              link: rb.redirect_link || rb.link_url || '/category/fashions',
+              link: rb.redirect_link || rb.link_url || '',
             });
           }
         }
@@ -86,6 +90,7 @@ export default function FashionUnevenBanners() {
     fetchBanners();
   }, []);
 
+  // Multi-scroll timer
   useEffect(() => {
     if (mainSlides.length <= 1) return;
     const timer = setInterval(() => {
@@ -94,72 +99,176 @@ export default function FashionUnevenBanners() {
     return () => clearInterval(timer);
   }, [mainSlides.length]);
 
+  // Handle Touch Swipe (Mobile App Feel)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    const distance = touchStartX.current - touchEndX.current;
+    if (distance > 50) {
+      setCurrentSlide((prev) => (prev + 1) % mainSlides.length);
+    } else if (distance < -50) {
+      setCurrentSlide((prev) => (prev === 0 ? mainSlides.length - 1 : prev - 1));
+    }
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
+
   const activeMain = mainSlides[currentSlide] || mainSlides[0];
 
+  // Helper to render either Link or regular Div if No-Click
+  const renderBannerContainer = (banner: BannerItem, children: React.ReactNode, extraClass: string) => {
+    const hasValidLink = Boolean(banner.link && banner.link.trim() !== '' && banner.link !== '#');
+
+    if (hasValidLink) {
+      return (
+        <Link to={banner.link} className={`${extraClass} cursor-pointer active:scale-[0.99] transition-transform`}>
+          {children}
+        </Link>
+      );
+    }
+
+    return (
+      <div className={`${extraClass} cursor-default select-none pointer-events-auto`}>
+        {children}
+      </div>
+    );
+  };
+
   return (
-    <section className="w-full max-w-7xl mx-auto px-4 md:px-6 pt-6 pb-12 select-none relative z-10">
+    <section className="w-full max-w-7xl mx-auto px-3 sm:px-6 pt-4 sm:pt-10 pb-8 sm:pb-12 select-none relative z-10">
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 sm:gap-6 items-start">
         
-        {/* 1. Large Main Spotlight Banner */}
-        <Link
-          to={activeMain.link}
-          className="md:col-span-8 relative rounded-3xl overflow-hidden bg-white shadow-[0_10px_30px_rgba(255,182,193,0.45),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_16px_40px_rgba(255,140,165,0.65)] group aspect-[16/9] w-full transition-shadow duration-500 block cursor-pointer border border-pink-100/60"
-        >
-          <div className="w-full h-full relative overflow-hidden bg-stone-100">
-            <img
-              key={activeMain.id}
-              src={activeMain.image}
-              alt={activeMain.title}
-              className="w-full h-full object-cover filter brightness-[0.98] group-hover:brightness-100 animate-in fade-in"
-              loading="lazy"
-            />
+        {/* 1. Large Main Hoarding (Touch Swipeable & No-Click Guard) */}
+        {renderBannerContainer(
+          activeMain,
+          <>
+            {/* Top Metal Truss Bar */}
+            <div className="absolute -top-3.5 inset-x-4 h-2 bg-gradient-to-r from-[#1e293b] via-[#475569] to-[#1e293b] rounded-t-xs shadow-md z-30" />
 
-            {/* Soft Ambient Boutique Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent opacity-60 group-hover:opacity-30 transition-opacity" />
+            {/* Overhead Spotlights */}
+            <div className="absolute -top-7 sm:-top-9 inset-x-0 flex justify-around px-8 sm:px-16 z-40 pointer-events-none">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <div className="w-1 sm:w-1.5 h-4 sm:h-6 bg-gradient-to-b from-[#475569] via-[#334155] to-[#1e293b] rounded-t-full shadow-inner" />
+                  <div className="w-6 sm:w-8 h-3 sm:h-4 rounded-t-sm bg-[#0f172a] border border-[#64748b] shadow-[0_4px_10px_rgba(0,0,0,0.9)] flex items-center justify-center -mt-0.5">
+                    <div className="w-3.5 sm:w-5 h-1.5 sm:h-2 rounded-full bg-white shadow-[0_0_12px_#ffffff,0_0_24px_rgba(255,255,255,0.95)]" />
+                  </div>
+                </div>
+              ))}
+            </div>
 
-            {/* Multi-Slide Navigation Dots */}
-            {mainSlides.length > 1 && (
-              <div className="absolute bottom-4 right-5 flex items-center gap-1.5 z-30 bg-white/70 px-2.5 py-1.5 rounded-full backdrop-blur-md border border-white/60 shadow-xs">
-                {mainSlides.map((_, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setCurrentSlide(idx);
-                    }}
-                    className={`h-1.5 rounded-full transition-all duration-300 ${
-                      currentSlide === idx ? 'w-5 bg-[#ff2d85] shadow-[0_0_8px_rgba(255,45,133,0.5)]' : 'w-1.5 bg-stone-400/50'
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </Link>
+            {/* Atmospheric Light Cones */}
+            <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden rounded-md">
+              <div
+                className="absolute -top-2 left-[5%] w-[40%] h-[95%] bg-gradient-to-b from-white/30 via-white/8 to-transparent blur-lg sm:blur-xl"
+                style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }}
+              />
+              <div
+                className="absolute -top-2 left-1/2 -translate-x-1/2 w-[45%] h-[100%] bg-gradient-to-b from-white/35 via-white/10 to-transparent blur-lg sm:blur-xl"
+                style={{ clipPath: 'polygon(38% 0%, 62% 0%, 100% 100%, 0% 100%)' }}
+              />
+              <div
+                className="absolute -top-2 right-[5%] w-[40%] h-[95%] bg-gradient-to-b from-white/30 via-white/8 to-transparent blur-lg sm:blur-xl"
+                style={{ clipPath: 'polygon(35% 0%, 65% 0%, 100% 100%, 0% 100%)' }}
+              />
+            </div>
 
-        {/* 2. Side Stacked Promotional Banners */}
-        <div className="md:col-span-4 flex flex-col gap-5 sm:gap-6">
-          {[rightTop, rightBottom].map((banner, index) => (
-            <Link
-              key={banner.id || index}
-              to={banner.link}
-              className="relative rounded-3xl overflow-hidden bg-white shadow-[0_8px_25px_rgba(255,182,193,0.38),0_2px_6px_rgba(0,0,0,0.03)] hover:shadow-[0_14px_34px_rgba(255,140,165,0.6)] group aspect-[16/9] w-full transition-shadow duration-500 block cursor-pointer border border-pink-100/60"
+            {/* Pure 16:9 Canvas Frame */}
+            <div
+              className="w-full h-full rounded-xs overflow-hidden bg-[#020617] relative border border-[#334155] shadow-[inset_0_0_30px_rgba(0,0,0,0.85)] z-10"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             >
-              <div className="w-full h-full relative overflow-hidden bg-stone-100">
-                <img
-                  src={banner.image}
-                  alt={banner.title}
-                  className="w-full h-full object-cover filter brightness-[0.98] group-hover:brightness-100"
-                  loading="lazy"
-                />
+              <img
+                key={activeMain.id}
+                src={activeMain.image}
+                alt={activeMain.title}
+                className="w-full h-full object-cover filter brightness-105 contrast-105 animate-in fade-in duration-300"
+                loading="eager"
+              />
 
-                {/* Subtle Luxury Gradient Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent opacity-60 group-hover:opacity-30 transition-opacity" />
+              {/* Corner Fasteners */}
+              <div className="absolute top-2 left-2 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30 flex items-center justify-center">
+                <div className="w-1.5 h-0.5 bg-black/70 rotate-45" />
               </div>
-            </Link>
-          ))}
+              <div className="absolute top-2 right-2 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30 flex items-center justify-center">
+                <div className="w-1.5 h-0.5 bg-black/70 -rotate-45" />
+              </div>
+              <div className="absolute bottom-2 left-2 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30 flex items-center justify-center">
+                <div className="w-1.5 h-0.5 bg-black/70 -rotate-45" />
+              </div>
+              <div className="absolute bottom-2 right-2 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30 flex items-center justify-center">
+                <div className="w-1.5 h-0.5 bg-black/70 rotate-45" />
+              </div>
+
+              {/* Native App Style Dots */}
+              {mainSlides.length > 1 && (
+                <div className="absolute bottom-2.5 right-3 flex items-center gap-1 z-30 bg-black/70 px-2 py-0.5 rounded-full backdrop-blur-md border border-white/10">
+                  {mainSlides.map((_, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setCurrentSlide(idx);
+                      }}
+                      className={`h-1.5 rounded-full transition-all duration-300 ${
+                        currentSlide === idx ? 'w-3.5 bg-[#00f5d4]' : 'w-1.5 bg-white/40'
+                      }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>,
+          "md:col-span-8 relative rounded-md bg-[#0a0f1d] border-4 border-[#1e293b] hover:border-[#00f5d4] shadow-[0_25px_60px_rgba(0,0,0,0.98)] group aspect-[16/9] w-full flex flex-col p-2 sm:p-2.5 pt-2.5 sm:pt-3 block touch-pan-y"
+        )}
+
+        {/* 2. Side Stacked Hoardings */}
+        <div className="md:col-span-4 flex flex-col gap-4 sm:gap-6 w-full">
+          {[rightTop, rightBottom].map((banner, index) =>
+            renderBannerContainer(
+              banner,
+              <>
+                <div className="absolute -top-3.5 inset-x-3 h-2 bg-gradient-to-r from-[#1e293b] via-[#475569] to-[#1e293b] rounded-t-xs shadow-md z-30" />
+
+                <div className="absolute -top-7 sm:-top-9 inset-x-0 flex justify-around px-8 z-40 pointer-events-none">
+                  {[...Array(2)].map((_, i) => (
+                    <div key={i} className="flex flex-col items-center">
+                      <div className="w-1 sm:w-1.5 h-4 sm:h-6 bg-gradient-to-b from-[#475569] via-[#334155] to-[#1e293b] rounded-t-full shadow-inner" />
+                      <div className="w-5 sm:w-7 h-3 sm:h-4 rounded-t-sm bg-[#0f172a] border border-[#64748b] shadow-[0_4px_10px_rgba(0,0,0,0.9)] flex items-center justify-center -mt-0.5">
+                        <div className="w-3 sm:w-4 h-1.5 sm:h-2 rounded-full bg-white shadow-[0_0_12px_#ffffff,0_0_20px_rgba(255,255,255,0.95)]" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="w-full h-full rounded-xs overflow-hidden bg-[#020617] relative border border-[#334155] shadow-[inset_0_0_20px_rgba(0,0,0,0.85)] z-10">
+                  <img
+                    src={banner.image}
+                    alt={banner.title}
+                    className="w-full h-full object-cover filter brightness-105 contrast-105"
+                    loading="lazy"
+                  />
+
+                  <div className="absolute top-1.5 left-1.5 w-2 h-2 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30" />
+                  <div className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30" />
+                  <div className="absolute bottom-1.5 left-1.5 w-2 h-2 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30" />
+                  <div className="absolute bottom-1.5 right-1.5 w-2 h-2 rounded-full bg-gradient-to-br from-neutral-400 to-neutral-700 border border-black shadow-md z-30" />
+                </div>
+              </>,
+              "relative rounded-md bg-[#0a0f1d] border-4 border-[#1e293b] hover:border-[#00f5d4] shadow-[0_20px_45px_rgba(0,0,0,0.95)] group aspect-[16/9] w-full flex flex-col p-2 sm:p-2.5 pt-2.5 sm:pt-3 block"
+            )
+          )}
         </div>
       </div>
     </section>

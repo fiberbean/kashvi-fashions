@@ -22,7 +22,7 @@ function HomePageContent() {
 
   return (
     <main
-      className={`min-h-screen pb-24 md:pb-20 w-full overflow-x-hidden relative transition-colors duration-500 ${
+      className={`min-h-screen pb-24 md:pb-20 w-full overflow-x-hidden relative transition-colors duration-500 overscroll-y-none select-none ${
         isJewellery
           ? 'bg-[#FBF9F5] text-stone-900 selection:bg-[#D4AF37] selection:text-black font-cinzel'
           : 'bg-[#FAF8F5] text-stone-900 selection:bg-[#ff2d85] selection:text-white font-sans'
@@ -43,7 +43,7 @@ function HomePageContent() {
 
       {/* Fashions Tab Content */}
       {!isJewellery && (
-        <div className="w-full relative z-10 animate-in fade-in duration-300 pt-2 sm:pt-4">
+        <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
           <FashionBubbleMenu />
           <FashionUnevenBanners />
         </div>
@@ -51,7 +51,7 @@ function HomePageContent() {
 
       {/* Jewellery Tab Content */}
       {isJewellery && (
-        <div className="w-full relative z-10 animate-in fade-in duration-300 pt-2 sm:pt-4">
+        <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
           <JewelleryBubbleMenu />
           <JewelleryUnevenBanners />
         </div>
@@ -65,8 +65,8 @@ export default function CustomerApp() {
     <AuthProvider>
       <WishlistProvider>
         <CartProvider>
-          <div className="relative min-h-screen bg-[#FAF8F5] text-stone-900">
-            {/* Dedicated Top Navbar */}
+          <div className="relative min-h-screen bg-[#FAF8F5] text-stone-900 select-none touch-manipulation overscroll-none">
+            {/* Top Navbar */}
             <Navbar />
 
             <Routes>
@@ -75,7 +75,7 @@ export default function CustomerApp() {
               <Route path="/product/:id" element={<ProductDetailPage />} />
             </Routes>
 
-            {/* Native App-Style Bottom Navigation Bar */}
+            {/* Native Mobile App Fixed Bottom Navigation */}
             <MobileBottomBar />
 
             {/* Modals & Drawers */}
