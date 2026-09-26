@@ -1,192 +1,144 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
-const JEWELLERY_DEFAULT_BANNERS = [
-  {
-    id: 'jwl-def-1',
-    title: 'Certified Antique Temple Sets',
-    image: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=1600&h=900&fit=crop&q=80',
-    link: 'noclick',
-  },
-  {
-    id: 'jwl-def-2',
-    title: 'Polki & Kundan Chokers',
-    image: 'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=960&h=540&fit=crop&q=80',
-    link: 'noclick',
-  },
-  {
-    id: 'jwl-def-3',
-    title: 'Heirloom Bangles & Kadas',
-    image: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=960&h=540&fit=crop&q=80',
-    link: 'noclick',
-  },
-];
-
-interface BannerItem {
+interface CategoryItem {
   id: string;
-  title: string;
-  image: string;
-  link: string;
+  name: string;
+  slug?: string;
+  image_url?: string;
+  department?: string;
 }
 
-export default function JewelleryUnevenBanners() {
-  const [mainSlides, setMainSlides] = useState<BannerItem[]>([JEWELLERY_DEFAULT_BANNERS[0]]);
-  const [rightTop, setRightTop] = useState<BannerItem>(JEWELLERY_DEFAULT_BANNERS[1]);
-  const [rightBottom, setRightBottom] = useState<BannerItem>(JEWELLERY_DEFAULT_BANNERS[2]);
-  const [currentSlide, setCurrentSlide] = useState(0);
+const DEFAULT_JEWELLERY_CATEGORIES: CategoryItem[] = [
+  { id: 'j1', name: 'Temple Sets', slug: 'temple-sets', image_url: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&q=80' },
+  { id: 'j2', name: 'Chokers', slug: 'chokers', image_url: 'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=300&q=80' },
+  { id: 'j3', name: 'Bangles', slug: 'bangles', image_url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80' },
+  { id: 'j4', name: 'Earrings', slug: 'earrings', image_url: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?w=300&q=80' },
+  { id: 'j5', name: 'Bridal Sets', slug: 'bridal-sets', image_url: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&q=80' },
+  { id: 'j6', name: 'Kundan Sets', slug: 'kundan-sets', image_url: 'https://images.unsplash.com/photo-1599643477877-530eb83abc8e?w=300&q=80' },
+];
 
-  const isClickDisabled = (targetLink?: string) => {
-    if (!targetLink) return true;
-    const clean = targetLink.trim().toLowerCase();
-    return clean === 'noclick' || clean === '#' || clean === 'none' || clean === '';
-  };
+export default function JewelleryBubbleMenu() {
+  const [categories, setCategories] = useState<CategoryItem[]>(DEFAULT_JEWELLERY_CATEGORIES);
+  const [searchParams] = useSearchParams();
+  const currentSub = searchParams.get('sub');
 
   useEffect(() => {
-    const fetchBanners = async () => {
+    async function loadCategories() {
       try {
         const { data, error } = await supabase
-          .from('banners')
+          .from('categories')
           .select('*')
-          .eq('banner_type', 'jewellery')
-          .eq('active', true)
           .order('display_order', { ascending: true });
 
-        if (error) throw error;
-        if (data && data.length > 0) {
-          const main = data
-            .filter((b) => b.placement === 'main_spotlight')
-            .map((b) => ({
-              id: b.id,
-              title: b.title || 'Royal Jewellery',
-              image: b.image_url,
-              link: b.redirect_link || b.link_url || 'noclick',
-            }));
+        if (!error && data && data.length > 0) {
+          // Jewellery categories detection
+          const jewelCats = data.filter((c: any) => {
+            if (c.active === false) return false;
+            const dept = (c.department || '').toLowerCase().trim();
+            const name = (c.name || '').toLowerCase().trim();
+            const slug = (c.slug || '').toLowerCase().trim();
 
-          const rt = data.find((b) => b.placement === 'right_top');
-          const rb = data.find((b) => b.placement === 'right_bottom');
+            return (
+              dept === 'jewellery' ||
+              dept.includes('jewel') ||
+              name.includes('jewel') ||
+              slug.includes('jewel') ||
+              name.includes('temple') ||
+              name.includes('choker') ||
+              name.includes('bangle') ||
+              name.includes('earring') ||
+              name.includes('bridal') ||
+              name.includes('kundan') ||
+              name.includes('necklace') ||
+              name.includes('ring') ||
+              name.includes('chain')
+            );
+          });
 
-          if (main.length > 0) setMainSlides(main);
-          if (rt && rt.image_url) {
-            setRightTop({
-              id: rt.id,
-              title: rt.title || 'Royal Chokers',
-              image: rt.image_url,
-              link: rt.redirect_link || rt.link_url || 'noclick',
-            });
-          }
-          if (rb && rb.image_url) {
-            setRightBottom({
-              id: rb.id,
-              title: rb.title || 'Royal Bangles',
-              image: rb.image_url,
-              link: rb.redirect_link || rb.link_url || 'noclick',
-            });
+          // Oka vela database lo categories lo direct ga lekapothe sub_categories check cheyadam
+          if (jewelCats.length > 0) {
+            setCategories(jewelCats);
+          } else {
+            const { data: subData } = await supabase
+              .from('sub_categories')
+              .select('*')
+              .order('name', { ascending: true });
+
+            if (subData && subData.length > 0) {
+              const subJewels = subData.filter((s: any) => {
+                if (s.active === false) return false;
+                const sDept = (s.department || '').toLowerCase().trim();
+                const sName = (s.name || '').toLowerCase().trim();
+                return sDept.includes('jewel') || sName.includes('bangle') || sName.includes('necklace') || sName.includes('earring') || sName.includes('choker') || sName.includes('set');
+              }).map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                slug: s.slug || s.name.toLowerCase().replace(/\s+/g, '-'),
+                image_url: s.image_url || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80',
+              }));
+
+              if (subJewels.length > 0) {
+                setCategories(subJewels);
+              }
+            }
           }
         }
       } catch (err) {
-        console.error('Failed to load dynamic jewellery banners:', err);
+        console.error('Error fetching jewellery categories:', err);
       }
-    };
-
-    fetchBanners();
+    }
+    loadCategories();
   }, []);
 
-  useEffect(() => {
-    if (mainSlides.length <= 1) return;
-    const timer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % mainSlides.length);
-    }, 4500);
-    return () => clearInterval(timer);
-  }, [mainSlides.length]);
-
-  const activeMain = mainSlides[currentSlide] || mainSlides[0];
-  const isMainNoClick = isClickDisabled(activeMain.link);
-
   return (
-    <section className="w-full max-w-7xl mx-auto px-3 sm:px-6 pt-4 sm:pt-6 pb-8 sm:pb-12 select-none relative z-10">
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 sm:gap-6 items-start">
-        
-        {/* 1. Main Spotlight Banner */}
-        <Link
-          to={isMainNoClick ? '#' : activeMain.link}
-          onClick={(e) => {
-            if (isMainNoClick) {
-              e.preventDefault();
-              e.stopPropagation();
-            }
-          }}
-          className={`md:col-span-8 relative rounded-2xl sm:rounded-3xl overflow-hidden bg-white shadow-[0_10px_30px_rgba(212,175,55,0.35),0_2px_8px_rgba(0,0,0,0.04)] hover:shadow-[0_16px_40px_rgba(212,175,55,0.55)] group aspect-[16/9] w-full transition-shadow duration-500 block border border-amber-200/60 ${
-            isMainNoClick ? 'cursor-default' : 'cursor-pointer'
-          }`}
-        >
-          <div className="w-full h-full relative overflow-hidden bg-stone-100">
-            <img
-              key={activeMain.id}
-              src={activeMain.image}
-              alt={activeMain.title}
-              className="w-full h-full object-cover filter brightness-[0.98] group-hover:brightness-100 animate-in fade-in"
-              loading="lazy"
-            />
-
-            {/* Amber Ambient Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent opacity-60 group-hover:opacity-30 transition-opacity" />
-
-            {/* Navigation Dots */}
-            {mainSlides.length > 1 && (
-              <div className="absolute bottom-3 sm:bottom-4 right-3 sm:right-5 flex items-center gap-1 sm:gap-1.5 z-30 bg-white/75 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-full backdrop-blur-md border border-white/60 shadow-xs">
-                {mainSlides.map((_, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setCurrentSlide(idx);
-                    }}
-                    className={`h-1 sm:h-1.5 rounded-full transition-all duration-300 ${
-                      currentSlide === idx ? 'w-4 sm:w-5 bg-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.7)]' : 'w-1 sm:w-1.5 bg-stone-400/50'
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </Link>
-
-        {/* 2. Side Banners - Mobile lo 2-column grid ga pakkana pakkana osthayi */}
-        <div className="md:col-span-4 grid grid-cols-2 md:grid-cols-1 gap-3 sm:gap-6">
-          {[rightTop, rightBottom].map((banner, index) => {
-            const isBannerNoClick = isClickDisabled(banner.link);
+    <div className="w-full py-2 sm:py-4 select-none relative z-10">
+      <div 
+        className="w-full overflow-x-auto overflow-y-hidden no-scrollbar px-3 sm:px-6 touch-pan-x"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        <div className="flex items-start justify-start md:justify-center gap-3.5 sm:gap-6 min-w-max py-2 px-1">
+          {categories.map((cat) => {
+            const targetSlug = cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-');
+            const isActive = currentSub === targetSlug || currentSub === cat.name;
 
             return (
               <Link
-                key={banner.id || index}
-                to={isBannerNoClick ? '#' : banner.link}
-                onClick={(e) => {
-                  if (isBannerNoClick) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }
-                }}
-                className={`relative rounded-xl sm:rounded-3xl overflow-hidden bg-white shadow-[0_8px_25px_rgba(212,175,55,0.28),0_2px_6px_rgba(0,0,0,0.03)] hover:shadow-[0_14px_34px_rgba(212,175,55,0.5)] group aspect-[16/9] w-full transition-shadow duration-500 block border border-amber-200/60 ${
-                  isBannerNoClick ? 'cursor-default' : 'cursor-pointer'
-                }`}
+                key={cat.id}
+                to={`/category/${targetSlug}?tab=jewellery`}
+                className="group shrink-0 flex flex-col items-center w-[72px] sm:w-[88px] text-center cursor-pointer transition-transform active:scale-95"
               >
-                <div className="w-full h-full relative overflow-hidden bg-stone-100">
+                <div
+                  className={`relative w-full h-[98px] sm:h-[118px] rounded-t-full rounded-b-2xl overflow-hidden bg-stone-100 transition-all duration-300 ${
+                    isActive
+                      ? 'shadow-[0_10px_25px_rgba(212,175,55,0.5)] ring-2 ring-[#D4AF37]'
+                      : 'shadow-[0_6px_18px_rgba(212,175,55,0.28)] group-hover:shadow-[0_10px_25px_rgba(212,175,55,0.45)]'
+                  }`}
+                >
                   <img
-                    src={banner.image}
-                    alt={banner.title}
-                    className="w-full h-full object-cover filter brightness-[0.98] group-hover:brightness-100"
+                    src={cat.image_url || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80'}
+                    alt={cat.name}
+                    className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-108"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent opacity-60 group-hover:opacity-30 transition-opacity" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-stone-950/40 via-transparent to-transparent opacity-50 group-hover:opacity-20 transition-opacity" />
+                </div>
+
+                <div className="mt-1.5 w-full px-0.5 min-h-[30px] flex items-center justify-center">
+                  <span
+                    className={`block text-[10px] sm:text-[11px] font-cinzel font-bold uppercase leading-tight text-center tracking-tight transition-colors whitespace-normal break-words ${
+                      isActive ? 'text-[#b38728]' : 'text-stone-800 group-hover:text-[#b38728]'
+                    }`}
+                  >
+                    {cat.name}
+                  </span>
                 </div>
               </Link>
             );
           })}
         </div>
       </div>
-    </section>
+    </div>
   );
 }

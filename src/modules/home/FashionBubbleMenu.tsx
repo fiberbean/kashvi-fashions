@@ -7,6 +7,7 @@ interface CategoryItem {
   name: string;
   slug?: string;
   image_url?: string;
+  department?: string;
 }
 
 const DEFAULT_FASHION_CATEGORIES: CategoryItem[] = [
@@ -29,14 +30,29 @@ export default function FashionBubbleMenu() {
         const { data, error } = await supabase
           .from('categories')
           .select('*')
-          .eq('active', true)
           .order('display_order', { ascending: true });
 
         if (!error && data && data.length > 0) {
           const filtered = data.filter((c: any) => {
-            const dept = (c.department || '').toLowerCase();
-            return !dept.includes('jewel');
+            if (c.active === false) return false;
+            const dept = (c.department || '').toLowerCase().trim();
+            const name = (c.name || '').toLowerCase().trim();
+            const slug = (c.slug || '').toLowerCase().trim();
+
+            // Jewellery items ni fashion nunchi poorthiga filter out cheyadam
+            const isJewel = 
+              dept === 'jewellery' || 
+              dept.includes('jewel') || 
+              name.includes('jewel') || 
+              slug.includes('jewel') ||
+              name.includes('bangle') ||
+              name.includes('choker') ||
+              name.includes('necklace') ||
+              name.includes('earring');
+
+            return !isJewel;
           });
+
           if (filtered.length > 0) {
             setCategories(filtered);
           }
@@ -50,7 +66,6 @@ export default function FashionBubbleMenu() {
 
   return (
     <div className="w-full py-2 sm:py-4 select-none relative z-10">
-      {/* Mobile Touch Optimized Smooth Horizontal Scroll Container */}
       <div 
         className="w-full overflow-x-auto overflow-y-hidden no-scrollbar px-3 sm:px-6 touch-pan-x"
         style={{ WebkitOverflowScrolling: 'touch' }}
@@ -63,10 +78,9 @@ export default function FashionBubbleMenu() {
             return (
               <Link
                 key={cat.id}
-                to={`/category/${targetSlug}`}
+                to={`/category/${targetSlug}?tab=fashions`}
                 className="group shrink-0 flex flex-col items-center w-[72px] sm:w-[88px] text-center cursor-pointer transition-transform active:scale-95"
               >
-                {/* French Arched Silhouette Window */}
                 <div
                   className={`relative w-full h-[98px] sm:h-[118px] rounded-t-full rounded-b-2xl overflow-hidden bg-stone-100 transition-all duration-300 ${
                     isActive
@@ -83,7 +97,6 @@ export default function FashionBubbleMenu() {
                   <div className="absolute inset-0 bg-gradient-to-t from-stone-900/40 via-transparent to-transparent opacity-50 group-hover:opacity-20 transition-opacity" />
                 </div>
 
-                {/* Multiline Category Label */}
                 <div className="mt-1.5 w-full px-0.5 min-h-[30px] flex items-center justify-center">
                   <span
                     className={`block text-[10.5px] sm:text-[11.5px] font-semibold leading-tight text-center tracking-tight transition-colors whitespace-normal break-words ${
