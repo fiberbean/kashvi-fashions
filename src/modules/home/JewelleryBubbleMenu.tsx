@@ -2,112 +2,111 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
-interface CategoryItem {
+interface SubCategoryItem {
   id: string;
   name: string;
-  slug?: string;
-  image_url?: string;
+  slug: string;
+  image_url: string;
+  display_order: number;
 }
 
-const DEFAULT_JEWELLERY_ITEMS: CategoryItem[] = [
-  { id: 'j-bangles', name: 'Bangles', slug: 'bangles', image_url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80' },
-  { id: 'j-bridal', name: 'Bridal Jewellery', slug: 'bridal-jewellery', image_url: 'https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=300&q=80' },
-  { id: 'j-chains', name: 'Chains', slug: 'chains', image_url: 'https://images.unsplash.com/photo-1599643477877-530eb83abc8e?w=300&q=80' },
-  { id: 'j-chokers', name: 'Chokers', slug: 'chokers', image_url: 'https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?w=300&q=80' },
-  { id: 'j-earrings', name: 'Earrings', slug: 'earrings', image_url: 'https://images.unsplash.com/photo-1630019852942-f89202989a59?w=300&q=80' },
-  { id: 'j-kundan', name: 'Kundan Sets', slug: 'kundan-sets', image_url: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&q=80' },
-  { id: 'j-necklaces', name: 'Necklaces', slug: 'necklaces', image_url: 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80' },
-  { id: 'j-rings', name: 'Rings', slug: 'rings', image_url: 'https://images.unsplash.com/photo-1605100804763-247f67b3557e?w=300&q=80' },
-  { id: 'j-temple', name: 'Temple Sets', slug: 'temple-sets', image_url: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&q=80' },
-];
-
 export default function JewelleryBubbleMenu() {
-  const [categories, setCategories] = useState<CategoryItem[]>(DEFAULT_JEWELLERY_ITEMS);
+  const [subCategories, setSubCategories] = useState<SubCategoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const currentSub = searchParams.get('sub');
 
+  const triggerHaptic = () => {
+    if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
+      navigator.vibrate(10);
+    }
+  };
+
   useEffect(() => {
-    async function loadCategories() {
+    let isMounted = true;
+
+    async function loadJewellerySubCategoriesDirectly() {
+      setLoading(true);
       try {
-        const [catRes, subRes] = await Promise.all([
-          supabase.from('categories').select('*').order('name', { ascending: true }),
-          supabase.from('sub_categories').select('*').order('name', { ascending: true })
-        ]);
+        // Step 1: categories table nunchi Jewellery category id thesukuntam
+        // (department column DB lo lekapoyina, name/slug based ga idi reliable)
+        const { data: catList } = await supabase
+          .from('categories')
+          .select('id, name, slug');
 
-        const catData = catRes.data || [];
-        const subData = subRes.data || [];
-
-        const isJewelleryItem = (item: any) => {
-          const dept = (item.department || '').toLowerCase().trim();
-          const name = (item.name || '').toLowerCase().trim();
-          const slug = (item.slug || '').toLowerCase().trim();
-
-          return (
-            dept.includes('jewel') ||
-            name.includes('jewel') ||
-            slug.includes('jewel') ||
-            name.includes('bangle') ||
-            name.includes('choker') ||
-            name.includes('necklace') ||
-            name.includes('earring') ||
-            name.includes('temple') ||
-            name.includes('bridal') ||
-            name.includes('chain') ||
-            name.includes('ring') ||
-            name.includes('kundan') ||
-            name.includes('kada') ||
-            name.includes('polki')
-          );
-        };
-
-        const mergedMap = new Map<string, CategoryItem>();
-
-        // 1. Database nunchi match aina sub_categories add cheyadam
-        subData.filter(isJewelleryItem).forEach((s: any) => {
-          const key = s.name.trim().toLowerCase();
-          mergedMap.set(key, {
-            id: String(s.id),
-            name: s.name.trim(),
-            slug: s.slug || s.name.toLowerCase().replace(/\s+/g, '-'),
-            image_url: s.image_url || 'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80',
-          });
-        });
-
-        // 2. Categories table nunchi add cheyadam
-        catData.filter(isJewelleryItem).forEach((c: any) => {
-          const key = c.name.trim().toLowerCase();
-          if (!mergedMap.has(key)) {
-            mergedMap.set(key, {
-              id: String(c.id),
-              name: c.name.trim(),
-              slug: c.slug || c.name.toLowerCase().replace(/\s+/g, '-'),
-              image_url: c.image_url || 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?w=300&q=80',
-            });
+        const jewelIds = new Set<string>();
+        (catList || []).forEach((c: any) => {
+          const name = (c.name || '').toLowerCase().trim();
+          const slug = (c.slug || '').toLowerCase().trim();
+          if (name.includes('jewel') || slug.includes('jewel')) {
+            jewelIds.add(String(c.id));
           }
         });
 
-        // 3. Database lo items thakkuva unte defaults ni add chesi full catalog ivvadam
-        DEFAULT_JEWELLERY_ITEMS.forEach((def) => {
-          const key = def.name.toLowerCase();
-          if (!mergedMap.has(key)) {
-            mergedMap.set(key, def);
-          }
-        });
+        // Step 2: sub_categories table nunchi all active records query chestham
+        const { data: subData, error: subErr } = await supabase
+          .from('sub_categories')
+          .select('id, name, slug, image_url, display_order, active, category_id, category_name')
+          .eq('active', true)
+          .order('display_order', { ascending: true });
 
-        const sortedList = Array.from(mergedMap.values()).sort((a, b) => 
-          a.name.localeCompare(b.name)
-        );
+        if (subErr) throw subErr;
 
-        if (sortedList.length > 0) {
-          setCategories(sortedList);
+        if (isMounted && subData) {
+          const list: SubCategoryItem[] = subData
+            .filter((item) => {
+              const cleanName = (item.name || '').trim().toLowerCase();
+              const cleanSlug = (item.slug || '').trim().toLowerCase();
+              const cId = String(item.category_id || '').trim();
+
+              // Only show active sub-categories actually linked
+              // to the Jewellery parent through category_id.
+              if (!cId || !jewelIds.has(cId)) {
+                return false;
+              }
+
+              // Hide the parent Jewellery category itself.
+              // "Jewellery Sets" is intentionally kept.
+              if (
+                cleanName === 'jewellery' ||
+                cleanName === 'jewelry' ||
+                cleanSlug === 'jewellery' ||
+                cleanSlug === 'jewelry'
+              ) {
+                return false;
+              }
+
+              return Boolean((item.name || '').trim());
+            })
+            .map((item) => ({
+              id: String(item.id),
+              name: item.name.trim(),
+              slug: item.slug || item.name.trim().toLowerCase().replace(/\s+/g, '-'),
+              image_url:
+                item.image_url ||
+                'https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=300&q=80',
+              display_order: item.display_order ?? 0,
+            }));
+
+          setSubCategories(list);
         }
       } catch (err) {
-        console.error('Error loading dynamic jewellery categories:', err);
+        console.error('Error loading subcategories from DB:', err);
+      } finally {
+        if (isMounted) setLoading(false);
       }
     }
 
-    loadCategories();
+    loadJewellerySubCategoriesDirectly();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  if (loading || subCategories.length === 0) {
+    return null;
+  }
 
   return (
     <div className="w-full py-2.5 sm:py-4 select-none relative z-10">
@@ -116,15 +115,16 @@ export default function JewelleryBubbleMenu() {
         className="w-full overflow-x-auto overflow-y-hidden no-scrollbar px-3 sm:px-6 touch-pan-x"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        <div className="flex flex-nowrap items-start justify-start md:justify-center gap-3.5 sm:gap-6 min-w-max py-1.5 px-1">
-          {categories.map((cat) => {
-            const targetSlug = cat.slug || cat.name.toLowerCase().replace(/\s+/g, '-');
-            const isActive = currentSub === targetSlug || currentSub === cat.name;
+        <div className="flex flex-nowrap items-start justify-start md:justify-center gap-3.5 sm:gap-6 min-w-max mx-auto py-1.5 px-2">
+          {subCategories.map((sub) => {
+            const targetSlug = sub.slug || sub.name.toLowerCase().replace(/\s+/g, '-');
+            const isActive = currentSub === targetSlug || currentSub === sub.name;
 
             return (
               <Link
-                key={cat.id}
-                to={`/category/${targetSlug}?tab=jewellery`}
+                key={sub.id}
+                to={`/category/${targetSlug}?tab=jewellery&sub=${encodeURIComponent(sub.name)}`}
+                onClick={triggerHaptic}
                 className="group shrink-0 flex flex-col items-center w-[74px] sm:w-[88px] text-center cursor-pointer transition-transform active:scale-95"
               >
                 {/* Royal Gold Arched Window */}
@@ -136,8 +136,8 @@ export default function JewelleryBubbleMenu() {
                   }`}
                 >
                   <img
-                    src={cat.image_url}
-                    alt={cat.name}
+                    src={sub.image_url}
+                    alt={sub.name}
                     className="w-full h-full object-cover object-top transition-transform duration-500 ease-out group-hover:scale-108"
                     loading="lazy"
                   />
@@ -151,7 +151,7 @@ export default function JewelleryBubbleMenu() {
                       isActive ? 'text-[#b38728]' : 'text-stone-800 group-hover:text-[#b38728]'
                     }`}
                   >
-                    {cat.name}
+                    {sub.name}
                   </span>
                 </div>
               </Link>
