@@ -1,260 +1,107 @@
-import React, { useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import {
-  Home,
-  Heart,
-  ShoppingBag,
-  User,
-} from 'lucide-react';
-import { useCart } from '../../context/CartContext';
-import { useWishlist } from '../../context/WishlistContext';
-import { useAuth } from '../../context/AuthContext';
-import AuthModal from '../auth/AuthModal';
+import React from 'react';
+import { Routes, Route, useSearchParams } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import FashionBubbleMenu from './modules/home/FashionBubbleMenu';
+import JewelleryBubbleMenu from './modules/home/JewelleryBubbleMenu';
+import FashionUnevenBanners from './modules/home/FashionUnevenBanners';
+import JewelleryUnevenBanners from './modules/home/JewelleryUnevenBanners';
+import CategoryProductListPage from './modules/products/CategoryProductListPage';
+import ProductDetailPage from './modules/products/ProductDetailPage';
+import { CartProvider } from './context/CartContext';
+import { AuthProvider } from './context/AuthContext';
+import { WishlistProvider } from './context/WishlistContext';
+import AuthModal from './components/auth/AuthModal';
+import CartDrawer from './components/common/CartDrawer';
+import CompleteProfileModal from './components/auth/CompleteProfileModal';
+import WishlistModal from './components/wishlist/WishlistModal';
 
-export default function MobileBottomBar() {
-  const location = useLocation();
-  const { openCart, totalItems } = useCart();
-  const { wishlist } = useWishlist();
-  const { user } = useAuth();
-
-  const [isMobileAuthOpen, setIsMobileAuthOpen] = useState(false);
-
-  const isJewelleryPage =
-    location.search.includes('tab=jewellery') ||
-    location.pathname.toLowerCase().includes('jewel');
-
-  // Native Mobile Haptic Touch Feedback
-  const triggerHaptic = () => {
-    if (
-      typeof window !== 'undefined' &&
-      'navigator' in window &&
-      navigator.vibrate
-    ) {
-      navigator.vibrate(12);
-    }
-  };
-
-  const openProfileOrLogin = () => {
-    triggerHaptic();
-
-    // Not logged in:
-    // Open the existing AuthModal directly.
-    if (!user) {
-      setIsMobileAuthOpen(true);
-      return;
-    }
-
-    // Logged in:
-    // Open the existing desktop User Account button/menu.
-    const userBtn = document.querySelector(
-      '[aria-label="User Account"]'
-    ) as HTMLButtonElement | null;
-
-    if (userBtn) {
-      userBtn.click();
-    }
-  };
-
-  const isActive = (path: string) => {
-    if (path === '/') {
-      return (
-        location.pathname === '/' &&
-        !location.pathname.includes('/category')
-      );
-    }
-
-    return location.pathname.startsWith(path);
-  };
+function HomePageContent() {
+  const [searchParams] = useSearchParams();
+  const isJewellery = searchParams.get('tab') === 'jewellery';
 
   return (
-    <>
-      <nav
-        className={`md:hidden fixed bottom-0 inset-x-0 z-50 transition-all duration-300 select-none ${
-          isJewelleryPage
-            ? 'bg-[#0f172a]/92 backdrop-blur-2xl border-t border-[#e5c07b]/25 shadow-[0_-8px_30px_rgba(0,0,0,0.85)]'
-            : 'bg-[#0b101e]/92 backdrop-blur-2xl border-t border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.85)]'
-        }`}
-        style={{
-          paddingBottom: 'max(env(safe-area-inset-bottom, 8px), 8px)',
-        }}
-      >
-        <div className="grid grid-cols-4 items-center h-14 px-3 max-w-md mx-auto">
+    <main
+      className={`min-h-screen pb-10 md:pb-20 w-full overflow-x-hidden overflow-y-auto relative transition-colors duration-500 ${
+        isJewellery
+          ? 'bg-[#FBF9F5] text-stone-900 selection:bg-[#D4AF37] selection:text-black font-cinzel'
+          : 'bg-[#FAF8F5] text-stone-900 selection:bg-[#ff2d85] selection:text-white font-sans'
+      }`}
+    >
+      {/* Dynamic Ambient Luxury Glows */}
+      {!isJewellery ? (
+        <>
+          <div className="fixed -top-24 left-1/4 w-[500px] h-[500px] bg-pink-100/60 rounded-full blur-[120px] pointer-events-none z-0" />
 
-          {/* 1. HOME */}
-          <Link
-            to={`/?tab=${isJewelleryPage ? 'jewellery' : 'fashions'}`}
-            onClick={triggerHaptic}
-            className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] relative"
-          >
-            {isActive('/') && (
-              <span
-                className={`absolute -top-1 w-6 h-0.5 rounded-full ${
-                  isJewelleryPage
-                    ? 'bg-[#ffd700] shadow-[0_0_8px_#ffd700]'
-                    : 'bg-[#00f5d4] shadow-[0_0_8px_#00f5d4]'
-                }`}
-              />
-            )}
+          <div className="fixed top-1/2 -right-20 w-[450px] h-[450px] bg-rose-50/70 rounded-full blur-[100px] pointer-events-none z-0" />
+        </>
+      ) : (
+        <>
+          <div className="fixed -top-24 left-1/4 w-[500px] h-[500px] bg-amber-100/50 rounded-full blur-[130px] pointer-events-none z-0" />
 
-            <div className="relative p-1">
-              <Home
-                className={`w-5 h-5 transition-all ${
-                  isActive('/')
-                    ? isJewelleryPage
-                      ? 'text-[#ffd700] stroke-[2.4] scale-110 drop-shadow-[0_0_6px_rgba(255,215,0,0.4)]'
-                      : 'text-[#00f5d4] stroke-[2.4] scale-110 drop-shadow-[0_0_6px_rgba(0,245,212,0.4)]'
-                    : 'text-slate-400 stroke-[1.8]'
-                }`}
-              />
-            </div>
+          <div className="fixed top-1/2 -right-20 w-[450px] h-[450px] bg-emerald-50/60 rounded-full blur-[120px] pointer-events-none z-0" />
+        </>
+      )}
 
-            <span
-              className={`text-[9.5px] tracking-tight ${
-                isActive('/')
-                  ? isJewelleryPage
-                    ? 'text-[#ffd700] font-bold'
-                    : 'text-[#00f5d4] font-bold'
-                  : 'text-slate-400 font-medium'
-              }`}
-            >
-              Home
-            </span>
-          </Link>
+      {/* Fashions Tab Content */}
+      {!isJewellery && (
+        <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
+          <FashionBubbleMenu />
 
-          {/* 2. WISHLIST / SAVED */}
-          <button
-            type="button"
-            onClick={() => {
-              triggerHaptic();
-
-              const heartBtn = document.querySelector(
-                '[aria-label="Wishlist"]'
-              ) as HTMLButtonElement | null;
-
-              if (heartBtn) {
-                heartBtn.click();
-              }
-            }}
-            className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
-          >
-            <div className="relative p-1">
-              <Heart
-                className={`w-5 h-5 transition-all ${
-                  wishlist.length > 0
-                    ? isJewelleryPage
-                      ? 'text-[#ffd700] fill-[#ffd700]/30 stroke-[2]'
-                      : 'text-[#ff2d85] fill-[#ff2d85]/30 stroke-[2]'
-                    : 'text-slate-400 stroke-[1.8]'
-                }`}
-              />
-
-              {wishlist.length > 0 && (
-                <span
-                  className={`absolute top-0 right-0 min-w-3.5 h-3.5 px-1 rounded-full text-[8.5px] font-black flex items-center justify-center text-white ${
-                    isJewelleryPage
-                      ? 'bg-[#ffd700] text-black font-extrabold'
-                      : 'bg-[#ff2d85]'
-                  }`}
-                >
-                  {wishlist.length > 9 ? '9+' : wishlist.length}
-                </span>
-              )}
-            </div>
-
-            <span className="text-[9.5px] text-slate-400 font-medium tracking-tight">
-              Saved
-            </span>
-          </button>
-
-          {/* 3. BAG / CART */}
-          <button
-            type="button"
-            onClick={() => {
-              triggerHaptic();
-              openCart();
-            }}
-            className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
-          >
-            <div className="relative p-1">
-              <ShoppingBag
-                className={`w-5 h-5 transition-all ${
-                  totalItems > 0
-                    ? isJewelleryPage
-                      ? 'text-[#ffd700] stroke-[2.2] scale-110 drop-shadow-[0_0_6px_rgba(255,215,0,0.5)]'
-                      : 'text-[#00f5d4] stroke-[2.2] scale-110 drop-shadow-[0_0_6px_rgba(0,245,212,0.5)]'
-                    : 'text-slate-400 stroke-[1.8]'
-                }`}
-              />
-
-              {totalItems > 0 && (
-                <span
-                  className={`absolute -top-0.5 -right-1 min-w-4 h-4 px-1 rounded-full text-[8.5px] font-black flex items-center justify-center text-white animate-in zoom-in-75 ${
-                    isJewelleryPage
-                      ? 'bg-[#ffd700] text-black font-extrabold'
-                      : 'bg-[#00f5d4] text-black font-black'
-                  }`}
-                >
-                  {totalItems}
-                </span>
-              )}
-            </div>
-
-            <span
-              className={`text-[9.5px] tracking-tight ${
-                totalItems > 0
-                  ? isJewelleryPage
-                    ? 'text-[#ffd700] font-bold'
-                    : 'text-[#00f5d4] font-bold'
-                  : 'text-slate-400 font-medium'
-              }`}
-            >
-              Bag
-            </span>
-          </button>
-
-          {/* 4. ACCOUNT */}
-          <button
-            type="button"
-            onClick={openProfileOrLogin}
-            className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
-          >
-            <div className="relative p-1">
-              <User
-                className={`w-5 h-5 transition-all ${
-                  user
-                    ? isJewelleryPage
-                      ? 'text-[#ffd700] stroke-[2.4]'
-                      : 'text-[#00f5d4] stroke-[2.4]'
-                    : 'text-slate-400 stroke-[1.8]'
-                }`}
-              />
-
-              {user && (
-                <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-[#00ff9d] ring-2 ring-[#0b101e]" />
-              )}
-            </div>
-
-            <span
-              className={`text-[9.5px] tracking-tight ${
-                user
-                  ? isJewelleryPage
-                    ? 'text-[#ffd700] font-bold'
-                    : 'text-[#00f5d4] font-bold'
-                  : 'text-slate-400 font-medium'
-              }`}
-            >
-              {user ? 'Profile' : 'Login'}
-            </span>
-          </button>
-
+          <FashionUnevenBanners />
         </div>
-      </nav>
+      )}
 
-      {/* Mobile Login / Signup Modal */}
-      <AuthModal
-        isOpen={isMobileAuthOpen}
-        onClose={() => setIsMobileAuthOpen(false)}
-      />
-    </>
+      {/* Jewellery Tab Content */}
+      {isJewellery && (
+        <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
+          <JewelleryBubbleMenu />
+
+          <JewelleryUnevenBanners />
+        </div>
+      )}
+    </main>
+  );
+}
+
+export default function CustomerApp() {
+  return (
+    <AuthProvider>
+      <WishlistProvider>
+        <CartProvider>
+          <div className="relative min-h-screen bg-[#FAF8F5] text-stone-900 overflow-x-hidden">
+
+            {/* Top Navbar */}
+            <Navbar />
+
+            <Routes>
+              <Route
+                path="/"
+                element={<HomePageContent />}
+              />
+
+              <Route
+                path="/category/:slug"
+                element={<CategoryProductListPage />}
+              />
+
+              <Route
+                path="/product/:id"
+                element={<ProductDetailPage />}
+              />
+            </Routes>
+
+            {/* Modals & Drawers */}
+            <CartDrawer />
+
+            <WishlistModal />
+
+            <AuthModal />
+
+            <CompleteProfileModal />
+
+          </div>
+        </CartProvider>
+      </WishlistProvider>
+    </AuthProvider>
   );
 }
