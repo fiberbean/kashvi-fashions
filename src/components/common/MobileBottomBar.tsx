@@ -14,14 +14,18 @@ export default function MobileBottomBar() {
   const location = useLocation();
   const { openCart, totalItems } = useCart();
   const { wishlist } = useWishlist();
-  const { user, openAuthModal, openProfileModal } = useAuth();
+  const { user } = useAuth();
 
   const isJewelleryPage =
     location.search.includes('tab=jewellery') ||
     location.pathname.toLowerCase().includes('jewel');
 
   const triggerHaptic = () => {
-    if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
+    if (
+      typeof window !== 'undefined' &&
+      'navigator' in window &&
+      navigator.vibrate
+    ) {
       navigator.vibrate(12);
     }
   };
@@ -29,16 +33,23 @@ export default function MobileBottomBar() {
   const openAuth = () => {
     triggerHaptic();
 
-    if (user) {
-      openProfileModal();
-      return;
-    }
-
-    openAuthModal();
+    /*
+     * Open the existing HeaderUserButton dropdown.
+     * HeaderUserButton handles both:
+     * - logged-in user -> existing profile menu
+     * - logged-out user -> existing auth flow
+     */
+    window.dispatchEvent(new CustomEvent('open-user-menu'));
   };
 
   const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/' && !location.pathname.includes('/category');
+    if (path === '/') {
+      return (
+        location.pathname === '/' &&
+        !location.pathname.includes('/category')
+      );
+    }
+
     return location.pathname.startsWith(path);
   };
 
@@ -49,7 +60,9 @@ export default function MobileBottomBar() {
           ? 'bg-[#0f172a]/92 backdrop-blur-2xl border-t border-[#e5c07b]/25 shadow-[0_-8px_30px_rgba(0,0,0,0.85)]'
           : 'bg-[#0b101e]/92 backdrop-blur-2xl border-t border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.85)]'
       }`}
-      style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 8px), 8px)' }}
+      style={{
+        paddingBottom: 'max(env(safe-area-inset-bottom, 8px), 8px)',
+      }}
     >
       <div className="grid grid-cols-4 items-center h-14 px-3 max-w-md mx-auto">
 
@@ -68,6 +81,7 @@ export default function MobileBottomBar() {
               }`}
             />
           )}
+
           <div className="relative p-1">
             <Home
               className={`w-5 h-5 transition-all ${
@@ -79,6 +93,7 @@ export default function MobileBottomBar() {
               }`}
             />
           </div>
+
           <span
             className={`text-[9.5px] tracking-tight ${
               isActive('/')
@@ -97,8 +112,14 @@ export default function MobileBottomBar() {
           type="button"
           onClick={() => {
             triggerHaptic();
-            const heartBtn = document.querySelector('[aria-label="Wishlist"]') as HTMLButtonElement | null;
-            if (heartBtn) heartBtn.click();
+
+            const heartBtn = document.querySelector(
+              '[aria-label="Wishlist"]'
+            ) as HTMLButtonElement | null;
+
+            if (heartBtn) {
+              heartBtn.click();
+            }
           }}
           className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
         >
@@ -112,16 +133,20 @@ export default function MobileBottomBar() {
                   : 'text-slate-400 stroke-[1.8]'
               }`}
             />
+
             {wishlist.length > 0 && (
               <span
                 className={`absolute top-0 right-0 min-w-3.5 h-3.5 px-1 rounded-full text-[8.5px] font-black flex items-center justify-center text-white ${
-                  isJewelleryPage ? 'bg-[#ffd700] text-black font-extrabold' : 'bg-[#ff2d85]'
+                  isJewelleryPage
+                    ? 'bg-[#ffd700] text-black font-extrabold'
+                    : 'bg-[#ff2d85]'
                 }`}
               >
                 {wishlist.length > 9 ? '9+' : wishlist.length}
               </span>
             )}
           </div>
+
           <span className="text-[9.5px] text-slate-400 font-medium tracking-tight">
             Saved
           </span>
@@ -146,16 +171,20 @@ export default function MobileBottomBar() {
                   : 'text-slate-400 stroke-[1.8]'
               }`}
             />
+
             {totalItems > 0 && (
               <span
                 className={`absolute -top-0.5 -right-1 min-w-4 h-4 px-1 rounded-full text-[8.5px] font-black flex items-center justify-center text-white animate-in zoom-in-75 ${
-                  isJewelleryPage ? 'bg-[#ffd700] text-black font-extrabold' : 'bg-[#00f5d4] text-black font-black'
+                  isJewelleryPage
+                    ? 'bg-[#ffd700] text-black font-extrabold'
+                    : 'bg-[#00f5d4] text-black font-black'
                 }`}
               >
                 {totalItems}
               </span>
             )}
           </div>
+
           <span
             className={`text-[9.5px] tracking-tight ${
               totalItems > 0
@@ -169,7 +198,7 @@ export default function MobileBottomBar() {
           </span>
         </button>
 
-        {/* 4. ACCOUNT */}
+        {/* 4. ACCOUNT / PROFILE */}
         <button
           type="button"
           onClick={openAuth}
@@ -185,10 +214,12 @@ export default function MobileBottomBar() {
                   : 'text-slate-400 stroke-[1.8]'
               }`}
             />
+
             {user && (
               <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-[#00ff9d] ring-2 ring-[#0b101e]" />
             )}
           </div>
+
           <span
             className={`text-[9.5px] tracking-tight ${
               user

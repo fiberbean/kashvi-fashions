@@ -21,7 +21,9 @@ interface HeaderUserButtonProps {
   isJewellery?: boolean;
 }
 
-export default function HeaderUserButton({ isJewellery = false }: HeaderUserButtonProps) {
+export default function HeaderUserButton({
+  isJewellery = false,
+}: HeaderUserButtonProps) {
   const authContext = useAuth();
   const { user, customer, signOut } = authContext;
 
@@ -35,20 +37,89 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showToast, setShowToast] = useState(false);
 
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
+
+  /*
+   * Detect mobile viewport.
+   * Desktop behavior remains exactly the same.
+   */
+  useEffect(() => {
+    const updateViewport = () => {
+      setIsMobileViewport(
+        typeof window !== 'undefined' &&
+          window.matchMedia('(max-width: 767px)').matches
+      );
+    };
+
+    updateViewport();
+
+    window.addEventListener('resize', updateViewport);
+
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+    };
+  }, []);
+
+  /*
+   * Close dropdown when clicking outside.
+   * The mobile dropdown is rendered through a portal, so it also
+   * needs its own ID to be recognised as an inside click.
+   */
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('#user-menu-wrapper')) {
+
+      const clickedInsideUserButton =
+        !!target.closest('#user-menu-wrapper');
+
+      const clickedInsideDropdown =
+        !!target.closest('#user-dropdown-menu');
+
+      if (!clickedInsideUserButton && !clickedInsideDropdown) {
         setIsDropdownOpen(false);
       }
     };
+
     if (isDropdownOpen) {
       document.addEventListener('click', handleOutsideClick);
     }
+
     return () => {
       document.removeEventListener('click', handleOutsideClick);
     };
   }, [isDropdownOpen]);
+
+  /*
+   * MobileBottomBar uses this event to open the SAME existing
+   * profile dropdown. No duplicate profile menu is created.
+   */
+  useEffect(() => {
+    const handleOpenUserMenu = () => {
+      if (!user) {
+        if (typeof (authContext as any).openAuthModal === 'function') {
+          (authContext as any).openAuthModal();
+        } else if (typeof (authContext as any).setIsAuthOpen === 'function') {
+          (authContext as any).setIsAuthOpen(true);
+        } else if (
+          typeof (authContext as any).setIsAuthModalOpen === 'function'
+        ) {
+          (authContext as any).setIsAuthModalOpen(true);
+        }
+
+        window.dispatchEvent(new CustomEvent('open-auth-modal'));
+        setIsDirectAuthOpen(true);
+        return;
+      }
+
+      setIsDropdownOpen((prev) => !prev);
+    };
+
+    window.addEventListener('open-user-menu', handleOpenUserMenu);
+
+    return () => {
+      window.removeEventListener('open-user-menu', handleOpenUserMenu);
+    };
+  }, [user, authContext]);
 
   const handleUserButtonClick = () => {
     if (!user) {
@@ -56,9 +127,12 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
         (authContext as any).openAuthModal();
       } else if (typeof (authContext as any).setIsAuthOpen === 'function') {
         (authContext as any).setIsAuthOpen(true);
-      } else if (typeof (authContext as any).setIsAuthModalOpen === 'function') {
+      } else if (
+        typeof (authContext as any).setIsAuthModalOpen === 'function'
+      ) {
         (authContext as any).setIsAuthModalOpen(true);
       }
+
       window.dispatchEvent(new CustomEvent('open-auth-modal'));
       setIsDirectAuthOpen(true);
     } else {
@@ -68,12 +142,15 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
 
   const handlePerformLogout = async () => {
     setIsLoggingOut(true);
+
     try {
       await signOut();
+
       setShowLogoutConfirm(false);
       setIsDropdownOpen(false);
 
       setShowToast(true);
+
       setTimeout(() => {
         setShowToast(false);
       }, 3500);
@@ -84,8 +161,98 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
     }
   };
 
-  const displayName = customer?.name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'Member';
-  const displayPhone = customer?.mobile || user?.user_metadata?.whatsapp_number || user?.email;
+  const displayName =
+    customer?.name ||
+    user?.user_metadata?.name ||
+    user?.email?.split('@')[0] ||
+    'Member';
+
+  const displayPhone =
+    customer?.mobile ||
+    user?.user_metadata?.whatsapp_number ||
+    user?.email;
+
+  const dropdownMenu =
+    user && isDropdownOpen ? (
+      <div
+        id="user-dropdown-menu"
+        className={
+          isMobileViewport
+            ? 'fixed right-4 top-20 w-[calc(100vw-2rem)] max-w-80 bg-white rounded-3xl shadow-xl border border-stone-100 py-3 z-[1000] animate-in fade-in zoom-in-95 duration-150'
+            : 'absolute right-0 mt-2 w-64 bg-white rounded-3xl shadow-xl border border-stone-100 py-3 z-50 animate-in fade-in zoom-in-95 duration-150'
+        }
+      >
+        <div className="px-5 py-2.5 border-b border-stone-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-pink-50 text-[#ff2d85] font-bold text-xs flex items-center justify-center border border-pink-100">
+              {displayName.charAt(0).toUpperCase()}
+            </div>
+
+            <div className="min-w-0">
+              <h4 className="text-xs font-bold text-stone-900 truncate leading-snug">
+                {displayName}
+              </h4>
+
+              <p className="text-[10px] text-stone-400 truncate">
+                {displayPhone}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="py-2 px-2 space-y-1 text-xs text-stone-700 font-medium">
+          <button
+            type="button"
+            onClick={() => {
+              setIsDropdownOpen(false);
+              setIsOrdersOpen(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-left"
+          >
+            <Package className="w-4 h-4 text-[#D4AF37]" />
+            <span>My Orders & Invoices</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsDropdownOpen(false);
+              setIsAddressesOpen(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-left"
+          >
+            <MapPin className="w-4 h-4 text-[#ff2d85]" />
+            <span>Saved Delivery Addresses</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsDropdownOpen(false);
+              setIsSettingsOpen(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-left"
+          >
+            <Settings className="w-4 h-4 text-stone-500" />
+            <span>Profile Settings</span>
+          </button>
+        </div>
+
+        <div className="pt-2 px-2 border-t border-stone-100">
+          <button
+            type="button"
+            onClick={() => {
+              setIsDropdownOpen(false);
+              setShowLogoutConfirm(true);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors font-bold text-xs cursor-pointer text-left"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </div>
+    ) : null;
 
   return (
     <div id="user-menu-wrapper" className="relative inline-block">
@@ -107,85 +274,26 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
           </span>
         )}
 
-        {user && <ChevronDown className="w-3.5 h-3.5 text-stone-400" />}
+        {user && (
+          <ChevronDown className="w-3.5 h-3.5 text-stone-400" />
+        )}
       </button>
 
-      {/* Dropdown Menu */}
-      {user && isDropdownOpen && (
-        <div className="absolute right-0 mt-2 w-64 bg-white rounded-3xl shadow-xl border border-stone-100 py-3 z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div className="px-5 py-2.5 border-b border-stone-100">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-pink-50 text-[#ff2d85] font-bold text-xs flex items-center justify-center border border-pink-100">
-                {displayName.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-xs font-bold text-stone-900 truncate leading-snug">
-                  {displayName}
-                </h4>
-                <p className="text-[10px] text-stone-400 truncate">{displayPhone}</p>
-              </div>
-            </div>
-          </div>
+      {/* Existing Dropdown - Desktop */}
+      {!isMobileViewport && dropdownMenu}
 
-          <div className="py-2 px-2 space-y-1 text-xs text-stone-700 font-medium">
-            <button
-              type="button"
-              onClick={() => {
-                setIsDropdownOpen(false);
-                setIsOrdersOpen(true);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-left"
-            >
-              <Package className="w-4 h-4 text-[#D4AF37]" />
-              <span>My Orders & Invoices</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsDropdownOpen(false);
-                setIsAddressesOpen(true);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-left"
-            >
-              <MapPin className="w-4 h-4 text-[#ff2d85]" />
-              <span>Saved Delivery Addresses</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsDropdownOpen(false);
-                setIsSettingsOpen(true);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-stone-50 transition-colors cursor-pointer text-left"
-            >
-              <Settings className="w-4 h-4 text-stone-500" />
-              <span>Profile Settings</span>
-            </button>
-          </div>
-
-          <div className="pt-2 px-2 border-t border-stone-100">
-            <button
-              type="button"
-              onClick={() => {
-                setIsDropdownOpen(false);
-                setShowLogoutConfirm(true);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors font-bold text-xs cursor-pointer text-left"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Sign Out</span>
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Existing Dropdown - Mobile Portal */}
+      {isMobileViewport &&
+        dropdownMenu &&
+        createPortal(dropdownMenu, document.body)}
 
       {/* Confirmation Modal */}
       {showLogoutConfirm &&
         createPortal(
           <div
-            onClick={() => !isLoggingOut && setShowLogoutConfirm(false)}
+            onClick={() =>
+              !isLoggingOut && setShowLogoutConfirm(false)
+            }
             className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-150 cursor-pointer"
           >
             <div
@@ -200,8 +308,14 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
                 <h3 className="font-bold text-stone-900 text-lg">
                   Confirm Sign Out
                 </h3>
+
                 <p className="text-xs text-stone-500 mt-1.5 leading-relaxed">
-                  Are you sure you want to sign out from <strong className="text-stone-800">Kashvi Fashions</strong>? Your shopping bag and saved wishlist will be cleared securely.
+                  Are you sure you want to sign out from{' '}
+                  <strong className="text-stone-800">
+                    Kashvi Fashions
+                  </strong>
+                  ? Your shopping bag and saved wishlist will be cleared
+                  securely.
                 </p>
               </div>
 
@@ -214,6 +328,7 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
                 >
                   Cancel
                 </button>
+
                 <button
                   type="button"
                   disabled={isLoggingOut}
@@ -246,8 +361,12 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
               <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
+
               <div className="text-xs">
-                <h5 className="font-bold text-white leading-tight">Signed Out Successfully</h5>
+                <h5 className="font-bold text-white leading-tight">
+                  Signed Out Successfully
+                </h5>
+
                 <p className="text-[11px] text-stone-400 mt-0.5">
                   Your session has been securely ended.
                 </p>
@@ -264,9 +383,20 @@ export default function HeaderUserButton({ isJewellery = false }: HeaderUserButt
         />
       )}
 
-      <CustomerOrdersModal isOpen={isOrdersOpen} onClose={() => setIsOrdersOpen(false)} />
-      <CustomerAddressesModal isOpen={isAddressesOpen} onClose={() => setIsAddressesOpen(false)} />
-      <ProfileSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <CustomerOrdersModal
+        isOpen={isOrdersOpen}
+        onClose={() => setIsOrdersOpen(false)}
+      />
+
+      <CustomerAddressesModal
+        isOpen={isAddressesOpen}
+        onClose={() => setIsAddressesOpen(false)}
+      />
+
+      <ProfileSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   );
 }
