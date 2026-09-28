@@ -68,7 +68,7 @@ export default function Navbar() {
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
 
-        {/* Left Section: Logo Only */}
+        {/* Logo */}
         <div className="flex items-center shrink-0">
           <Link
             to={`/?tab=${currentTab}`}
@@ -76,10 +76,10 @@ export default function Navbar() {
             aria-label={brandAlt}
           >
             <div
-              className={`relative h-10 w-10 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 bg-white shadow-xs border flex items-center justify-center ${
+              className={`relative h-10 w-10 sm:h-14 sm:w-14 rounded-2xl overflow-hidden p-1 transition-all duration-300 shadow-xs border flex items-center justify-center ${
                 isJewellery
-                  ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
-                  : 'border-neutral-200 group-hover:border-neutral-400'
+                  ? 'bg-[#0b3b2c] border-[#e5c07b]/40 group-hover:border-[#e5c07b]'
+                  : 'bg-white border-neutral-200 group-hover:border-neutral-400'
               }`}
             >
               <img
@@ -91,7 +91,7 @@ export default function Navbar() {
           </Link>
         </div>
 
-        {/* Center Section: Department Switcher */}
+        {/* Department Switcher */}
         <div className="flex items-center justify-center flex-1 min-w-0">
           <div className="inline-flex p-1 rounded-full bg-neutral-100 border border-neutral-200/60 shadow-inner">
 
@@ -137,13 +137,13 @@ export default function Navbar() {
             <Search className="w-5 h-5 sm:w-5 sm:h-5 stroke-[1.8]" />
           </button>
 
-          {/* Global User / Profile */}
+          {/* User / Profile */}
           <HeaderUserButton isJewellery={isJewellery} />
 
-          {/* Global Wishlist */}
+          {/* Wishlist */}
           <HeaderHeartButton isJewellery={isJewellery} />
 
-          {/* Global Cart */}
+          {/* Cart */}
           <HeaderBagButton isJewellery={isJewellery} />
 
         </div>
