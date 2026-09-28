@@ -5,7 +5,6 @@ import FashionBubbleMenu from './modules/home/FashionBubbleMenu';
 import JewelleryBubbleMenu from './modules/home/JewelleryBubbleMenu';
 import FashionUnevenBanners from './modules/home/FashionUnevenBanners';
 import JewelleryUnevenBanners from './modules/home/JewelleryUnevenBanners';
-import MobileBottomBar from './components/common/MobileBottomBar';
 import CategoryProductListPage from './modules/products/CategoryProductListPage';
 import ProductDetailPage from './modules/products/ProductDetailPage';
 import { CartProvider } from './context/CartContext';
@@ -23,7 +22,7 @@ function HomePageContent() {
 
   return (
     <main
-      className={`min-h-screen pb-28 md:pb-20 w-full overflow-x-hidden overflow-y-auto relative transition-colors duration-500 ${
+      className={`min-h-screen pb-10 md:pb-20 w-full overflow-x-hidden overflow-y-auto relative transition-colors duration-500 ${
         isJewellery
           ? 'bg-[#FBF9F5] text-stone-900 selection:bg-[#D4AF37] selection:text-black font-cinzel'
           : 'bg-[#FAF8F5] text-stone-900 selection:bg-[#ff2d85] selection:text-white font-sans'
@@ -79,11 +78,15 @@ export default function CustomerApp() {
 
             <Routes>
               <Route path="/" element={<HomePageContent />} />
-              <Route path="/category/:slug" element={<CategoryProductListPage />} />
-              <Route path="/product/:id" element={<ProductDetailPage />} />
+              <Route
+                path="/category/:slug"
+                element={<CategoryProductListPage />}
+              />
+              <Route
+                path="/product/:id"
+                element={<ProductDetailPage />}
+              />
             </Routes>
-
-            <MobileBottomBar />
 
             <CartDrawer />
             <WishlistModal />
