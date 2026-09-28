@@ -14,12 +14,13 @@ export default function MobileBottomBar() {
   const location = useLocation();
   const { openCart, totalItems } = useCart();
   const { wishlist } = useWishlist();
-  const { user } = useAuth();
+  const { user, openAuthModal } = useAuth();
 
   const isJewelleryPage =
     location.search.includes('tab=jewellery') ||
     location.pathname.toLowerCase().includes('jewel');
 
+  // Native Mobile Haptic Touch Feedback
   const triggerHaptic = () => {
     if (
       typeof window !== 'undefined' &&
@@ -30,16 +31,25 @@ export default function MobileBottomBar() {
     }
   };
 
-  const openAuth = () => {
+  const openProfileOrLogin = () => {
     triggerHaptic();
 
-    /*
-     * Open the existing HeaderUserButton dropdown.
-     * HeaderUserButton handles both:
-     * - logged-in user -> existing profile menu
-     * - logged-out user -> existing auth flow
-     */
-    window.dispatchEvent(new CustomEvent('open-user-menu'));
+    // User is NOT logged in:
+    // Open the existing Auth Modal directly.
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+
+    // User is logged in:
+    // Open the existing User Account menu.
+    const userBtn = document.querySelector(
+      '[aria-label="User Account"]'
+    ) as HTMLButtonElement | null;
+
+    if (userBtn) {
+      userBtn.click();
+    }
   };
 
   const isActive = (path: string) => {
@@ -198,10 +208,10 @@ export default function MobileBottomBar() {
           </span>
         </button>
 
-        {/* 4. ACCOUNT / PROFILE */}
+        {/* 4. ACCOUNT */}
         <button
           type="button"
-          onClick={openAuth}
+          onClick={openProfileOrLogin}
           className="flex flex-col items-center justify-center gap-0.5 py-1 transition-all active:scale-[0.84] cursor-pointer relative"
         >
           <div className="relative p-1">
