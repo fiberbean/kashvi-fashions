@@ -50,9 +50,9 @@ export default function Navbar() {
           : 'border-neutral-100 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]'
       }`}
     >
-      {/* Top Micro Strip */}
+      {/* Top Micro Strip - Desktop Only */}
       <div
-        className={`w-full py-1 text-center text-[10px] font-semibold tracking-widest uppercase transition-colors ${
+        className={`hidden md:block w-full py-1 text-center text-[10px] font-semibold tracking-widest uppercase transition-colors ${
           isJewellery
             ? 'bg-[#0b3b2c] text-[#e5c07b]'
             : 'bg-neutral-950 text-neutral-300'
@@ -68,9 +68,9 @@ export default function Navbar() {
       </div>
 
       {/* Main Navigation Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-4">
         {/* Left Section: Logo */}
-        <div className="flex items-center">
+        <div className="flex items-center shrink-0">
           <Link
             to={`/?tab=${currentTab}`}
             className="group flex items-center gap-3"
@@ -110,7 +110,7 @@ export default function Navbar() {
         </div>
 
         {/* Center Section: Department Switcher */}
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-center flex-1">
           <div className="inline-flex p-1 rounded-full bg-neutral-100 border border-neutral-200/60 shadow-inner">
             <button
               type="button"
@@ -138,8 +138,8 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Right Section: Action Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-3">
+        {/* Desktop Action Controls Only */}
+        <div className="hidden md:flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Search */}
           <button
             type="button"
@@ -161,9 +161,9 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Expandable Search Drawer */}
+      {/* Search Drawer - Desktop Only */}
       {isSearchOpen && (
-        <div className="w-full bg-neutral-50 border-t border-neutral-100 px-4 py-3 animate-in slide-in-from-top-2 duration-200">
+        <div className="hidden md:block w-full bg-neutral-50 border-t border-neutral-100 px-4 py-3 animate-in slide-in-from-top-2 duration-200">
           <form
             onSubmit={handleSearchSubmit}
             className="max-w-2xl mx-auto flex items-center gap-2 bg-white rounded-2xl px-3.5 py-2 border border-neutral-200 focus-within:border-neutral-900 shadow-2xs transition-all"
