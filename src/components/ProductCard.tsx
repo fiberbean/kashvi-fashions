@@ -15,6 +15,7 @@ interface ProductCardProps {
   sizes?: string[];
   fabric?: string;
   department?: 'fashions' | 'jewellery';
+  createdAt?: string;
 }
 
 export default function ProductCard({
@@ -38,6 +39,7 @@ export default function ProductCard({
 
   const handleWishlistToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
+
     if (isFavorited) {
       removeFromWishlist(id);
     } else {
@@ -61,6 +63,7 @@ export default function ProductCard({
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
+
     addToCart({
       id: `${id}-${sizes[0] || 'default'}-${colors[0] || 'default'}`,
       productId: id,
@@ -74,6 +77,7 @@ export default function ProductCard({
       fabric,
       department,
     });
+
     openCart();
   };
 
@@ -153,6 +157,7 @@ export default function ProductCard({
               {fabric}
             </span>
           )}
+
           <h3
             className={`text-xs sm:text-sm font-semibold truncate transition-colors ${
               isJewellery
@@ -172,6 +177,7 @@ export default function ProductCard({
           >
             ₹{price.toLocaleString('en-IN')}
           </span>
+
           {originalPrice && originalPrice > price && (
             <span className="text-[11px] text-neutral-400 line-through">
               ₹{originalPrice.toLocaleString('en-IN')}

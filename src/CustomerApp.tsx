@@ -5,6 +5,7 @@ import FashionBubbleMenu from './modules/home/FashionBubbleMenu';
 import JewelleryBubbleMenu from './modules/home/JewelleryBubbleMenu';
 import FashionUnevenBanners from './modules/home/FashionUnevenBanners';
 import JewelleryUnevenBanners from './modules/home/JewelleryUnevenBanners';
+import NewArrivals from './modules/home/NewArrivals';
 import CategoryProductListPage from './modules/products/CategoryProductListPage';
 import ProductDetailPage from './modules/products/ProductDetailPage';
 import { CartProvider } from './context/CartContext';
@@ -44,6 +45,8 @@ function HomePageContent() {
         <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
           <FashionBubbleMenu />
           <FashionUnevenBanners />
+
+          <NewArrivals department="fashions" />
         </div>
       )}
 
@@ -51,6 +54,8 @@ function HomePageContent() {
         <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
           <JewelleryBubbleMenu />
           <JewelleryUnevenBanners />
+
+          <NewArrivals department="jewellery" />
         </div>
       )}
     </main>
@@ -78,10 +83,12 @@ export default function CustomerApp() {
 
             <Routes>
               <Route path="/" element={<HomePageContent />} />
+
               <Route
                 path="/category/:slug"
                 element={<CategoryProductListPage />}
               />
+
               <Route
                 path="/product/:id"
                 element={<ProductDetailPage />}

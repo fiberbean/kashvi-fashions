@@ -22,6 +22,7 @@ import { supabase } from '../../lib/supabase';
 import CringeLoader from '../../components/common/CringeLoader';
 import { useCart } from '../../context/CartContext';
 import { useWishlist } from '../../context/WishlistContext';
+import { NewArrivalsCollectionPage } from '../home/NewArrivals';
 
 interface Product {
   id: string;
@@ -89,6 +90,16 @@ const cleanStr = (val?: string | null): string => {
 const categoryMetaCache = new Map<string, { name: string; dept: 'fashions' | 'jewellery'; id: string }>();
 
 export default function CategoryProductListPage() {
+  const { slug } = useParams<{ slug: string }>();
+
+  if ((slug || '').toLowerCase() === 'new-arrivals') {
+    return <NewArrivalsCollectionPage />;
+  }
+
+  return <CategoryProductListContent />;
+}
+
+function CategoryProductListContent() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedSub = searchParams.get('sub');
