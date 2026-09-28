@@ -14,7 +14,7 @@ import { WishlistProvider } from './context/WishlistContext';
 import AuthModal from './components/auth/AuthModal';
 import CartDrawer from './components/common/CartDrawer';
 import CompleteProfileModal from './components/auth/CompleteProfileModal';
-import ProfileSettingsModal from './components/auth/ProfileSettingsModal';
+import ProfileSettingsModal from './components/profile/ProfileSettingsModal';
 import WishlistModal from './components/wishlist/WishlistModal';
 
 function HomePageContent() {
