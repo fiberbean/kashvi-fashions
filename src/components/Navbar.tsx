@@ -67,6 +67,7 @@ export default function Navbar() {
 
       {/* Main Navigation Bar */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2 sm:gap-4">
+
         {/* Left Section: Logo Only */}
         <div className="flex items-center shrink-0">
           <Link
@@ -93,6 +94,7 @@ export default function Navbar() {
         {/* Center Section: Department Switcher */}
         <div className="flex items-center justify-center flex-1 min-w-0">
           <div className="inline-flex p-1 rounded-full bg-neutral-100 border border-neutral-200/60 shadow-inner">
+
             {/* FASHIONS */}
             <button
               type="button"
@@ -118,11 +120,13 @@ export default function Navbar() {
             >
               Jewellery
             </button>
+
           </div>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0">
+
           {/* Search */}
           <button
             type="button"
@@ -141,6 +145,7 @@ export default function Navbar() {
 
           {/* Global Cart */}
           <HeaderBagButton isJewellery={isJewellery} />
+
         </div>
       </div>
 
