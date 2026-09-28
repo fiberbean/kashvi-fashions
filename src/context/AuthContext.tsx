@@ -19,8 +19,11 @@ interface AuthContextType {
   customer: CustomerProfile | null;
   loading: boolean;
   isAuthModalOpen: boolean;
+  isProfileModalOpen: boolean;
   openAuthModal: () => void;
   closeAuthModal: () => void;
+  openProfileModal: () => void;
+  closeProfileModal: () => void;
   signOut: () => Promise<void>;
   refreshCustomer: () => Promise<void>;
 }
@@ -33,6 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const fetchCustomerProfile = async (authUserId: string) => {
     try {
@@ -65,25 +69,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+
       if (session?.user) {
         fetchCustomerProfile(session.user.id);
       } else {
         setCustomer(null);
+        setIsProfileModalOpen(false);
       }
+
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const openAuthModal = () => setIsAuthModalOpen(true);
+  const openAuthModal = () => {
+    setIsProfileModalOpen(false);
+    setIsAuthModalOpen(true);
+  };
+
   const closeAuthModal = () => setIsAuthModalOpen(false);
+
+  const openProfileModal = () => {
+    if (!user) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    setIsAuthModalOpen(false);
+    setIsProfileModalOpen(true);
+  };
+
+  const closeProfileModal = () => setIsProfileModalOpen(false);
 
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
     setCustomer(null);
+    setIsAuthModalOpen(false);
+    setIsProfileModalOpen(false);
   };
 
   const refreshCustomer = async () => {
@@ -98,8 +123,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         customer,
         loading,
         isAuthModalOpen,
+        isProfileModalOpen,
         openAuthModal,
         closeAuthModal,
+        openProfileModal,
+        closeProfileModal,
         signOut,
         refreshCustomer,
       }}

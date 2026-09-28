@@ -30,9 +30,39 @@ export default function FashionBubbleMenu() {
   const [menuItems, setMenuItems] = useState<MenuBubble[]>([]);
   const [subByCategory, setSubByCategory] = useState<Record<string, SubBubble[]>>({});
   const [loading, setLoading] = useState(true);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const [openMenu, setOpenMenu] = useState<MenuBubble | null>(null);
   const [searchParams] = useSearchParams();
   const currentSub = searchParams.get('sub');
+
+
+  useEffect(() => {
+    const updateScrollHints = () => {
+      const el = document.querySelector('[data-bubble-scroll="fashion-bubbles"]') as HTMLDivElement | null;
+      if (!el) return;
+
+      const maxScrollLeft = Math.max(0, el.scrollWidth - el.clientWidth);
+      setCanScrollLeft(el.scrollLeft > 4);
+      setCanScrollRight(el.scrollLeft < maxScrollLeft - 4);
+    };
+
+    const frame = window.requestAnimationFrame(updateScrollHints);
+    const el = document.querySelector('[data-bubble-scroll="fashion-bubbles"]') as HTMLDivElement | null;
+
+    if (!el) {
+      return () => window.cancelAnimationFrame(frame);
+    }
+
+    el.addEventListener('scroll', updateScrollHints, { passive: true });
+    window.addEventListener('resize', updateScrollHints);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      el.removeEventListener('scroll', updateScrollHints);
+      window.removeEventListener('resize', updateScrollHints);
+    };
+  }, [menuItems.length]);
 
   useEffect(() => {
     let isMounted = true;
@@ -78,8 +108,8 @@ export default function FashionBubbleMenu() {
             image_url: c.image_url || FALLBACK_MENU_IMG,
             display_order: c.display_order ?? 0,
           }))
-          .sort(
-            (a: any, b: any) => a.display_order - b.display_order || a.name.localeCompare(b.name)
+          .sort((a: any, b: any) =>
+            a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
           );
 
         // LEVEL 2 (Sub-Menu): Sub-Categories - image_url sub_categories table nunchi,
@@ -173,8 +203,8 @@ export default function FashionBubbleMenu() {
     return (
       <div className="w-full py-4 flex items-center justify-start md:justify-center gap-4 px-4 overflow-hidden">
         {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="w-[74px] sm:w-[88px] flex flex-col items-center gap-2 shrink-0 animate-pulse">
-            <div className="w-full h-[102px] sm:h-[118px] rounded-t-full rounded-b-2xl bg-pink-100/50" />
+          <div key={i} className="w-[62px] sm:w-[88px] flex flex-col items-center gap-2 shrink-0 animate-pulse">
+            <div className="w-full h-[86px] sm:h-[118px] rounded-t-full rounded-b-2xl bg-pink-100/50" />
             <div className="w-12 h-2.5 bg-pink-100/60 rounded-md" />
           </div>
         ))}
@@ -201,7 +231,7 @@ export default function FashionBubbleMenu() {
     const inner = (
       <>
         <div
-          className={`relative w-full h-[102px] sm:h-[118px] rounded-t-full rounded-b-2xl overflow-hidden bg-stone-100 transition-all duration-300 ${
+          className={`relative w-full h-[86px] sm:h-[118px] rounded-t-full rounded-b-2xl overflow-hidden bg-stone-100 transition-all duration-300 ${
             opts.isActive
               ? 'shadow-[0_10px_25px_rgba(255,45,133,0.45)] ring-2 ring-[#ff2d85]'
               : 'shadow-[0_6px_18px_rgba(255,182,193,0.38)] group-hover:shadow-[0_10px_25px_rgba(255,140,165,0.55)]'
@@ -218,7 +248,7 @@ export default function FashionBubbleMenu() {
 
         <div className="mt-1.5 w-full px-0.5 min-h-[30px] flex items-center justify-center">
           <span
-            className={`block text-[10.5px] sm:text-[11.5px] font-semibold leading-tight text-center tracking-tight transition-colors whitespace-normal break-words ${
+            className={`block text-[9px] sm:text-[11.5px] font-semibold leading-tight text-center tracking-tight transition-colors whitespace-normal break-words ${
               opts.isActive ? 'text-[#ff2d85]' : 'text-stone-800 group-hover:text-[#ff2d85]'
             }`}
           >
@@ -229,7 +259,7 @@ export default function FashionBubbleMenu() {
     );
 
     const className =
-      'group shrink-0 flex flex-col items-center w-[74px] sm:w-[88px] text-center cursor-pointer transition-transform active:scale-95';
+      'group shrink-0 flex flex-col items-center w-[62px] sm:w-[88px] text-center cursor-pointer transition-transform active:scale-95';
 
     if (opts.linkTo) {
       return (
@@ -280,7 +310,7 @@ export default function FashionBubbleMenu() {
           {/* Sub-Menu bubble grid */}
           <div className="px-4 sm:px-5 py-4 overflow-y-auto">
             {activeSubs.length > 0 ? (
-              <div className="flex flex-wrap items-start justify-start gap-3.5 sm:gap-5">
+              <div className="flex flex-wrap items-start justify-start gap-2.5 sm:gap-5">
                 {activeSubs.map((item) =>
                   renderBubble({
                     key: item.id,
@@ -303,13 +333,54 @@ export default function FashionBubbleMenu() {
       document.body
     );
 
+  const scrollHintStyles = (
+    <style>{`
+      @keyframes bubbleHintLeft {
+        0%, 100% { transform: translateX(0); opacity: 0.45; }
+        50% { transform: translateX(-4px); opacity: 1; }
+      }
+      @keyframes bubbleHintRight {
+        0%, 100% { transform: translateX(0); opacity: 0.45; }
+        50% { transform: translateX(4px); opacity: 1; }
+      }
+    `}</style>
+  );
+
   return (
-    <div className="w-full py-2.5 sm:py-4 select-none relative z-10">
+    <>
+      {scrollHintStyles}
+      <div className="w-full py-2.5 sm:py-4 select-none relative z-10">
+      {canScrollLeft && (
+        <div className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 z-20 sm:hidden">
+          <div className="w-9 h-16 flex items-center justify-center bg-gradient-to-r from-white/95 to-transparent">
+            <span
+              className="text-stone-500 text-xl leading-none"
+              style={{ animation: 'bubbleHintLeft 1.15s ease-in-out infinite' }}
+            >
+              ‹
+            </span>
+          </div>
+        </div>
+      )}
+
+      {canScrollRight && (
+        <div className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 z-20 sm:hidden">
+          <div className="w-9 h-16 flex items-center justify-center bg-gradient-to-l from-white/95 to-transparent">
+            <span
+              className="text-stone-500 text-xl leading-none"
+              style={{ animation: 'bubbleHintRight 1.15s ease-in-out infinite' }}
+            >
+              ›
+            </span>
+          </div>
+        </div>
+      )}
+
       <div
-        className="w-full overflow-x-auto overflow-y-hidden no-scrollbar px-3 sm:px-6 touch-pan-x"
+        className="w-full overflow-x-auto overflow-y-hidden no-scrollbar px-3 sm:px-6 touch-pan-x scroll-smooth"
         style={{ WebkitOverflowScrolling: 'touch' }}
-      >
-        <div className="flex flex-nowrap items-start justify-start md:justify-center gap-3.5 sm:gap-6 min-w-max py-1.5 px-1">
+       data-bubble-scroll="fashion-bubbles">
+        <div className="flex flex-nowrap items-start justify-start md:justify-center gap-2.5 sm:gap-6 min-w-max py-1.5 px-1">
           {menuItems.map((item) =>
             renderBubble({
               key: item.id,
@@ -324,5 +395,6 @@ export default function FashionBubbleMenu() {
 
       {popup}
     </div>
+    </>
   );
 }

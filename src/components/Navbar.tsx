@@ -13,7 +13,7 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { user, openAuthModal, openProfileModal } = useAuth() as any;
+  const { user, openAuthModal, openProfileModal } = useAuth();
   const wishlistContext = useWishlist() as any;
   const cartContext = useCart() as any;
 
@@ -87,9 +87,10 @@ export default function Navbar() {
 
   const handleUserClick = () => {
     triggerHaptic();
+
     if (user) {
-      if (typeof openProfileModal === 'function') openProfileModal();
-    } else if (typeof openAuthModal === 'function') {
+      openProfileModal();
+    } else {
       openAuthModal();
     }
   };
@@ -114,7 +115,7 @@ export default function Navbar() {
 
   return (
     <header
-      className={`sticky top-0 z-40 w-full bg-white/95 backdrop-blur-xl border-b transition-all duration-300 ${
+      className={`sticky top-0 z-40 w-full overflow-x-clip bg-white/95 backdrop-blur-xl border-b transition-all duration-300 ${
         isJewellery
           ? 'border-amber-100/80 shadow-[0_4px_24px_rgba(212,175,55,0.08)]'
           : 'border-stone-100 shadow-[0_4px_24px_rgba(0,0,0,0.06)]'
@@ -154,7 +155,7 @@ export default function Navbar() {
 
         <div className="flex-1 min-w-0 flex justify-center">
           <div
-            className={`flex items-center gap-1 p-1 rounded-full border w-full max-w-[285px] sm:max-w-[320px] ${
+            className={`flex min-w-0 items-center gap-1 p-1 rounded-full border w-full max-w-[285px] sm:max-w-[320px] ${
               isJewellery
                 ? 'bg-stone-50/90 border-amber-200/70'
                 : 'bg-stone-50/90 border-pink-200/60'

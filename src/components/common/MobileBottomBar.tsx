@@ -14,13 +14,12 @@ export default function MobileBottomBar() {
   const location = useLocation();
   const { openCart, totalItems } = useCart();
   const { wishlist } = useWishlist();
-  const { user } = useAuth();
+  const { user, openAuthModal, openProfileModal } = useAuth();
 
   const isJewelleryPage =
     location.search.includes('tab=jewellery') ||
     location.pathname.toLowerCase().includes('jewel');
 
-  // Native Mobile Haptic Touch Feedback
   const triggerHaptic = () => {
     if (typeof window !== 'undefined' && 'navigator' in window && navigator.vibrate) {
       navigator.vibrate(12);
@@ -29,12 +28,13 @@ export default function MobileBottomBar() {
 
   const openAuth = () => {
     triggerHaptic();
-    const userBtn = document.querySelector('[aria-label="User Account"]') as HTMLButtonElement | null;
-    if (userBtn) {
-      userBtn.click();
-    } else {
-      window.dispatchEvent(new CustomEvent('open-auth-modal'));
+
+    if (user) {
+      openProfileModal();
+      return;
     }
+
+    openAuthModal();
   };
 
   const isActive = (path: string) => {

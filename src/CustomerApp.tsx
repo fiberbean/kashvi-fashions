@@ -9,11 +9,12 @@ import MobileBottomBar from './components/common/MobileBottomBar';
 import CategoryProductListPage from './modules/products/CategoryProductListPage';
 import ProductDetailPage from './modules/products/ProductDetailPage';
 import { CartProvider } from './context/CartContext';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { WishlistProvider } from './context/WishlistContext';
 import AuthModal from './components/auth/AuthModal';
 import CartDrawer from './components/common/CartDrawer';
 import CompleteProfileModal from './components/auth/CompleteProfileModal';
+import ProfileSettingsModal from './components/auth/ProfileSettingsModal';
 import WishlistModal from './components/wishlist/WishlistModal';
 
 function HomePageContent() {
@@ -28,7 +29,6 @@ function HomePageContent() {
           : 'bg-[#FAF8F5] text-stone-900 selection:bg-[#ff2d85] selection:text-white font-sans'
       }`}
     >
-      {/* Dynamic Ambient Luxury Glows */}
       {!isJewellery ? (
         <>
           <div className="fixed -top-24 left-1/4 w-[500px] h-[500px] bg-pink-100/60 rounded-full blur-[120px] pointer-events-none z-0" />
@@ -41,7 +41,6 @@ function HomePageContent() {
         </>
       )}
 
-      {/* Fashions Tab Content */}
       {!isJewellery && (
         <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
           <FashionBubbleMenu />
@@ -49,7 +48,6 @@ function HomePageContent() {
         </div>
       )}
 
-      {/* Jewellery Tab Content */}
       {isJewellery && (
         <div className="w-full relative z-10 animate-in fade-in duration-300 pt-1 sm:pt-4">
           <JewelleryBubbleMenu />
@@ -60,13 +58,23 @@ function HomePageContent() {
   );
 }
 
+function ProfileSettingsController() {
+  const { isProfileModalOpen, closeProfileModal } = useAuth();
+
+  return (
+    <ProfileSettingsModal
+      isOpen={isProfileModalOpen}
+      onClose={closeProfileModal}
+    />
+  );
+}
+
 export default function CustomerApp() {
   return (
     <AuthProvider>
       <WishlistProvider>
         <CartProvider>
           <div className="relative min-h-screen bg-[#FAF8F5] text-stone-900 overflow-x-hidden">
-            {/* Top Navbar */}
             <Navbar />
 
             <Routes>
@@ -75,14 +83,13 @@ export default function CustomerApp() {
               <Route path="/product/:id" element={<ProductDetailPage />} />
             </Routes>
 
-            {/* Native Mobile App Fixed Bottom Navigation */}
             <MobileBottomBar />
 
-            {/* Modals & Drawers */}
             <CartDrawer />
             <WishlistModal />
             <AuthModal />
             <CompleteProfileModal />
+            <ProfileSettingsController />
           </div>
         </CartProvider>
       </WishlistProvider>
