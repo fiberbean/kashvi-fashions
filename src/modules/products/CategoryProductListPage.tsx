@@ -56,6 +56,7 @@ interface SubCategory {
   category_name?: string | null;
   department?: string | null;
   image_url?: string | null;
+  slug?: string | null;
   active?: boolean | null;
 }
 
@@ -102,6 +103,8 @@ export default function CategoryProductListPage() {
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [categoryName, setCategoryName] = useState<string>('');
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
+  const [resolvedCategoryId, setResolvedCategoryId] = useState<string>('');
+  const [resolvedRouteSubId, setResolvedRouteSubId] = useState<string>('');
 
   const [dbColoursMap, setDbColoursMap] = useState<Record<string, string>>({});
 
@@ -188,104 +191,121 @@ export default function CategoryProductListPage() {
     return false;
   };
 
-  // 2. Load Category Meta and Sub-Categories
+  // 2. Resolve the route against categories first, then sub-categories.
+  // The URL can point directly to a category slug or a sub-category slug.
   useEffect(() => {
     let isCurrent = true;
 
     async function loadMetaAndSubs() {
       const slugKey = (slug || '').trim();
+      const slugNorm = cleanStr(slugKey);
+
       let activeCatId = '';
       let activeCatName = slugKey;
+      let activeRouteSubId = '';
       let currentDept: 'fashions' | 'jewellery' = slugKey.toLowerCase().includes('jewel')
         ? 'jewellery'
         : 'fashions';
 
       try {
-        if (categoryMetaCache.has(slugKey)) {
-          const cached = categoryMetaCache.get(slugKey)!;
-          activeCatId = cached.id;
-          activeCatName = cached.name;
-          currentDept = cached.dept;
-        } else if (slugKey) {
-          const { data: catList } = await supabase
+        const [{ data: catData, error: catError }, { data: subData, error: subError }] = await Promise.all([
+          supabase
             .from('categories')
             .select('id, name, slug, image_url, active, display_order')
-            .limit(50);
+            .eq('active', true),
+          supabase
+            .from('sub_categories')
+            .select('id, name, category_id, category_name, slug, image_url, active, display_order')
+            .eq('active', true),
+        ]);
 
-          if (catList && catList.length > 0) {
-            const targetNorm = cleanStr(slugKey);
-            const matched = catList.find((c: any) => 
-              cleanStr(c.id) === targetNorm ||
-              cleanStr(c.slug) === targetNorm ||
-              cleanStr(c.name) === targetNorm
-            );
+        if (catError) throw catError;
+        if (subError) throw subError;
 
-            if (matched) {
-              activeCatId = String(matched.id);
-              activeCatName = matched.name;
-              currentDept = matched.name.toLowerCase().includes('jewel') || (matched.slug && matched.slug.toLowerCase().includes('jewel'))
-                ? 'jewellery'
-                : 'fashions';
-              categoryMetaCache.set(slugKey, { name: activeCatName, dept: currentDept, id: activeCatId });
-            }
-          }
+        const categories = (catData || []) as any[];
+        const allSubs = (subData || []) as any[];
+
+        // 1) Try the route as a category slug/id/name.
+        const matchedCategory = categories.find((c: any) =>
+          cleanStr(c.id) === slugNorm ||
+          cleanStr(c.slug) === slugNorm ||
+          cleanStr(c.name) === slugNorm
+        );
+
+        // 2) If it is not a category, try it as a sub-category slug/id/name.
+        const matchedRouteSub = !matchedCategory
+          ? allSubs.find((sub: any) =>
+              cleanStr(sub.id) === slugNorm ||
+              cleanStr(sub.slug) === slugNorm ||
+              cleanStr(sub.name) === slugNorm
+            )
+          : null;
+
+        if (matchedCategory) {
+          activeCatId = String(matchedCategory.id || '').trim();
+          activeCatName = String(matchedCategory.name || slugKey).trim();
+          currentDept =
+            String(matchedCategory.name || '').toLowerCase().includes('jewel') ||
+            String(matchedCategory.slug || '').toLowerCase().includes('jewel')
+              ? 'jewellery'
+              : 'fashions';
+        } else if (matchedRouteSub) {
+          activeRouteSubId = String(matchedRouteSub.id || '').trim();
+          activeCatId = String(matchedRouteSub.category_id || '').trim();
+
+          // Always use the real parent category row for the category name.
+          // sub_categories.category_name can contain stale/inconsistent text.
+          const parentCategory = categories.find(
+            (c: any) => String(c.id || '').trim() === activeCatId
+          );
+
+          activeCatName = String(
+            parentCategory?.name || matchedRouteSub.category_name || slugKey
+          ).trim();
+
+          currentDept =
+            String(parentCategory?.name || '').toLowerCase().includes('jewel') ||
+            String(parentCategory?.slug || '').toLowerCase().includes('jewel') ||
+            String(matchedRouteSub.name || '').toLowerCase().includes('jewel')
+              ? 'jewellery'
+              : 'fashions';
         }
+
+        if (activeCatId) {
+          categoryMetaCache.set(slugKey, {
+            name: activeCatName,
+            dept: currentDept,
+            id: activeCatId,
+          });
+        }
+
+        // Only show sub-categories belonging to the resolved parent category.
+        const filteredSubs: SubCategory[] = activeCatId
+          ? allSubs.filter((sub: any) =>
+              sub.active !== false && String(sub.category_id || '').trim() === activeCatId
+            )
+          : [];
 
         if (isCurrent) {
-          setCategoryName(activeCatName);
+          setCategoryName(activeCatName || (currentDept === 'jewellery' ? 'Jewellery' : 'Collection'));
           setDepartment(currentDept);
-        }
-
-        const { data: subData } = await supabase
-          .from('sub_categories')
-          .select('*');
-
-        if (isCurrent && subData) {
-          let filtered: SubCategory[] = [];
-
-          if (currentDept === 'jewellery' || slugKey.toLowerCase().includes('jewel')) {
-            filtered = subData.filter((sub: any) => {
-              if (sub.active === false) return false;
-              const subDept = (sub.department || '').toLowerCase().trim();
-              if (subDept.includes('jewel')) return true;
-              if (activeCatId && String(sub.category_id).trim() === activeCatId) return true;
-              const cName = (sub.category_name || '').toLowerCase();
-              if (cName.includes('jewel')) return true;
-
-              const sName = (sub.name || '').toLowerCase();
-              return (
-                sName.includes('bangle') ||
-                sName.includes('necklace') ||
-                sName.includes('earring') ||
-                sName.includes('chain') ||
-                sName.includes('ring') ||
-                sName.includes('choker') ||
-                sName.includes('chuda') ||
-                sName.includes('jewel') ||
-                sName.includes('set')
-              );
-            });
-          } else {
-            filtered = subData.filter((sub: any) => {
-              if (sub.active === false) return false;
-              const matchesId = activeCatId && String(sub.category_id).trim() === activeCatId;
-              const matchesName =
-                sub.category_name &&
-                activeCatName &&
-                cleanStr(sub.category_name) === cleanStr(activeCatName);
-              return matchesId || matchesName || !activeCatId;
-            });
-          }
-
-          setSubCategories(filtered);
+          setSubCategories(filteredSubs);
+          setResolvedCategoryId(activeCatId);
+          setResolvedRouteSubId(activeRouteSubId);
         }
       } catch (err) {
         console.error('Meta/Sub-categories loading error:', err);
+        if (isCurrent) {
+          setSubCategories([]);
+          setResolvedCategoryId('');
+          setResolvedRouteSubId('');
+        }
       } finally {
         if (isCurrent) setHeaderLoading(false);
       }
     }
 
+    setHeaderLoading(true);
     loadMetaAndSubs();
 
     return () => {
@@ -293,51 +313,39 @@ export default function CategoryProductListPage() {
     };
   }, [slug]);
 
-  // 3. Load Category Products
+  // 3. Load only products that belong to the resolved category/sub-category.
+  // Filtering is done by database IDs. Product names are never used for routing.
   useEffect(() => {
     let isCurrent = true;
 
     async function loadCategoryProducts() {
       setProductsLoading(true);
-      try {
-        const slugKey = (slug || '').trim();
-        const catInfo = categoryMetaCache.get(slugKey);
-        const activeCatId = catInfo?.id || '';
-        const activeCatName = catInfo?.name || slugKey;
-        const currentDept = catInfo?.dept || (slugKey.toLowerCase().includes('jewel') ? 'jewellery' : 'fashions');
 
+      try {
+        const categoryId = String(resolvedCategoryId || '').trim();
+        const routeSubId = String(resolvedRouteSubId || '').trim();
+
+        if (!categoryId) {
+          if (isCurrent) setRawProducts([]);
+          return;
+        }
+
+        // Always load the complete product set for the resolved parent category.
+        // If the route itself is a sub-category, that ID is used only as the
+        // initial/default sub-category selection below. This is important because
+        // clicking another sub-category must be able to switch away from the
+        // route sub-category without reloading a permanently narrowed product set.
         const { data: prodData, error: prodError } = await supabase
           .from('products')
           .select('*')
+          .eq('active', true)
+          .eq('category_id', categoryId)
           .order('created_at', { ascending: false });
 
         if (prodError) throw prodError;
 
-        if (isCurrent && prodData) {
-          const categoryMatched = prodData.filter((p: any) => {
-            if (p.active === false) return false;
-            
-            const pDept = (p.department || '').toLowerCase().trim();
-            if (currentDept === 'jewellery' || slugKey.toLowerCase().includes('jewel')) {
-              if (pDept.includes('jewel')) return true;
-              const pCat = (p.category || p.category_name || '').toLowerCase();
-              return pCat.includes('jewel');
-            }
-
-            if (activeCatId && String(p.category_id).trim() === activeCatId) return true;
-            
-            const pCatNorm = cleanStr(p.category_name || p.category);
-            const targetNorm = cleanStr(activeCatName);
-            const slugNorm = cleanStr(slugKey);
-
-            if (pCatNorm && (pCatNorm === targetNorm || pCatNorm === slugNorm || pCatNorm.includes('ethnic') || targetNorm.includes('ethnic'))) {
-              return true;
-            }
-
-            return true;
-          });
-
-          setRawProducts(categoryMatched);
+        if (isCurrent) {
+          setRawProducts((prodData || []) as Product[]);
         }
       } catch (err) {
         console.error('Error loading products:', err);
@@ -352,51 +360,65 @@ export default function CategoryProductListPage() {
     return () => {
       isCurrent = false;
     };
-  }, [slug]);
+  }, [resolvedCategoryId, resolvedRouteSubId]);
 
   // 4. Dynamic Sub-Category Filtering
+  // Match the selected sub-category by ID/slug/name, then filter products by sub_category_id.
   useEffect(() => {
+    // A direct sub-category route such as /category/kurta-s has a resolved
+    // sub-category ID. If there is no ?sub= parameter, use that route ID as
+    // the default filter. If the user clicks another sub-category, ?sub=
+    // takes priority and the clicked sub-category is used instead.
     if (!selectedSub) {
-      setFilteredProducts(rawProducts);
+      if (resolvedRouteSubId) {
+        const routeSubId = String(resolvedRouteSubId).trim();
+        setFilteredProducts(
+          rawProducts.filter(
+            (p: any) => String(p.sub_category_id || '').trim() === routeSubId
+          )
+        );
+      } else {
+        setFilteredProducts(rawProducts);
+      }
       return;
     }
 
     const token = cleanStr(selectedSub);
-
     const targetObj = subCategories.find(
-      (s) => cleanStr(s.name) === token || cleanStr(s.id) === token
+      (s) =>
+        cleanStr(s.id) === token ||
+        cleanStr(s.slug) === token ||
+        cleanStr(s.name) === token
     );
-    const targetId = targetObj ? String(targetObj.id).trim().toLowerCase() : '';
-    const rawTargetName = (targetObj?.name || selectedSub).toLowerCase().trim();
 
-    const matched = rawProducts.filter((p: any) => {
-      const pSubId = String(p.sub_category_id || '').trim().toLowerCase();
-      if (targetId && pSubId && pSubId === targetId) return true;
+    if (targetObj?.id) {
+      const targetId = String(targetObj.id).trim();
+      setFilteredProducts(
+        rawProducts.filter(
+          (p: any) => String(p.sub_category_id || '').trim() === targetId
+        )
+      );
+      return;
+    }
 
-      const pSub = String(p.sub_category || p.sub_category_name || '').toLowerCase().trim();
-      if (pSub) {
-        const pSubNorm = cleanStr(pSub);
-        if (pSubNorm === token || pSubNorm.includes(token) || token.includes(pSubNorm)) return true;
-        if (pSub.includes(rawTargetName) || rawTargetName.includes(pSub)) return true;
-      }
-
-      const pName = String(p.name || '').toLowerCase();
-      const pNameNorm = cleanStr(pName);
-      if (token.length >= 3 && (pNameNorm.includes(token) || pName.includes(rawTargetName))) {
-        return true;
-      }
-
-      return false;
-    });
-
-    setFilteredProducts(matched);
-  }, [rawProducts, selectedSub, subCategories]);
+    // Safe fallback for old records: use DB sub-category text fields only.
+    // Never infer sub-category from the product name.
+    setFilteredProducts(
+      rawProducts.filter((p: any) => {
+        const pSub = cleanStr(p.sub_category);
+        const pSubName = cleanStr(p.sub_category_name);
+        return pSub === token || pSubName === token;
+      })
+    );
+  }, [rawProducts, selectedSub, subCategories, resolvedRouteSubId]);
 
   const handleSubSelect = (subName: string) => {
     if (selectedSub === subName) return;
+
     startTransition(() => {
-      searchParams.set('sub', subName);
-      setSearchParams(searchParams);
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('sub', subName);
+      setSearchParams(nextParams);
     });
   };
 
