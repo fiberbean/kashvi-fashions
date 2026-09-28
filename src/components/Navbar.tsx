@@ -1,19 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  Search,
-  Sparkles,
-  X,
-  Crown,
-  Gem,
-  User,
-  Heart,
-  ShoppingBag,
-} from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useWishlist } from '../context/WishlistContext';
-import { useCart } from '../context/CartContext';
+import { Search, Sparkles } from 'lucide-react';
 import HeaderUserButton from './common/HeaderUserButton';
+import HeaderHeartButton from './common/HeaderHeartButton';
+import HeaderBagButton from './common/HeaderBagButton';
 
 import fashionLogo from '../assets/fashion-logo.png';
 import jewelleryLogo from '../assets/jewellery-logo.png';
@@ -22,10 +12,6 @@ export default function Navbar() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-
-  const { user, openAuthModal, openProfileModal } = useAuth() as any;
-  const wishlistContext = useWishlist() as any;
-  const cartContext = useCart() as any;
 
   const currentTab = searchParams.get('tab') || 'fashions';
   const isJewellery = currentTab === 'jewellery';
@@ -36,53 +22,7 @@ export default function Navbar() {
   const currentLogo = isJewellery ? jewelleryLogo : fashionLogo;
   const brandAlt = isJewellery ? 'Kashvi Jewellery' : 'Kashvi Fashions';
 
-  const wishlistArray =
-    wishlistContext?.wishlistItems ||
-    wishlistContext?.wishlist ||
-    wishlistContext?.items ||
-    [];
-
-  const wishlistCount =
-    typeof wishlistContext?.wishlistCount === 'number'
-      ? wishlistContext.wishlistCount
-      : Array.isArray(wishlistArray)
-        ? wishlistArray.length
-        : 0;
-
-  const rawCartList =
-    cartContext?.cartItems ||
-    cartContext?.items ||
-    cartContext?.cart ||
-    [];
-
-  const cartList = Array.isArray(rawCartList) ? rawCartList : [];
-
-  const computedCount = cartList.reduce((sum: number, item: any) => {
-    const q = Number(item?.quantity ?? item?.qty ?? item?.count ?? 1);
-    return sum + (Number.isFinite(q) && q > 0 ? q : 1);
-  }, 0);
-
-  const cartCount =
-    typeof cartContext?.totalItems === 'number'
-      ? cartContext.totalItems
-      : typeof cartContext?.itemCount === 'number'
-        ? cartContext.itemCount
-        : typeof cartContext?.cartCount === 'number'
-          ? cartContext.cartCount
-          : computedCount;
-
-  const triggerHaptic = () => {
-    if (
-      typeof navigator !== 'undefined' &&
-      typeof navigator.vibrate === 'function'
-    ) {
-      navigator.vibrate(10);
-    }
-  };
-
   const handleTabSwitch = (tab: 'fashions' | 'jewellery') => {
-    triggerHaptic();
-
     if (location.pathname === '/') {
       setSearchParams({ tab });
     } else {
@@ -93,502 +33,337 @@ export default function Navbar() {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const query = searchQuery.trim();
-
-    if (!query) return;
+    if (!searchQuery.trim()) return;
 
     navigate(
-      `/search?q=${encodeURIComponent(query)}&dept=${currentTab}`
+      `/search?q=${encodeURIComponent(searchQuery.trim())}&dept=${currentTab}`
     );
 
     setIsSearchOpen(false);
-    triggerHaptic();
-  };
-
-  const handleUserClick = () => {
-    triggerHaptic();
-
-    if (user) {
-      if (typeof openProfileModal === 'function') {
-        openProfileModal();
-      }
-    } else if (typeof openAuthModal === 'function') {
-      openAuthModal();
-    }
-  };
-
-  const handleWishlistClick = () => {
-    triggerHaptic();
-
-    if (typeof wishlistContext?.openWishlistModal === 'function') {
-      wishlistContext.openWishlistModal();
-    } else if (typeof wishlistContext?.openWishlist === 'function') {
-      wishlistContext.openWishlist();
-    }
-  };
-
-  const handleCartClick = () => {
-    triggerHaptic();
-
-    if (typeof cartContext?.openCartDrawer === 'function') {
-      cartContext.openCartDrawer();
-    } else if (typeof cartContext?.openCart === 'function') {
-      cartContext.openCart();
-    }
   };
 
   return (
     <header
-      className={`sticky top-0 z-40 w-full overflow-x-clip bg-white/95 backdrop-blur-xl border-b transition-all duration-300 ${
+      className={`sticky top-0 z-40 w-full transition-all duration-300 backdrop-blur-md bg-white/95 border-b ${
         isJewellery
-          ? 'border-amber-100/80 shadow-[0_4px_24px_rgba(212,175,55,0.08)]'
-          : 'border-stone-100 shadow-[0_4px_24px_rgba(0,0,0,0.06)]'
+          ? 'border-[#0b3b2c]/10 shadow-[0_4px_20px_-10px_rgba(11,59,44,0.08)]'
+          : 'border-neutral-100 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]'
       }`}
     >
       {/* =========================================================
-          DELIVERY STRIP
-          DESKTOP ONLY
+          TOP MICRO STRIP
+          Desktop only - unchanged
       ========================================================== */}
       <div
-        className={`hidden sm:block w-full py-1.5 text-center text-[10px] font-semibold tracking-[0.16em] uppercase border-b px-2 ${
+        className={`hidden md:block w-full py-1 text-center text-[10px] font-semibold tracking-widest uppercase transition-colors ${
           isJewellery
-            ? 'bg-[#FAF6EE] text-[#b38728] border-amber-100/80'
-            : 'bg-[#FFF5F8] text-[#ff2d85] border-pink-100/80'
+            ? 'bg-[#0b3b2c] text-[#e5c07b]'
+            : 'bg-neutral-950 text-neutral-300'
         }`}
       >
-        <span className="inline-flex items-center gap-2 font-sans">
+        <span className="inline-flex items-center gap-1.5">
           <Sparkles className="w-2.5 h-2.5 opacity-80" />
 
-          Complimentary Insured Delivery Across India
+          <span>Complimentary Insured Delivery Across India</span>
 
           <Sparkles className="w-2.5 h-2.5 opacity-80" />
         </span>
       </div>
 
       {/* =========================================================
-          DESKTOP NAVBAR
-          KEEPING THE EXISTING DESKTOP EXPERIENCE
+          MAIN NAVIGATION
+          Same structure for Desktop + Mobile
+          Mobile only adjusts size/spacing
       ========================================================== */}
-      <div className="hidden md:flex max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-20 items-center gap-4">
-
-        {/* LOGO */}
-        <Link
-          to={`/?tab=${currentTab}`}
-          onClick={triggerHaptic}
-          className="group flex items-center shrink-0"
-          aria-label={brandAlt}
-        >
-          <div
-            className={`relative h-14 w-14 rounded-2xl overflow-hidden p-1 border flex items-center justify-center ${
-              isJewellery
-                ? 'bg-gradient-to-br from-[#0f281e] to-[#071610] border-[#D4AF37]/50 shadow-[0_3px_12px_rgba(212,175,55,0.20)]'
-                : 'bg-white border-stone-200/80 shadow-[0_3px_12px_rgba(0,0,0,0.05)]'
-            }`}
-          >
-            <img
-              src={currentLogo}
-              alt={brandAlt}
-              className="w-full h-full object-contain"
-            />
-          </div>
-        </Link>
-
-        {/* DESKTOP SWITCHER */}
-        <div className="flex-1 min-w-0 flex justify-center">
-          <div
-            className={`flex min-w-0 items-center gap-1 p-1 rounded-full border w-full max-w-[320px] ${
-              isJewellery
-                ? 'bg-stone-50/90 border-amber-200/70'
-                : 'bg-stone-50/90 border-pink-200/60'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => handleTabSwitch('fashions')}
-              className={`flex-1 min-w-0 h-10 rounded-full transition-all flex items-center justify-center gap-1.5 ${
-                !isJewellery
-                  ? 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] text-white shadow-[0_3px_12px_rgba(255,45,133,0.28)]'
-                  : 'text-stone-600 active:scale-95'
-              }`}
-            >
-              <Crown className="w-3.5 h-3.5 shrink-0" />
-
-              <span className="text-[15px] font-semibold tracking-wide">
-                Fashions
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleTabSwitch('jewellery')}
-              className={`flex-1 min-w-0 h-10 rounded-full transition-all flex items-center justify-center gap-1.5 ${
-                isJewellery
-                  ? 'bg-gradient-to-r from-[#D4AF37] via-[#DFBF58] to-[#B8860B] text-stone-950 shadow-[0_3px_14px_rgba(212,175,55,0.30)]'
-                  : 'text-stone-600 active:scale-95'
-              }`}
-            >
-              <Gem className="w-3.5 h-3.5 shrink-0" />
-
-              <span className="text-[13px] font-semibold tracking-[0.04em]">
-                Jewellery
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* DESKTOP ACTIONS */}
-        <div className="flex items-center gap-1 shrink-0">
-
-          {/* SEARCH */}
-          <button
-            type="button"
-            aria-label="Search"
-            onClick={() => {
-              triggerHaptic();
-              setIsSearchOpen((prev) => !prev);
-            }}
-            className="flex items-center justify-center w-10 h-10 rounded-full active:scale-95"
-          >
-            <Search
-              className={`w-5 h-5 ${
-                isJewellery
-                  ? 'text-[#8f6b1b]'
-                  : 'text-stone-700'
-              }`}
-            />
-          </button>
-
-          {/* USER */}
-          <button
-            type="button"
-            onClick={handleUserClick}
-            aria-label="User Account"
-            className="relative flex items-center justify-center w-10 h-10 rounded-full active:scale-95"
-          >
-            <User
-              className={`w-5 h-5 ${
-                user
-                  ? isJewellery
-                    ? 'text-[#D4AF37]'
-                    : 'text-[#ff2d85]'
-                  : 'text-stone-700'
-              }`}
-              strokeWidth={1.8}
-            />
-          </button>
-
-          {/* WISHLIST */}
-          <button
-            type="button"
-            onClick={handleWishlistClick}
-            aria-label="Wishlist"
-            className="relative flex items-center justify-center w-10 h-10 rounded-full active:scale-95"
-          >
-            <Heart
-              className={`w-5 h-5 ${
-                wishlistCount > 0
-                  ? isJewellery
-                    ? 'fill-[#D4AF37] text-[#D4AF37]'
-                    : 'fill-[#ff2d85] text-[#ff2d85]'
-                  : 'text-stone-700'
-              }`}
-              strokeWidth={1.8}
-            />
-
-            {wishlistCount > 0 && (
-              <span
-                className={`absolute top-0 right-0 min-w-[17px] h-[17px] px-1 text-[9px] font-bold rounded-full flex items-center justify-center ${
-                  isJewellery
-                    ? 'bg-[#D4AF37] text-stone-950'
-                    : 'bg-[#ff2d85] text-white'
-                }`}
-              >
-                {wishlistCount > 99 ? '99+' : wishlistCount}
-              </span>
-            )}
-          </button>
-
-          {/* BAG */}
-          <button
-            type="button"
-            onClick={handleCartClick}
-            aria-label="Shopping Bag"
-            className="relative flex items-center justify-center w-10 h-10 rounded-full active:scale-95"
-          >
-            <ShoppingBag
-              className={`w-5 h-5 ${
-                isJewellery
-                  ? 'text-[#8f6b1b]'
-                  : 'text-stone-700'
-              }`}
-              strokeWidth={1.8}
-            />
-
-            {cartCount > 0 && (
-              <span
-                className={`absolute top-0 right-0 min-w-[18px] h-[18px] px-1 text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white ${
-                  isJewellery
-                    ? 'bg-[#D4AF37] text-stone-950'
-                    : 'bg-[#ff2d85] text-white'
-                }`}
-              >
-                {cartCount > 99 ? '99+' : cartCount}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* =========================================================
-          MOBILE NAVBAR
-          ROW 1 = LOGO + DEPARTMENT SWITCHER
-      ========================================================== */}
-      <div className="md:hidden w-full">
-
-        <div className="h-[64px] px-3 flex items-center gap-2">
-
-          {/* MOBILE LOGO */}
+      <div
+        className="
+          max-w-7xl mx-auto
+          px-2.5 sm:px-6 lg:px-8
+          h-16 sm:h-20
+          flex items-center
+          justify-between
+          gap-1.5 sm:gap-4
+        "
+      >
+        {/* =======================================================
+            LEFT SECTION: LOGO + BRAND
+        ======================================================== */}
+        <div className="flex items-center shrink-0 min-w-0">
           <Link
             to={`/?tab=${currentTab}`}
-            onClick={triggerHaptic}
-            className="shrink-0 flex items-center"
-            aria-label={brandAlt}
+            className="group flex items-center gap-1.5 sm:gap-3 min-w-0"
           >
+            {/* LOGO */}
             <div
-              className={`relative h-11 w-11 rounded-xl overflow-hidden p-1 border flex items-center justify-center ${
-                isJewellery
-                  ? 'bg-gradient-to-br from-[#0f281e] to-[#071610] border-[#D4AF37]/50 shadow-[0_3px_10px_rgba(212,175,55,0.18)]'
-                  : 'bg-white border-stone-200/80 shadow-[0_3px_10px_rgba(0,0,0,0.05)]'
-              }`}
+              className={`relative
+                h-10 w-10
+                sm:h-14 sm:w-14
+                rounded-xl sm:rounded-2xl
+                overflow-hidden
+                p-1
+                transition-all duration-300
+                bg-white
+                shadow-xs
+                border
+                flex items-center justify-center
+                shrink-0
+                ${
+                  isJewellery
+                    ? 'border-[#0b3b2c]/20 group-hover:border-[#0b3b2c]'
+                    : 'border-neutral-200 group-hover:border-neutral-400'
+                }`}
             >
               <img
                 src={currentLogo}
                 alt={brandAlt}
-                className="w-full h-full object-contain"
+                className="
+                  w-full h-full
+                  object-contain
+                  transition-transform duration-300
+                  group-hover:scale-105
+                "
               />
             </div>
-          </Link>
 
-          {/* MOBILE FASHION / JEWELLERY SWITCHER */}
-          <div className="flex-1 min-w-0 flex justify-center">
-            <div
-              className={`flex items-center gap-1 p-1 rounded-full border w-full max-w-[300px] ${
-                isJewellery
-                  ? 'bg-stone-50/90 border-amber-200/70'
-                  : 'bg-stone-50/90 border-pink-200/60'
-              }`}
-            >
-
-              {/* FASHIONS */}
-              <button
-                type="button"
-                onClick={() => handleTabSwitch('fashions')}
-                aria-label="Switch to Fashions"
-                className={`flex-1 min-w-0 h-9 rounded-full transition-all duration-200 flex items-center justify-center gap-1.5 ${
-                  !isJewellery
-                    ? 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] text-white shadow-[0_3px_12px_rgba(255,45,133,0.28)]'
-                    : 'text-stone-600 active:scale-95'
-                }`}
-              >
-                <Crown
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    !isJewellery ? 'text-white' : 'text-stone-500'
+            {/* BRAND NAME
+                Same desktop branding, compact on mobile */}
+            <div className="flex flex-col text-left min-w-0">
+              <span
+                className={`font-serif
+                  text-[13px]
+                  sm:text-lg
+                  lg:text-xl
+                  font-bold
+                  tracking-[0.12em]
+                  sm:tracking-[0.18em]
+                  leading-none
+                  truncate
+                  ${
+                    isJewellery
+                      ? 'text-[#0b3b2c]'
+                      : 'text-neutral-950'
                   }`}
-                  strokeWidth={1.9}
-                />
-
-                <span className="text-[12px] sm:text-[13px] font-semibold tracking-wide truncate">
-                  Fashions
-                </span>
-              </button>
-
-              {/* JEWELLERY */}
-              <button
-                type="button"
-                onClick={() => handleTabSwitch('jewellery')}
-                aria-label="Switch to Jewellery"
-                className={`flex-1 min-w-0 h-9 rounded-full transition-all duration-200 flex items-center justify-center gap-1.5 ${
-                  isJewellery
-                    ? 'bg-gradient-to-r from-[#D4AF37] via-[#DFBF58] to-[#B8860B] text-stone-950 shadow-[0_3px_14px_rgba(212,175,55,0.30)]'
-                    : 'text-stone-600 active:scale-95'
-                }`}
               >
-                <Gem
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    isJewellery ? 'text-stone-950' : 'text-stone-500'
+                KASHVI
+              </span>
+
+              <span
+                className={`text-[6px]
+                  sm:text-[8px]
+                  uppercase
+                  tracking-[0.16em]
+                  sm:tracking-[0.25em]
+                  font-semibold
+                  mt-1
+                  truncate
+                  ${
+                    isJewellery
+                      ? 'text-[#b38728]'
+                      : 'text-[#ff4d6d]'
                   }`}
-                  strokeWidth={1.9}
-                />
-
-                <span className="text-[12px] sm:text-[13px] font-semibold tracking-[0.02em] truncate">
-                  Jewellery
-                </span>
-              </button>
-
+              >
+                {isJewellery ? 'Royal Vault' : 'Haute Couture'}
+              </span>
             </div>
+          </Link>
+        </div>
+
+        {/* =======================================================
+            CENTER SECTION: DEPARTMENT SWITCHER
+            Same design, only compact sizing on mobile
+        ======================================================== */}
+        <div className="flex items-center justify-center flex-1 min-w-0 px-1 sm:px-2">
+          <div
+            className="
+              inline-flex
+              p-0.5 sm:p-1
+              rounded-full
+              bg-neutral-100
+              border border-neutral-200/60
+              shadow-inner
+              w-full
+              max-w-[210px]
+              sm:max-w-none
+            "
+          >
+            {/* FASHIONS */}
+            <button
+              type="button"
+              onClick={() => handleTabSwitch('fashions')}
+              className={`flex-1
+                px-2 sm:px-5
+                py-1.5 sm:py-1.5
+                rounded-full
+                text-[9px] sm:text-xs
+                font-bold
+                tracking-[0.06em] sm:tracking-wider
+                uppercase
+                transition-all duration-200
+                cursor-pointer
+                whitespace-nowrap
+                ${
+                  !isJewellery
+                    ? 'bg-white text-neutral-950 shadow-xs ring-1 ring-neutral-200'
+                    : 'text-neutral-500 hover:text-neutral-900'
+                }`}
+            >
+              Fashions
+            </button>
+
+            {/* JEWELLERY */}
+            <button
+              type="button"
+              onClick={() => handleTabSwitch('jewellery')}
+              className={`flex-1
+                px-2 sm:px-5
+                py-1.5 sm:py-1.5
+                rounded-full
+                text-[9px] sm:text-xs
+                font-bold
+                tracking-[0.06em] sm:tracking-wider
+                uppercase
+                transition-all duration-200
+                cursor-pointer
+                whitespace-nowrap
+                ${
+                  isJewellery
+                    ? 'bg-[#0b3b2c] text-[#e5c07b] shadow-xs'
+                    : 'text-neutral-500 hover:text-neutral-900'
+                }`}
+            >
+              Jewellery
+            </button>
           </div>
         </div>
 
         {/* =======================================================
-            MOBILE ACTION ROW
-            SEARCH + ACCOUNT + SAVED + BAG
+            ACTION CONTROLS
+            Same controls on Desktop + Mobile
+            Mobile only reduces spacing/size
         ======================================================== */}
         <div
-          className={`h-[54px] border-t px-2 flex items-center justify-around ${
-            isJewellery
-              ? 'border-amber-100/70 bg-[#FBF9F5]/90'
-              : 'border-pink-100/70 bg-[#FFF9FB]/90'
-          }`}
+          className="
+            flex items-center
+            gap-0 sm:gap-1.5 lg:gap-3
+            shrink-0
+          "
         >
-
           {/* SEARCH */}
           <button
             type="button"
             aria-label="Search"
-            onClick={() => {
-              triggerHaptic();
-              setIsSearchOpen((prev) => !prev);
-            }}
-            className={`relative w-11 h-11 rounded-xl flex items-center justify-center active:scale-90 transition-all ${
-              isJewellery
-                ? 'text-[#8f6b1b]'
-                : 'text-stone-700'
-            }`}
+            onClick={() => setIsSearchOpen(!isSearchOpen)}
+            className="
+              p-1.5 sm:p-2
+              rounded-full
+              text-neutral-600
+              hover:text-neutral-950
+              hover:bg-neutral-100
+              transition-colors
+              cursor-pointer
+            "
           >
             <Search
-              className="w-[21px] h-[21px]"
-              strokeWidth={1.9}
+              className="
+                w-[17px] h-[17px]
+                sm:w-5 sm:h-5
+                stroke-[1.8]
+              "
             />
-
-            <span className="absolute bottom-0.5 text-[8px] font-medium text-stone-400">
-              Search
-            </span>
           </button>
 
-          {/* ACCOUNT */}
-          <div className="w-11 h-11 flex items-center justify-center">
+          {/* GLOBAL USER / PROFILE */}
+          <div className="shrink-0">
             <HeaderUserButton isJewellery={isJewellery} />
           </div>
 
-          {/* SAVED */}
-          <button
-            type="button"
-            aria-label="Wishlist"
-            onClick={handleWishlistClick}
-            className={`relative w-11 h-11 rounded-xl flex items-center justify-center active:scale-90 transition-all ${
-              isJewellery
-                ? 'text-[#8f6b1b]'
-                : 'text-stone-700'
-            }`}
-          >
-            <Heart
-              className={`w-[21px] h-[21px] ${
-                wishlistCount > 0
-                  ? isJewellery
-                    ? 'fill-[#D4AF37] text-[#D4AF37]'
-                    : 'fill-[#ff2d85] text-[#ff2d85]'
-                  : ''
-              }`}
-              strokeWidth={1.9}
-            />
+          {/* GLOBAL WISHLIST */}
+          <div className="shrink-0">
+            <HeaderHeartButton isJewellery={isJewellery} />
+          </div>
 
-            {wishlistCount > 0 && (
-              <span
-                className={`absolute top-0 right-0 min-w-[17px] h-[17px] px-1 text-[8px] font-bold rounded-full flex items-center justify-center ${
-                  isJewellery
-                    ? 'bg-[#D4AF37] text-stone-950'
-                    : 'bg-[#ff2d85] text-white'
-                }`}
-              >
-                {wishlistCount > 99 ? '99+' : wishlistCount}
-              </span>
-            )}
-
-            <span className="absolute bottom-0.5 text-[8px] font-medium text-stone-400">
-              Saved
-            </span>
-          </button>
-
-          {/* BAG */}
-          <button
-            type="button"
-            aria-label="Shopping Bag"
-            onClick={handleCartClick}
-            className={`relative w-11 h-11 rounded-xl flex items-center justify-center active:scale-90 transition-all ${
-              isJewellery
-                ? 'text-[#8f6b1b]'
-                : 'text-stone-700'
-            }`}
-          >
-            <ShoppingBag
-              className="w-[21px] h-[21px]"
-              strokeWidth={1.9}
-            />
-
-            {cartCount > 0 && (
-              <span
-                className={`absolute top-0 right-0 min-w-[17px] h-[17px] px-1 text-[8px] font-bold rounded-full flex items-center justify-center ${
-                  isJewellery
-                    ? 'bg-[#D4AF37] text-stone-950'
-                    : 'bg-[#ff2d85] text-white'
-                }`}
-              >
-                {cartCount > 99 ? '99+' : cartCount}
-              </span>
-            )}
-
-            <span className="absolute bottom-0.5 text-[8px] font-medium text-stone-400">
-              Bag
-            </span>
-          </button>
+          {/* GLOBAL CART */}
+          <div className="shrink-0">
+            <HeaderBagButton isJewellery={isJewellery} />
+          </div>
         </div>
       </div>
 
       {/* =========================================================
-          SEARCH PANEL
+          SEARCH DRAWER
+          Desktop + Mobile
       ========================================================== */}
       {isSearchOpen && (
         <div
-          className={`w-full border-t px-3 py-2.5 sm:py-3 ${
-            isJewellery
-              ? 'bg-[#FBF9F5] border-amber-200/50'
-              : 'bg-[#FAF8F5] border-pink-200/40'
-          }`}
+          className="
+            w-full
+            bg-neutral-50
+            border-t border-neutral-100
+            px-2.5 sm:px-4
+            py-2.5 sm:py-3
+            animate-in
+            slide-in-from-top-2
+            duration-200
+          "
         >
           <form
             onSubmit={handleSearchSubmit}
-            className={`max-w-2xl mx-auto flex items-center gap-2 rounded-2xl px-3 py-2.5 border bg-white shadow-sm ${
-              isJewellery
-                ? 'border-amber-200/70 focus-within:border-amber-400'
-                : 'border-pink-200/70 focus-within:border-[#ff2d85]'
-            }`}
+            className="
+              max-w-2xl mx-auto
+              flex items-center
+              gap-1.5 sm:gap-2
+              bg-white
+              rounded-xl sm:rounded-2xl
+              px-2.5 sm:px-3.5
+              py-2 sm:py-2
+              border border-neutral-200
+              focus-within:border-neutral-900
+              shadow-2xs
+              transition-all
+            "
           >
             <Search
-              className={`w-4 h-4 shrink-0 ${
-                isJewellery
-                  ? 'text-[#b38728]'
-                  : 'text-[#ff2d85]'
-              }`}
+              className="
+                w-3.5 h-3.5
+                sm:w-4 sm:h-4
+                text-neutral-400
+                shrink-0
+              "
             />
 
             <input
               type="text"
               autoFocus
-              placeholder={
+              placeholder={`Search handcrafted ${
                 isJewellery
-                  ? 'Search jewellery...'
-                  : 'Search products...'
-              }
+                  ? 'jewellery, chokers, bangles...'
+                  : 'sarees, silks, lehengas...'
+              }`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full min-w-0 bg-transparent text-sm text-stone-900 placeholder:text-stone-400 focus:outline-none"
+              className="
+                w-full
+                min-w-0
+                bg-transparent
+                text-xs sm:text-sm
+                text-neutral-900
+                placeholder:text-neutral-400
+                focus:outline-hidden
+              "
             />
 
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="shrink-0 text-[11px] text-stone-400 font-semibold px-1"
+                className="
+                  text-[9px] sm:text-[11px]
+                  text-neutral-400
+                  hover:text-neutral-900
+                  font-semibold
+                  px-1
+                  shrink-0
+                "
               >
                 Clear
               </button>
@@ -596,22 +371,23 @@ export default function Navbar() {
 
             <button
               type="submit"
-              className={`shrink-0 px-3.5 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider ${
-                isJewellery
-                  ? 'bg-gradient-to-r from-[#D4AF37] to-[#B8860B] text-stone-950'
-                  : 'bg-gradient-to-r from-[#ff2d85] to-[#ff639f] text-white'
-              }`}
+              className="
+                px-2.5 sm:px-4
+                py-1.5
+                rounded-lg sm:rounded-xl
+                bg-neutral-900
+                text-white
+                text-[9px] sm:text-xs
+                font-bold
+                uppercase
+                tracking-wider
+                hover:bg-neutral-800
+                transition-all
+                cursor-pointer
+                shrink-0
+              "
             >
               Search
-            </button>
-
-            <button
-              type="button"
-              aria-label="Close search"
-              onClick={() => setIsSearchOpen(false)}
-              className="shrink-0 p-1 text-stone-400"
-            >
-              <X className="w-4 h-4" />
             </button>
           </form>
         </div>
