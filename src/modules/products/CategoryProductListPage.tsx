@@ -39,9 +39,9 @@ interface Product {
   size?: string | null;
   sizes?: any;
   available_sizes?: any;
-  selling_price?: number | null;
-  price?: number | null;
-  mrp?: number | null;
+  // Customer-facing price fields come from inventory.
+  online_price?: number | null;
+  inventory_mrp?: number | null;
   images?: any;
   active?: boolean | null;
   fabric?: string | null;
@@ -67,6 +67,11 @@ interface InventoryItem {
   variant_color: string;
   variant_size: string;
   stock_quantity: number;
+  reserved_quantity?: number;
+  cost_price?: number;
+  store_price?: number;
+  online_price: number;
+  mrp: number;
 }
 
 interface ComboItem {
@@ -111,6 +116,9 @@ function CategoryProductListContent() {
 
   const [rawProducts, setRawProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [inventoryPriceMap, setInventoryPriceMap] = useState<
+    Record<string, { online_price: number; mrp: number }>
+  >({});
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [categoryName, setCategoryName] = useState<string>('');
   const [department, setDepartment] = useState<'fashions' | 'jewellery'>('fashions');
@@ -355,12 +363,67 @@ function CategoryProductListContent() {
 
         if (prodError) throw prodError;
 
+        const products = (prodData || []) as Product[];
+
+        // Inventory is the single source of truth for customer-facing prices.
+        // Do NOT read the inventory table directly from the customer app.
+        // Inventory is protected by RLS because it also contains internal
+        // purchase/store pricing. The SECURITY DEFINER RPC below exposes only
+        // the customer-safe fields: product/variant, stock, online price and MRP.
+        const productIds = new Set(
+          products.map((p) => String(p.id || '').trim()).filter(Boolean)
+        );
+        const nextPriceMap: Record<string, { online_price: number; mrp: number }> = {};
+
+        const { data: inventoryData, error: inventoryError } = await supabase
+          .rpc('get_customer_inventory_pricing');
+
+        if (inventoryError) {
+          console.error('Customer inventory RPC error:', inventoryError);
+        } else {
+          const grouped: Record<string, any[]> = {};
+
+          ((inventoryData || []) as any[]).forEach((row) => {
+            const pid = String(row.product_id || '').trim();
+            if (!pid || !productIds.has(pid)) return;
+            if (!grouped[pid]) grouped[pid] = [];
+            grouped[pid].push(row);
+          });
+
+          Object.entries(grouped).forEach(([pid, rowsForProduct]) => {
+            const usableRows = rowsForProduct
+              .filter((row) => Number(row.online_price) > 0)
+              .sort((a, b) => {
+                const stockDiff = Number(b.stock_quantity || 0) - Number(a.stock_quantity || 0);
+                if (stockDiff !== 0) return stockDiff;
+                return String(b.id || '').localeCompare(String(a.id || ''));
+              });
+
+            if (usableRows.length > 0) {
+              const row = usableRows[0];
+              nextPriceMap[pid] = {
+                online_price: Number(row.online_price) || 0,
+                mrp: Number(row.mrp) || 0,
+              };
+            }
+          });
+        }
+
+        console.log('Category customer inventory pricing loaded:', {
+          productsOnPage: productIds.size,
+          productsWithInventoryPricing: Object.keys(nextPriceMap).length,
+        });
+
         if (isCurrent) {
-          setRawProducts((prodData || []) as Product[]);
+          setRawProducts(products);
+          setInventoryPriceMap(nextPriceMap);
         }
       } catch (err) {
         console.error('Error loading products:', err);
-        if (isCurrent) setRawProducts([]);
+        if (isCurrent) {
+          setRawProducts([]);
+          setInventoryPriceMap({});
+        }
       } finally {
         if (isCurrent) setProductsLoading(false);
       }
@@ -463,13 +526,15 @@ function CategoryProductListContent() {
       removeFromWishlist(pid);
     } else {
       const pImage = getProductImage(product.images);
-      const price = product.selling_price || product.price || 0;
+      const inventoryPrice = inventoryPriceMap[pid];
+      const price = Number(inventoryPrice?.online_price) || 0;
+      const originalPrice = Number(inventoryPrice?.mrp) || 0;
 
       addToWishlist({
         id: pid,
         name: product.name,
         price,
-        originalPrice: product.mrp || undefined,
+        originalPrice: originalPrice > price ? originalPrice : undefined,
         image: pImage,
         fabric: product.fabric || undefined,
         department: isJewellery ? 'jewellery' : 'fashions',
@@ -538,13 +603,15 @@ function CategoryProductListContent() {
 
     try {
       const pid = String(product.id).trim();
-      const { data: invData, error } = await supabase
-        .from('inventory')
-        .select('*')
-        .eq('product_id', pid);
+      const { data: allCustomerInventory, error } = await supabase
+        .rpc('get_customer_inventory_pricing');
+
+      const invData = ((allCustomerInventory || []) as any[]).filter(
+        (item) => String(item.product_id || '').trim() === pid
+      );
 
       if (error) {
-        console.error('Inventory fetch error:', error);
+        console.error('Customer inventory RPC error:', error);
       }
 
       const inStockItems = (invData || []).filter((item: any) => Number(item.stock_quantity) > 0);
@@ -584,35 +651,11 @@ function CategoryProductListContent() {
         setSelectedColor('');
         setSelectedSize('');
       } else {
-        const prodColors = (product.colour || product.colors || '')
-          .split(',')
-          .map((c: string) => c.trim())
-          .filter(Boolean);
-        const prodSizes = (product.size || product.sizes || product.available_sizes || '')
-          .split(',')
-          .map((s: string) => s.trim())
-          .filter(Boolean);
-
-        const finalColors = prodColors.length > 0 ? prodColors : ['Standard'];
-        const finalSizes = prodSizes.length > 0 ? prodSizes : ['Free Size'];
-
-        const simulatedStock: InventoryItem[] = [];
-        finalColors.forEach((c: string) => {
-          finalSizes.forEach((s: string) => {
-            simulatedStock.push({
-              id: `${product.id}-${c}-${s}`,
-              product_id: product.id,
-              variant_color: c,
-              variant_size: s,
-              stock_quantity: 10,
-            });
-          });
-        });
-
-        setModalStock(simulatedStock);
-        setStockColors(finalColors);
-        setSelectedColor(finalColors[0]);
-        setSelectedSize(finalSizes[0]);
+        // Inventory is authoritative. Never simulate stock from product fields.
+        setModalStock([]);
+        setStockColors([]);
+        setSelectedColor('');
+        setSelectedSize('');
       }
     } catch (err) {
       console.error('Error fetching inventory for modal:', err);
@@ -706,22 +749,48 @@ function CategoryProductListContent() {
     setComboList((prev) => prev.filter((item) => item.id !== id));
   };
 
+  const getSelectedInventoryItem = (sizeVal?: string, colorVal?: string): InventoryItem | null => {
+    const size = (sizeVal || selectedSize || 'Free Size').trim().toLowerCase();
+    const color = (colorVal || selectedColor || 'Standard').trim().toLowerCase();
+
+    const exact = modalStock.find(
+      (item) =>
+        (item.variant_size || '').trim().toLowerCase() === size &&
+        (item.variant_color || '').trim().toLowerCase() === color &&
+        Number(item.stock_quantity) > 0
+    );
+
+    return exact || null;
+  };
+
   // ROBUST CART CHECKOUT ACTION (Supports both Single Item & Array Batching with full property compatibility)
   const handleFinalCheckoutAction = (shouldOpenCart: boolean = false) => {
     if (!activeProduct) return;
-    const finalPrice = activeProduct.selling_price || activeProduct.price || 0;
 
     const buildPayload = (sizeVal?: string, colorVal?: string, quantityNum: number = 1) => {
       const s = sizeVal || 'Free Size';
       const c = colorVal || 'Standard';
+      const inventoryItem = getSelectedInventoryItem(s, c);
+
+      if (!inventoryItem) {
+        console.error('Inventory variant not found for customer cart:', {
+          product_id: activeProduct.id,
+          variant_color: c,
+          variant_size: s,
+        });
+        return null;
+      }
+
+      const finalPrice = Number(inventoryItem.online_price) || 0;
+      const finalMrp = Number(inventoryItem.mrp) || 0;
+
       return {
         id: `${activeProduct.id}-${s}-${c}`,
         productId: activeProduct.id,
         product_id: activeProduct.id,
         name: activeProduct.name,
         price: finalPrice,
-        selling_price: finalPrice,
-        mrp: activeProduct.mrp || undefined,
+        mrp: finalMrp > 0 ? finalMrp : undefined,
         image: selectedImage,
         image_url: selectedImage,
         color: c,
@@ -738,10 +807,11 @@ function CategoryProductListContent() {
     if (comboList.length > 0) {
       comboList.forEach((item) => {
         const payload = buildPayload(item.size, item.color, item.qty);
-        addToCart(payload);
+        if (payload) addToCart(payload);
       });
     } else {
       const payload = buildPayload(selectedSize, selectedColor, singleQty);
+      if (!payload) return;
       addToCart(payload);
     }
 
@@ -768,23 +838,32 @@ function CategoryProductListContent() {
   }, [isZoomOpen]);
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
-    const priceA = a.selling_price || a.price || 0;
-    const priceB = b.selling_price || b.price || 0;
+    const priceA = Number(inventoryPriceMap[String(a.id).trim()]?.online_price) || 0;
+    const priceB = Number(inventoryPriceMap[String(b.id).trim()]?.online_price) || 0;
     if (sortBy === 'price-asc') return priceA - priceB;
     if (sortBy === 'price-desc') return priceB - priceA;
     return 0;
   });
 
-  const activeSellingPrice = activeProduct?.selling_price || activeProduct?.price || 0;
-  const activeMrp = activeProduct?.mrp || 0;
-  const activeDiscount = activeMrp > activeSellingPrice ? Math.round(((activeMrp - activeSellingPrice) / activeMrp) * 100) : 0;
+  const selectedInventoryItem = activeProduct
+    ? getSelectedInventoryItem(selectedSize, selectedColor)
+    : null;
+  const activeSellingPrice = Number(selectedInventoryItem?.online_price) || 0;
+  const activeMrp = Number(selectedInventoryItem?.mrp) || 0;
+  const activeDiscount =
+    activeMrp > activeSellingPrice
+      ? Math.round(((activeMrp - activeSellingPrice) / activeMrp) * 100)
+      : 0;
   
   const isOutOfStock = stockColors.length === 0;
   const showColors = stockColors.filter((c) => c.toLowerCase() !== 'standard');
   const showSizes = stockSizesForSelectedColor.filter((s) => s.toLowerCase() !== 'free size');
 
   const totalComboItems = comboList.reduce((acc, item) => acc + item.qty, 0);
-  const totalComboPrice = totalComboItems * activeSellingPrice;
+  const totalComboPrice = comboList.reduce((total, item) => {
+    const inventoryItem = getSelectedInventoryItem(item.size, item.color);
+    return total + (Number(inventoryItem?.online_price) || 0) * item.qty;
+  }, 0);
 
   return (
     <div
@@ -972,8 +1051,10 @@ function CategoryProductListContent() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 animate-in fade-in duration-150">
             {sortedProducts.map((product) => {
-              const currentPrice = product.selling_price || product.price || 0;
-              const originalPrice = product.mrp && product.mrp > currentPrice ? product.mrp : null;
+              const inventoryPrice = inventoryPriceMap[String(product.id).trim()];
+              const currentPrice = Number(inventoryPrice?.online_price) || 0;
+              const inventoryMrp = Number(inventoryPrice?.mrp) || 0;
+              const originalPrice = inventoryMrp > currentPrice ? inventoryMrp : null;
               const discountPercent = originalPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0;
               const imageUrl = getProductImage(product.images);
               const isFav = isInWishlist(String(product.id));

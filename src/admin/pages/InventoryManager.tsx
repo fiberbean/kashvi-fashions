@@ -39,11 +39,17 @@ interface InventoryProductRow {
   landed_price: number;
   store_price: number;
   online_price: number;
+  mrp: number;
   total_stock: number;
   variants: {
     color: string;
     size: string;
     stock: number;
+    reserved: number;
+    cost_price: number;
+    store_price: number;
+    online_price: number;
+    mrp: number;
     hex: string;
   }[];
 }
@@ -69,6 +75,17 @@ interface SalesHistoryItem {
   quantity: number;
   unit_price: number;
   total_amount: number;
+}
+
+interface MovementHistoryItem {
+  id: string;
+  variant_color: string;
+  variant_size: string;
+  quantity: number;
+  movement_type: string;
+  reference_id: string;
+  notes: string;
+  created_at: string;
 }
 
 function getContrastTextColor(hexColor: string | null | undefined): string {
@@ -114,6 +131,7 @@ export default function InventoryManager({ currentUser }: InventoryManagerProps)
   const [selectedProductForHistory, setSelectedProductForHistory] = useState<InventoryProductRow | null>(null);
   const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
   const [salesHistory, setSalesHistory] = useState<SalesHistoryItem[]>([]);
+  const [movementHistory, setMovementHistory] = useState<MovementHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
   const isAdmin = currentUser?.role === 'admin';
@@ -121,52 +139,87 @@ export default function InventoryManager({ currentUser }: InventoryManagerProps)
   const loadInventory = async () => {
     setLoading(true);
     try {
-      const [prodRes, colorRes, invRes, purchRes] = await Promise.all([
-        supabase.from('products').select('*'),
+      const [prodRes, colorRes, invRes, catRes, subCatRes] = await Promise.all([
+        // Final Products structure: product master only.
+        supabase.from('products').select(`
+          id,
+          name,
+          category_id,
+          sub_category_id,
+          colour,
+          size,
+          created_at
+        `),
         supabase.from('colours').select('name, hex_code'),
-        supabase.from('inventory').select('*'),
-        supabase.from('purchase_items').select('*')
+        // Inventory is the single source of truth for stock + pricing.
+        supabase.from('inventory').select(`
+          id,
+          product_id,
+          variant_color,
+          variant_size,
+          stock_quantity,
+          reserved_quantity,
+          cost_price,
+          store_price,
+          online_price,
+          mrp,
+          updated_at
+        `),
+        supabase.from('categories').select('id, name, slug'),
+        supabase.from('sub_categories').select('id, name, slug, category_id')
       ]);
+
+      if (prodRes.error) throw prodRes.error;
+      if (colorRes.error) throw colorRes.error;
+      if (invRes.error) throw invRes.error;
+      if (catRes.error) throw catRes.error;
+      if (subCatRes.error) throw subCatRes.error;
 
       const products = prodRes.data || [];
       const inventoryRecords = invRes.data || [];
-      const purchaseRecords = purchRes.data || [];
+      const categories = catRes.data || [];
+      const subCategories = subCatRes.data || [];
 
-      let colorHexMap = new Map<string, string>();
+      const categoryNameMap = new Map<string, string>();
+      categories.forEach((c: any) => {
+        if (c?.id) categoryNameMap.set(String(c.id), String(c.name || ''));
+      });
+
+      const subCategoryNameMap = new Map<string, string>();
+      subCategories.forEach((s: any) => {
+        if (s?.id) subCategoryNameMap.set(String(s.id), String(s.name || ''));
+      });
+
+      const colorHexMap = new Map<string, string>();
       (colorRes.data || []).forEach((c: any) => {
         if (c.name && c.hex_code) {
           const rawName = c.name.toLowerCase().trim();
           colorHexMap.set(rawName, c.hex_code.trim());
+
           if (rawName.includes('/')) {
             rawName.split('/').forEach((part: string) => {
               const p = part.trim();
-              if (p && !colorHexMap.has(p)) colorHexMap.set(p, c.hex_code.trim());
+              if (p && !colorHexMap.has(p)) {
+                colorHexMap.set(p, c.hex_code.trim());
+              }
             });
           }
         }
       });
       setColoursList(colorRes.data || []);
 
-      const latestCostMap = new Map<string, number>();
-      purchaseRecords.forEach((pi: any) => {
-        if (pi.product_id && pi.unit_cost) {
-          latestCostMap.set(String(pi.product_id).toUpperCase().trim(), Number(pi.unit_cost));
-        }
-      });
-
       const groupedMap = new Map<string, InventoryProductRow>();
 
-      products.forEach((prod) => {
+      products.forEach((prod: any) => {
         const pId = String(prod.id).toUpperCase().trim();
-        const code = String(prod.code || prod.id);
+        const code = String(prod.id || '');
         const name = String(prod.name || 'UNKNOWN PRODUCT');
-        const cat = String(prod.category || 'FASHION');
-        const subCat = String(prod.sub_category || 'GENERAL');
 
-        const baseCost = Number(prod.cost_price || prod.price || latestCostMap.get(pId) || 0);
-        const landed = baseCost > 0 ? Math.round(baseCost * 1.10) : 0;
-        const store = prod.offline_price || prod.store_price || prod.selling_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.10) / 5) * 5 : 0);
-        const online = prod.online_price || (landed > 0 ? Math.ceil(((landed * 2) * 1.20) / 10) * 10 : 0);
+        const categoryId = String(prod.category_id || '').trim();
+        const subCategoryId = String(prod.sub_category_id || '').trim();
+
+        const cat = categoryNameMap.get(categoryId) || 'FASHION';
+        const subCat = subCategoryNameMap.get(subCategoryId) || 'GENERAL';
 
         groupedMap.set(pId, {
           product_id: pId,
@@ -174,81 +227,172 @@ export default function InventoryManager({ currentUser }: InventoryManagerProps)
           product_name: name,
           category: cat,
           sub_category: subCat,
-          cost_price: baseCost,
-          landed_price: landed,
-          store_price: store,
-          online_price: online,
+          cost_price: 0,
+          landed_price: 0,
+          store_price: 0,
+          online_price: 0,
+          mrp: 0,
           total_stock: 0,
           variants: []
         });
       });
 
-      const variantStockMap = new Map<string, number>();
+      /*
+       * Inventory is authoritative.
+       * We do NOT reconstruct stock from purchase_items and we do NOT read
+       * any legacy product-level price fields.
+       */
       inventoryRecords.forEach((inv: any) => {
         const pId = String(inv.product_id).toUpperCase().trim();
-        const color = String(inv.variant_color || inv.color || 'STANDARD').toUpperCase().trim();
-        const size = String(inv.variant_size || inv.size || 'FREE SIZE').toUpperCase().trim();
-        const stock = Number(inv.stock_quantity ?? inv.quantity ?? 0);
-        const key = `${pId}___${color}___${size}`;
-        variantStockMap.set(key, (variantStockMap.get(key) || 0) + stock);
+
+        if (!groupedMap.has(pId)) return;
+
+        const row = groupedMap.get(pId)!;
+
+        const color = String(inv.variant_color || 'STANDARD').toUpperCase().trim();
+        const size = String(inv.variant_size || 'FREE SIZE').toUpperCase().trim();
+
+        const stock = Number(inv.stock_quantity || 0);
+        const reserved = Number(inv.reserved_quantity || 0);
+        const costPrice = Number(inv.cost_price || 0);
+        const storePrice = Number(inv.store_price || 0);
+        const onlinePrice = Number(inv.online_price || 0);
+        const mrp = Number(inv.mrp || 0);
+
+        const cleanColorKey = color.toLowerCase().trim();
+        const firstPart = cleanColorKey.split('/')[0].trim();
+        const secondPart = cleanColorKey.includes('/')
+          ? cleanColorKey.split('/')[1].trim()
+          : '';
+
+        const hex =
+          colorHexMap.get(cleanColorKey) ||
+          colorHexMap.get(firstPart) ||
+          (secondPart ? colorHexMap.get(secondPart) : undefined) ||
+          getDynamicColorHex(color);
+
+        row.variants.push({
+          color,
+          size,
+          stock,
+          reserved,
+          cost_price: costPrice,
+          store_price: storePrice,
+          online_price: onlinePrice,
+          mrp,
+          hex
+        });
+
+        row.total_stock += stock;
       });
 
-      purchaseRecords.forEach((pi: any) => {
-        const pId = String(pi.product_id).toUpperCase().trim();
-        const color = String(pi.variant_color || pi.color || 'STANDARD').toUpperCase().trim();
-        const size = String(pi.variant_size || pi.size || 'FREE SIZE').toUpperCase().trim();
-        const qty = Number(pi.quantity || 0);
-        const key = `${pId}___${color}___${size}`;
-
-        if (!variantStockMap.has(key)) {
-          variantStockMap.set(key, qty);
-        }
-      });
-
-      variantStockMap.forEach((stock, key) => {
-        const [pId, color, size] = key.split('___');
-        if (groupedMap.has(pId)) {
-          const row = groupedMap.get(pId)!;
-          const cleanColorKey = color.toLowerCase().trim();
-          const firstPart = cleanColorKey.split('/')[0].trim();
-          const secondPart = cleanColorKey.includes('/') ? cleanColorKey.split('/')[1].trim() : '';
-
-          const hex =
-            colorHexMap.get(cleanColorKey) ||
-            colorHexMap.get(firstPart) ||
-            (secondPart ? colorHexMap.get(secondPart) : undefined) ||
-            getDynamicColorHex(color);
-
-          row.variants.push({ color, size, stock, hex });
-          row.total_stock += stock;
-        }
-      });
-
+      /*
+       * For products that do not yet have inventory rows, retain the existing
+       * product-master colour/size display so the Inventory screen can still
+       * show the product as 0 stock. These are NOT treated as inventory stock.
+       */
       groupedMap.forEach((row, pId) => {
         if (row.variants.length === 0) {
-          const prod = products.find((p) => String(p.id).toUpperCase().trim() === pId);
+          const prod = products.find(
+            (p: any) => String(p.id).toUpperCase().trim() === pId
+          );
+
           let sizes = ['FREE SIZE'];
           if (prod?.size) {
-            sizes = typeof prod.size === 'string' ? prod.size.split(',').map((s: string) => s.trim().toUpperCase()) : prod.size;
-          }
-          let colors = ['STANDARD'];
-          if (prod?.colour) {
-            colors = typeof prod.colour === 'string' ? prod.colour.split(',').map((c: string) => c.trim().toUpperCase()) : prod.colour;
+            sizes =
+              typeof prod.size === 'string'
+                ? prod.size
+                    .split(',')
+                    .map((v: string) => v.trim().toUpperCase())
+                    .filter(Boolean)
+                : Array.isArray(prod.size)
+                ? prod.size.map((v: any) => String(v).trim().toUpperCase()).filter(Boolean)
+                : sizes;
           }
 
-          colors.forEach((c) => {
-            sizes.forEach((s) => {
+          let colors = ['STANDARD'];
+          if (prod?.colour) {
+            colors =
+              typeof prod.colour === 'string'
+                ? prod.colour
+                    .split(',')
+                    .map((v: string) => v.trim().toUpperCase())
+                    .filter(Boolean)
+                : Array.isArray(prod.colour)
+                ? prod.colour.map((v: any) => String(v).trim().toUpperCase()).filter(Boolean)
+                : colors;
+          }
+
+          colors.forEach((c: string) => {
+            sizes.forEach((sz: string) => {
               const cleanC = c.toLowerCase().trim();
               const firstP = cleanC.split('/')[0].trim();
-              const hex = colorHexMap.get(cleanC) || colorHexMap.get(firstP) || getDynamicColorHex(c);
-              row.variants.push({ color: c, size: s, stock: 0, hex });
+
+              const hex =
+                colorHexMap.get(cleanC) ||
+                colorHexMap.get(firstP) ||
+                getDynamicColorHex(c);
+
+              row.variants.push({
+                color: c,
+                size: sz,
+                stock: 0,
+                reserved: 0,
+                cost_price: 0,
+                store_price: 0,
+                online_price: 0,
+                mrp: 0,
+                hex
+              });
             });
           });
         }
       });
 
+      /*
+       * Product-level price cells are kept in the existing UI.
+       * If every inventory variant has the same value, show that value.
+       * If variants have different values, show 0 here and the exact
+       * variant-wise values remain available in the audit modal.
+       */
+      groupedMap.forEach((row) => {
+        const pricedVariants = row.variants.filter(
+          (v) =>
+            v.cost_price > 0 ||
+            v.store_price > 0 ||
+            v.online_price > 0 ||
+            v.mrp > 0
+        );
+
+        const uniqueValues = (field: 'cost_price' | 'store_price' | 'online_price' | 'mrp') =>
+          Array.from(new Set(pricedVariants.map((v) => Number(v[field] || 0))));
+
+        const costValues = uniqueValues('cost_price');
+        const storeValues = uniqueValues('store_price');
+        const onlineValues = uniqueValues('online_price');
+        const mrpValues = uniqueValues('mrp');
+
+        row.cost_price = costValues.length === 1 ? costValues[0] : 0;
+        row.store_price = storeValues.length === 1 ? storeValues[0] : 0;
+        row.online_price = onlineValues.length === 1 ? onlineValues[0] : 0;
+        row.mrp = mrpValues.length === 1 ? mrpValues[0] : 0;
+
+        // Landed price is no longer stored in Inventory. Keep the existing
+        // column visible without inventing a separate source-of-truth field.
+        row.landed_price =
+          costValues.length === 1 && costValues[0] > 0
+            ? Math.round(costValues[0] * 1.10)
+            : 0;
+      });
+
       const rowsArray = Array.from(groupedMap.values());
-      rowsArray.sort((a, b) => a.product_code.localeCompare(b.product_code, undefined, { numeric: true, sensitivity: 'base' }));
+
+      rowsArray.sort((a, b) =>
+        a.product_code.localeCompare(b.product_code, undefined, {
+          numeric: true,
+          sensitivity: 'base'
+        })
+      );
 
       setProductRows(rowsArray);
     } catch (err: any) {
@@ -272,68 +416,119 @@ export default function InventoryManager({ currentUser }: InventoryManagerProps)
     setLoadingHistory(true);
     setPurchaseHistory([]);
     setSalesHistory([]);
+    setMovementHistory([]);
 
     try {
-      const { data: purItems } = await supabase
-        .from('purchase_items')
-        .select(`
-          quantity,
-          unit_cost,
-          total_cost,
-          variant_color,
-          variant_size,
-          purchases (
+      const [movementRes, purRes, salesRes] = await Promise.all([
+        supabase
+          .from('inventory_movements')
+          .select(`
             id,
-            supplier_name,
-            supplier_bill_no,
-            purchase_date
-          )
-        `)
-        .eq('product_id', row.product_id);
+            variant_color,
+            variant_size,
+            quantity,
+            movement_type,
+            reference_id,
+            notes,
+            created_at
+          `)
+          .eq('product_id', row.product_id)
+          .order('created_at', { ascending: false }),
 
-      if (purItems && purItems.length > 0) {
-        const mappedPurchases: PurchaseHistoryItem[] = purItems.map((pi: any) => ({
-          purchase_id: pi.purchases?.id || '—',
-          supplier_name: pi.purchases?.supplier_name || 'DIRECT INWARD',
-          supplier_bill_no: pi.purchases?.supplier_bill_no || '—',
-          purchase_date: pi.purchases?.purchase_date || '—',
-          variant_color: String(pi.variant_color || 'STANDARD').toUpperCase(),
-          variant_size: String(pi.variant_size || 'FREE SIZE').toUpperCase(),
-          quantity: Number(pi.quantity || 0),
-          unit_cost: Number(pi.unit_cost || 0),
-          total_cost: Number(pi.total_cost || (pi.quantity * pi.unit_cost) || 0)
-        }));
-        setPurchaseHistory(mappedPurchases);
+        supabase
+          .from('purchase_items')
+          .select(`
+            quantity,
+            unit_cost,
+            total_cost,
+            variant_color,
+            variant_size,
+            purchases (
+              id,
+              supplier_name,
+              supplier_bill_no,
+              purchase_date
+            )
+          `)
+          .eq('product_id', row.product_id),
+
+        supabase
+          .from('order_items')
+          .select(`
+            quantity,
+            price,
+            total,
+            variant_color,
+            variant_size,
+            orders (
+              id,
+              customer_name,
+              created_at
+            )
+          `)
+          .eq('product_id', row.product_id)
+      ]);
+
+      if (movementRes.error && !movementRes.error.message.toLowerCase().includes('does not exist')) {
+        throw movementRes.error;
       }
 
-      const { data: saleItems } = await supabase
-        .from('order_items')
-        .select(`
-          quantity,
-          price,
-          total,
-          variant_color,
-          variant_size,
-          orders (
-            id,
-            customer_name,
-            created_at
-          )
-        `)
-        .eq('product_id', row.product_id);
+      if (movementRes.data) {
+        setMovementHistory(
+          movementRes.data.map((m: any) => ({
+            id: String(m.id),
+            variant_color: String(m.variant_color || 'STANDARD').toUpperCase(),
+            variant_size: String(m.variant_size || 'FREE SIZE').toUpperCase(),
+            quantity: Number(m.quantity || 0),
+            movement_type: String(m.movement_type || 'UNKNOWN').toUpperCase(),
+            reference_id: String(m.reference_id || '—'),
+            notes: String(m.notes || ''),
+            created_at: m.created_at
+              ? new Date(m.created_at).toLocaleString('en-IN')
+              : '—'
+          }))
+        );
+      }
 
-      if (saleItems && saleItems.length > 0) {
-        const mappedSales: SalesHistoryItem[] = saleItems.map((si: any) => ({
-          order_id: si.orders?.id || '—',
-          customer_name: si.orders?.customer_name || 'WALK-IN CUSTOMER',
-          sale_date: si.orders?.created_at ? new Date(si.orders.created_at).toLocaleDateString('en-IN') : '—',
-          variant_color: String(si.variant_color || 'STANDARD').toUpperCase(),
-          variant_size: String(si.variant_size || 'FREE SIZE').toUpperCase(),
-          quantity: Number(si.quantity || 0),
-          unit_price: Number(si.price || 0),
-          total_amount: Number(si.total || (si.quantity * si.price) || 0)
-        }));
-        setSalesHistory(mappedSales);
+      if (purRes.error) throw purRes.error;
+
+      if (purRes.data && purRes.data.length > 0) {
+        setPurchaseHistory(
+          purRes.data.map((pi: any) => ({
+            purchase_id: pi.purchases?.id || '—',
+            supplier_name: pi.purchases?.supplier_name || 'DIRECT INWARD',
+            supplier_bill_no: pi.purchases?.supplier_bill_no || '—',
+            purchase_date: pi.purchases?.purchase_date || '—',
+            variant_color: String(pi.variant_color || 'STANDARD').toUpperCase(),
+            variant_size: String(pi.variant_size || 'FREE SIZE').toUpperCase(),
+            quantity: Number(pi.quantity || 0),
+            unit_cost: Number(pi.unit_cost || 0),
+            total_cost: Number(
+              pi.total_cost || (Number(pi.quantity || 0) * Number(pi.unit_cost || 0))
+            )
+          }))
+        );
+      }
+
+      if (salesRes.error) throw salesRes.error;
+
+      if (salesRes.data && salesRes.data.length > 0) {
+        setSalesHistory(
+          salesRes.data.map((si: any) => ({
+            order_id: si.orders?.id || '—',
+            customer_name: si.orders?.customer_name || 'WALK-IN CUSTOMER',
+            sale_date: si.orders?.created_at
+              ? new Date(si.orders.created_at).toLocaleDateString('en-IN')
+              : '—',
+            variant_color: String(si.variant_color || 'STANDARD').toUpperCase(),
+            variant_size: String(si.variant_size || 'FREE SIZE').toUpperCase(),
+            quantity: Number(si.quantity || 0),
+            unit_price: Number(si.price || 0),
+            total_amount: Number(
+              si.total || (Number(si.quantity || 0) * Number(si.price || 0))
+            )
+          }))
+        );
       }
     } catch (err) {
       console.error('Failed to load history:', err);
@@ -688,6 +883,120 @@ export default function InventoryManager({ currentUser }: InventoryManagerProps)
                 </div>
               ) : (
                 <>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono uppercase">
+                      <span className="font-bold text-[#6d4aff] flex items-center gap-1.5">
+                        <Tag className="w-3.5 h-3.5 text-[#6d4aff]" />
+                        CURRENT VARIANT PRICING ({selectedProductForHistory.variants.length})
+                      </span>
+                    </div>
+
+                    <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs uppercase min-w-[680px]">
+                          <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
+                            <tr>
+                              <th className="py-1.5 px-2.5">VARIANT</th>
+                              <th className="py-1.5 px-2 text-center">STOCK</th>
+                              <th className="py-1.5 px-2 text-right">COST</th>
+                              <th className="py-1.5 px-2 text-right">STORE</th>
+                              <th className="py-1.5 px-2 text-right">ONLINE</th>
+                              <th className="py-1.5 px-2.5 text-right">MRP</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5 font-mono">
+                            {selectedProductForHistory.variants.map((v, idx) => (
+                              <tr key={`${v.color}__${v.size}__${idx}`} className="hover:bg-white/[0.02]">
+                                <td className="py-2 px-2.5 text-[#00d9ff]">
+                                  {v.color} / {v.size}
+                                </td>
+                                <td className="py-2 px-2 text-center font-bold text-[#00ff9d]">
+                                  {v.stock}
+                                  {v.reserved > 0 ? (
+                                    <span className="block text-[8px] text-[#ffa500]">
+                                      RESERVED {v.reserved}
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className="py-2 px-2 text-right text-[#8b9bb4]">
+                                  {v.cost_price > 0 ? `₹${v.cost_price.toLocaleString('en-IN')}` : '—'}
+                                </td>
+                                <td className="py-2 px-2 text-right font-bold text-white">
+                                  {v.store_price > 0 ? `₹${v.store_price.toLocaleString('en-IN')}` : '—'}
+                                </td>
+                                <td className="py-2 px-2 text-right text-[#00d9ff]">
+                                  {v.online_price > 0 ? `₹${v.online_price.toLocaleString('en-IN')}` : '—'}
+                                </td>
+                                <td className="py-2 px-2.5 text-right text-[#D4AF37]">
+                                  {v.mrp > 0 ? `₹${v.mrp.toLocaleString('en-IN')}` : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-mono uppercase">
+                      <span className="font-bold text-[#00ff9d] flex items-center gap-1.5">
+                        <History className="w-3.5 h-3.5 text-[#00ff9d]" />
+                        STOCK MOVEMENT HISTORY ({movementHistory.length})
+                      </span>
+                    </div>
+
+                    <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17]">
+                      {movementHistory.length === 0 ? (
+                        <div className="p-4 text-center text-[#8b9bb4] italic text-xs uppercase">
+                          NO MOVEMENT HISTORY RECORDED FOR THIS PRODUCT YET.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs uppercase min-w-[720px]">
+                            <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10">
+                              <tr>
+                                <th className="py-1.5 px-2.5">DATE / TIME</th>
+                                <th className="py-1.5 px-2.5">VARIANT</th>
+                                <th className="py-1.5 px-2 text-center">TYPE</th>
+                                <th className="py-1.5 px-2 text-center">QTY</th>
+                                <th className="py-1.5 px-2.5">REFERENCE</th>
+                                <th className="py-1.5 px-2.5">NOTES</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5 font-mono">
+                              {movementHistory.map((mh) => {
+                                const inwardTypes = ['PURCHASE_IN', 'RETURN_IN', 'ADJUSTMENT_IN', 'STOCK_IN'];
+                                const isInward = inwardTypes.includes(mh.movement_type);
+
+                                return (
+                                  <tr key={mh.id} className="hover:bg-white/[0.02]">
+                                    <td className="py-2 px-2.5 text-[#8b9bb4]">{mh.created_at}</td>
+                                    <td className="py-2 px-2.5 text-[#00d9ff] text-[10.5px]">
+                                      {mh.variant_color} / {mh.variant_size}
+                                    </td>
+                                    <td className={`py-2 px-2 text-center font-bold ${
+                                      isInward ? 'text-[#00ff9d]' : 'text-[#ff6b6b]'
+                                    }`}>
+                                      {mh.movement_type}
+                                    </td>
+                                    <td className={`py-2 px-2 text-center font-bold ${
+                                      isInward ? 'text-[#00ff9d]' : 'text-[#ff6b6b]'
+                                    }`}>
+                                      {isInward ? '+' : '-'}{Math.abs(mh.quantity)}
+                                    </td>
+                                    <td className="py-2 px-2.5 text-[#ffa500]">{mh.reference_id}</td>
+                                    <td className="py-2 px-2.5 text-[#8b9bb4]">{mh.notes || '—'}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs font-mono uppercase">
                       <span className="font-bold text-[#00d9ff] flex items-center gap-1.5">

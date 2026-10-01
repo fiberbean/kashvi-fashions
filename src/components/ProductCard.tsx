@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Heart, ShoppingBag } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
+import { supabase } from '../lib/supabase';
 
 interface ProductCardProps {
   id: string;
@@ -36,6 +37,85 @@ export default function ProductCard({
 
   const isFavorited = isInWishlist(id);
   const isJewellery = department === 'jewellery';
+  const [inventorySizes, setInventorySizes] = useState<string[]>([]);
+  const [inventoryColors, setInventoryColors] = useState<string[]>([]);
+  const [inventoryPrice, setInventoryPrice] = useState<number>(Number(price) || 0);
+  const [inventoryMrp, setInventoryMrp] = useState<number>(Number(originalPrice) || 0);
+  const [primaryInventoryVariant, setPrimaryInventoryVariant] = useState<{ size: string; color: string } | null>(null);
+
+  useEffect(() => {
+    let current = true;
+
+    const loadInventorySizes = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('inventory')
+          .select('variant_size, variant_color, stock_quantity, online_price, mrp, updated_at')
+          .eq('product_id', String(id));
+
+        if (error) {
+          console.warn('ProductCard inventory size fetch failed:', error);
+          return;
+        }
+
+        const allRows = (data || []) as any[];
+        const inStockRows = allRows.filter((item: any) => Number(item.stock_quantity) > 0);
+        const priceRows = [...allRows]
+          .filter((item: any) => Number(item.online_price) > 0)
+          .sort((a: any, b: any) => {
+            const stockDiff = Number(b.stock_quantity || 0) - Number(a.stock_quantity || 0);
+            if (stockDiff !== 0) return stockDiff;
+            return new Date(String(b.updated_at || 0)).getTime() - new Date(String(a.updated_at || 0)).getTime();
+          });
+        const primaryPriceRow = priceRows[0];
+
+        const sizesFromInventory = Array.from(
+          new Set(
+            inStockRows
+              .map((item: any) => String(item.variant_size || '').trim())
+              .filter(Boolean)
+          )
+        );
+
+        const colorsFromInventory = Array.from(
+          new Set(
+            inStockRows
+              .map((item: any) => String(item.variant_color || '').trim())
+              .filter(Boolean)
+          )
+        );
+
+        if (current) {
+          setInventorySizes(sizesFromInventory);
+          setInventoryColors(colorsFromInventory);
+
+          if (primaryPriceRow) {
+            setInventoryPrice(Number(primaryPriceRow.online_price) || 0);
+            setInventoryMrp(Number(primaryPriceRow.mrp) || 0);
+            setPrimaryInventoryVariant({
+              size: String(primaryPriceRow.variant_size || 'Free Size').trim() || 'Free Size',
+              color: String(primaryPriceRow.variant_color || 'Standard').trim() || 'Standard',
+            });
+          }
+        }
+      } catch (error) {
+        console.warn('ProductCard inventory size fetch failed:', error);
+      }
+    };
+
+    loadInventorySizes();
+
+    return () => {
+      current = false;
+    };
+  }, [id]);
+
+  // Inventory is the source of truth for customer-facing variants.
+  // Never fall back to the generic products.size / products.colour values.
+  const actualSizes = inventorySizes;
+  const actualColors = inventoryColors;
+  const displayPrice = inventoryPrice;
+  const displayMrp = inventoryMrp;
 
   const handleWishlistToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -46,11 +126,11 @@ export default function ProductCard({
       addToWishlist({
         id,
         name,
-        price,
-        originalPrice,
+        price: displayPrice,
+        originalPrice: displayMrp || undefined,
         image,
-        color: colors[0],
-        size: sizes[0],
+        color: actualColors[0],
+        size: actualSizes[0],
         fabric,
         department,
       });
@@ -65,15 +145,15 @@ export default function ProductCard({
     e.stopPropagation();
 
     addToCart({
-      id: `${id}-${sizes[0] || 'default'}-${colors[0] || 'default'}`,
+      id: `${id}-${primaryInventoryVariant?.size || actualSizes[0] || 'default'}-${primaryInventoryVariant?.color || actualColors[0] || 'default'}`,
       productId: id,
       name,
-      price,
-      mrp: originalPrice,
+      price: displayPrice,
+      mrp: displayMrp || undefined,
       image,
       qty: 1,
-      color: colors[0],
-      size: sizes[0],
+      color: primaryInventoryVariant?.color || actualColors[0],
+      size: primaryInventoryVariant?.size || actualSizes[0],
       fabric,
       department,
     });
@@ -82,8 +162,8 @@ export default function ProductCard({
   };
 
   const discountPercent =
-    originalPrice && originalPrice > price
-      ? Math.round(((originalPrice - price) / originalPrice) * 100)
+    displayMrp && displayMrp > displayPrice
+      ? Math.round(((displayMrp - displayPrice) / displayMrp) * 100)
       : null;
 
   return (
@@ -178,9 +258,9 @@ export default function ProductCard({
             ₹{price.toLocaleString('en-IN')}
           </span>
 
-          {originalPrice && originalPrice > price && (
+          {displayMrp && displayMrp > displayPrice && (
             <span className="text-[11px] text-neutral-400 line-through">
-              ₹{originalPrice.toLocaleString('en-IN')}
+              ₹{displayMrp.toLocaleString('en-IN')}
             </span>
           )}
         </div>

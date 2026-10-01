@@ -26,19 +26,13 @@ import ProductMasterModal from '../components/modals/ProductMasterModal';
 export interface ProductRecord {
   id: string;
   name: string;
-  category?: string | null;
-  sub_category?: string | null;
   category_id?: string | null;
   sub_category_id?: string | null;
   colour?: string | null;
   size?: string | null;
   unit?: string | null;
   brand?: string | null;
-  model_no?: string | null;
   barcode?: string | null;
-  selling_price?: number;
-  cost_price?: number;
-  gst?: number;
   weight?: number;
   weight_unit?: string;
   images?: any[] | null;
@@ -96,6 +90,8 @@ function getChipColor(name: string): string {
 
 export default function ProductMasterManager() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [subCategories, setSubCategories] = useState<{ id: string; name: string; category_id: string }[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -115,13 +111,28 @@ export default function ProductMasterManager() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [productsResult, categoriesResult, subCategoriesResult] = await Promise.all([
+        supabase
+          .from('products')
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('categories')
+          .select('id, name')
+          .order('name', { ascending: true }),
+        supabase
+          .from('sub_categories')
+          .select('id, name, category_id')
+          .order('name', { ascending: true }),
+      ]);
 
-      if (error) throw error;
-      setProducts(data || []);
+      if (productsResult.error) throw productsResult.error;
+      if (categoriesResult.error) throw categoriesResult.error;
+      if (subCategoriesResult.error) throw subCategoriesResult.error;
+
+      setProducts((productsResult.data || []) as ProductRecord[]);
+      setCategories(categoriesResult.data || []);
+      setSubCategories(subCategoriesResult.data || []);
     } catch (err: any) {
       console.error('Failed to load products:', err);
       setErrorMsg(err.message || 'Failed to load products.');
@@ -152,12 +163,16 @@ export default function ProductMasterManager() {
 
   // Distinct Categories list for filter
   const categoryOptions = useMemo(() => {
-    const cats = new Set<string>();
-    products.forEach((p) => {
-      if (p.category) cats.add(p.category);
-    });
-    return Array.from(cats);
-  }, [products]);
+    return categories.map((category) => category.name).filter(Boolean);
+  }, [categories]);
+
+  const categoryNameById = useMemo(() => {
+    return new Map(categories.map((category) => [category.id, category.name]));
+  }, [categories]);
+
+  const subCategoryNameById = useMemo(() => {
+    return new Map(subCategories.map((subCategory) => [subCategory.id, subCategory.name]));
+  }, [subCategories]);
 
   // Filter Logic
   const filteredProducts = useMemo(() => {
@@ -166,7 +181,7 @@ export default function ProductMasterManager() {
       if (brandFilter === 'fashions' && isJewel) return false;
       if (brandFilter === 'jewellery' && !isJewel) return false;
 
-      if (categoryFilter !== 'all' && (p.category || '').toLowerCase() !== categoryFilter.toLowerCase()) {
+      if (categoryFilter !== 'all' && (categoryNameById.get(p.category_id || '') || '').toLowerCase() !== categoryFilter.toLowerCase()) {
         return false;
       }
 
@@ -174,14 +189,14 @@ export default function ProductMasterManager() {
         const q = searchQuery.toLowerCase();
         const matchId = p.id.toLowerCase().includes(q);
         const matchName = (p.name || '').toLowerCase().includes(q);
-        const matchCat = (p.category || '').toLowerCase().includes(q);
-        const matchSub = (p.sub_category || '').toLowerCase().includes(q);
+        const matchCat = (categoryNameById.get(p.category_id || '') || '').toLowerCase().includes(q);
+        const matchSub = (subCategoryNameById.get(p.sub_category_id || '') || '').toLowerCase().includes(q);
         return matchId || matchName || matchCat || matchSub;
       }
 
       return true;
     });
-  }, [products, brandFilter, categoryFilter, searchQuery]);
+  }, [products, brandFilter, categoryFilter, searchQuery, categoryNameById, subCategoryNameById]);
 
   return (
     <div className="space-y-4 font-sans text-xs select-none">
@@ -378,10 +393,10 @@ export default function ProductMasterManager() {
                       {/* Category & Sub-Category */}
                       <td className="p-3.5">
                         <span className="font-semibold text-white block">
-                          {prod.category || 'General'}
+                          {categoryNameById.get(prod.category_id || '') || 'General'}
                         </span>
                         <span className="text-[9.5px] text-[#00d9ff] font-mono block mt-0.5">
-                          {prod.sub_category || '—'}
+                          {subCategoryNameById.get(prod.sub_category_id || '') || '—'}
                         </span>
                       </td>
 
@@ -592,7 +607,7 @@ export default function ProductMasterManager() {
                         Category
                       </span>
                       <span className="text-xs font-extrabold text-white">
-                        {viewingProduct.category || 'General'}
+                        {categoryNameById.get(viewingProduct.category_id || '') || 'General'}
                       </span>
                     </div>
                     <div>
@@ -600,7 +615,7 @@ export default function ProductMasterManager() {
                         Sub-Category
                       </span>
                       <span className="text-xs font-extrabold text-[#00d9ff]">
-                        {viewingProduct.sub_category || '—'}
+                        {subCategoryNameById.get(viewingProduct.sub_category_id || '') || '—'}
                       </span>
                     </div>
                     <div>

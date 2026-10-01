@@ -154,6 +154,40 @@ function calculateSmartPricing(baseUnitCost: number, transportPercentage: number
   };
 }
 
+async function recordStockMovement({
+  productId,
+  inventoryId,
+  variantColor,
+  variantSize,
+  quantity,
+  movementType,
+  referenceId,
+  notes
+}: {
+  productId: string;
+  inventoryId?: string | null;
+  variantColor: string;
+  variantSize: string;
+  quantity: number;
+  movementType: string;
+  referenceId?: string | null;
+  notes?: string | null;
+}) {
+  const { error } = await supabase.from('inventory_movements').insert([{
+    id: `im_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+    product_id: productId,
+    inventory_id: inventoryId || null,
+    variant_color: variantColor,
+    variant_size: variantSize,
+    quantity,
+    movement_type: movementType,
+    reference_id: referenceId || null,
+    notes: notes || null
+  }]);
+
+  if (error) throw error;
+}
+
 export default function PurchaseManager() {
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -170,6 +204,7 @@ export default function PurchaseManager() {
   const [isProductMasterOpen, setIsProductMasterOpen] = useState<boolean>(false);
   const [isColorMasterOpen, setIsColorMasterOpen] = useState<boolean>(false);
   const [isShadePickerModalOpen, setIsShadePickerModalOpen] = useState<boolean>(false);
+  const [isSizePickerModalOpen, setIsSizePickerModalOpen] = useState<boolean>(false);
   const [viewingPurchase, setViewingPurchase] = useState<PurchaseRecord | null>(null);
   const [viewingItems, setViewingItems] = useState<any[]>([]);
   const [loadingItems, setLoadingItems] = useState<boolean>(false);
@@ -220,7 +255,11 @@ export default function PurchaseManager() {
   const [unitCost, setUnitCost] = useState<number | string>(0);
   const [selectedBaseFilter, setSelectedBaseFilter] = useState<string>('green');
   const [activeMatrixColors, setActiveMatrixColors] = useState<string[]>([]);
+  const [selectedMatrixSizes, setSelectedMatrixSizes] = useState<string[]>([]);
   const [matrixQtyMap, setMatrixQtyMap] = useState<{ [color_size_key: string]: number }>({});
+  const [matrixCostMap, setMatrixCostMap] = useState<{ [color_size_key: string]: number }>({});
+  const [matrixCostManualMap, setMatrixCostManualMap] = useState<{ [color_size_key: string]: boolean }>({});
+  const [excludedMatrixVariants, setExcludedMatrixVariants] = useState<Record<string, boolean>>({});
   const [stagedItems, setStagedItems] = useState<StagedMatrixItem[]>([]);
 
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -265,15 +304,23 @@ export default function PurchaseManager() {
     try {
       const [purchRes, suppRes, prodRes, sizeRes, subCatRes, colourRes] = await Promise.all([
         supabase.from('purchases').select('*').order('created_at', { ascending: false }),
-        supabase.from('suppliers').select('id, name, shop_name, city, phone').order('name', { ascending: true }),
-        supabase.from('products').select('*'),
+        supabase.from('suppliers').select('id, name, shop_name, city, phone').order('id', { ascending: true }),
+        supabase.from('products').select('id, name, category_id, sub_category_id, colour, size, unit, brand, sub_brand, barcode, weight, weight_unit, images, active, created_at, variants, description, fabric'),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
         supabase.from('sub_categories').select('*'),
         supabase.from('colours').select('*').order('name', { ascending: true })
       ]);
 
       if (purchRes.data) setPurchases(purchRes.data);
-      if (suppRes.data) setSuppliers(suppRes.data);
+      if (suppRes.data) {
+        const sortedSuppliers = [...suppRes.data].sort((a, b) => {
+          const aMatch = String(a.id || '').match(/\d+/);
+          const bMatch = String(b.id || '').match(/\d+/);
+          if (aMatch && bMatch) return Number(aMatch[0]) - Number(bMatch[0]);
+          return String(a.id || '').localeCompare(String(b.id || ''), undefined, { numeric: true, sensitivity: 'base' });
+        });
+        setSuppliers(sortedSuppliers);
+      }
 
       if (prodRes.data) {
         const sorted = [...prodRes.data].sort((a, b) =>
@@ -346,7 +393,11 @@ export default function PurchaseManager() {
     setSelectedProductId('');
     setProductSearchTerm('');
     setActiveMatrixColors([]);
+    setSelectedMatrixSizes([]);
     setMatrixQtyMap({});
+    setMatrixCostMap({});
+    setMatrixCostManualMap({});
+    setExcludedMatrixVariants({});
     setUnitCost(0);
     setIsModalOpen(true);
   };
@@ -366,7 +417,10 @@ export default function PurchaseManager() {
     setSelectedProductId('');
     setProductSearchTerm('');
     setActiveMatrixColors([]);
+    setSelectedMatrixSizes([]);
     setMatrixQtyMap({});
+    setMatrixCostMap({});
+    setMatrixCostManualMap({});
 
     try {
       const { data } = await supabase
@@ -433,7 +487,7 @@ export default function PurchaseManager() {
         for (const item of lineItems) {
           const { data: inv } = await supabase
             .from('inventory')
-            .select('id, stock_quantity')
+            .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
             .eq('product_id', item.product_id)
             .eq('variant_color', item.variant_color)
             .eq('variant_size', item.variant_size)
@@ -443,8 +497,19 @@ export default function PurchaseManager() {
             const rollbackQty = Math.max(0, inv.stock_quantity - (item.quantity || 0));
             await supabase
               .from('inventory')
-              .update({ stock_quantity: rollbackQty })
+              .update({ stock_quantity: rollbackQty, updated_at: new Date().toISOString() })
               .eq('id', inv.id);
+
+            await recordStockMovement({
+              productId: item.product_id,
+              inventoryId: inv.id,
+              variantColor: item.variant_color,
+              variantSize: item.variant_size,
+              quantity: -(Number(item.quantity) || 0),
+              movementType: 'PURCHASE_ROLLBACK',
+              referenceId: p.id,
+              notes: `Purchase deletion rollback ${p.id}`
+            });
           }
         }
       }
@@ -489,18 +554,46 @@ export default function PurchaseManager() {
 
       const { data: inv } = await supabase
         .from('inventory')
-        .select('id, stock_quantity')
+        .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
         .eq('product_id', editingItemModal.product_id)
         .eq('variant_color', editingItemModal.variant_color)
         .eq('variant_size', editingItemModal.variant_size)
         .maybeSingle();
 
       if (inv) {
+        const revisedPricing = calculateSmartPricing(newCost, currentTransportPercent);
         const updatedStock = Math.max(0, (Number(inv.stock_quantity) || 0) + qtyDifference);
-        await supabase
+        const { data: verifiedInv, error: invUpdateErr } = await supabase
           .from('inventory')
-          .update({ stock_quantity: updatedStock, updated_at: new Date().toISOString() })
-          .eq('id', inv.id);
+          .update({
+            stock_quantity: updatedStock,
+            cost_price: newCost,
+            store_price: revisedPricing.storePrice,
+            online_price: revisedPricing.onlinePrice,
+            mrp: revisedPricing.mrpPrice,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', inv.id)
+          .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
+          .maybeSingle();
+
+        if (invUpdateErr) throw invUpdateErr;
+        if (!verifiedInv) {
+          throw new Error(`Inventory price update failed for ${editingItemModal.product_id} / ${editingItemModal.variant_color} / ${editingItemModal.variant_size}`);
+        }
+
+        if (qtyDifference !== 0) {
+          await recordStockMovement({
+            productId: editingItemModal.product_id,
+            inventoryId: inv.id,
+            variantColor: editingItemModal.variant_color,
+            variantSize: editingItemModal.variant_size,
+            quantity: qtyDifference,
+            movementType: 'PURCHASE_ADJUSTMENT',
+            referenceId: editingPurchase.id,
+            notes: `Purchase line quantity adjustment ${editingPurchase.id}`
+          });
+        }
       }
 
       const updatedExisting = existingItems.map((it) =>
@@ -560,7 +653,7 @@ export default function PurchaseManager() {
 
       const { data: inv } = await supabase
         .from('inventory')
-        .select('id, stock_quantity')
+        .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
         .eq('product_id', item.product_id)
         .eq('variant_color', item.variant_color)
         .eq('variant_size', item.variant_size)
@@ -570,8 +663,19 @@ export default function PurchaseManager() {
         const newQty = Math.max(0, inv.stock_quantity - (item.quantity || 0));
         await supabase
           .from('inventory')
-          .update({ stock_quantity: newQty })
+          .update({ stock_quantity: newQty, updated_at: new Date().toISOString() })
           .eq('id', inv.id);
+
+        await recordStockMovement({
+          productId: item.product_id,
+          inventoryId: inv.id,
+          variantColor: item.variant_color,
+          variantSize: item.variant_size,
+          quantity: -(Number(item.quantity) || 0),
+          movementType: 'PURCHASE_ROLLBACK',
+          referenceId: editingPurchase.id,
+          notes: `Purchase line deleted ${editingPurchase.id}`
+        });
       }
 
       const updatedExisting = existingItems.filter((it) => it.id !== item.id);
@@ -610,7 +714,7 @@ export default function PurchaseManager() {
       (p) =>
         String(p.id).toLowerCase().includes(term) ||
         String(p.name).toLowerCase().includes(term) ||
-        String(p.sub_category || '').toLowerCase().includes(term)
+        String(subCategories.find((sc) => String(sc.id) === String(p.sub_category_id))?.name || '').toLowerCase().includes(term)
     );
   }, [productsList, productSearchTerm]);
 
@@ -628,7 +732,7 @@ export default function PurchaseManager() {
 
     const subCatId = activeProduct.sub_category_id;
     const subCatObj = subCategories.find(
-      (sc) => sc.id === subCatId || sc.name === activeProduct.sub_category
+      (sc) => String(sc.id) === String(subCatId)
     );
 
     if (subCatObj) {
@@ -654,15 +758,97 @@ export default function PurchaseManager() {
     return ['Free Size'];
   }, [activeProduct, subCategories, allSizes]);
 
+  useEffect(() => {
+    if (!activeProduct) return;
+    if (productSizes.length === 1 && String(productSizes[0]).toLowerCase() === 'free size') {
+      setSelectedMatrixSizes([productSizes[0]]);
+    }
+  }, [activeProduct, productSizes]);
+
   const handleSelectProduct = (prod: any) => {
     setSelectedProductId(prod.id);
     setProductSearchTerm(`[${prod.id}] ${prod.name}`);
     setIsProductDropdownOpen(false);
 
-    setUnitCost(prod.cost_price || 0);
+    setUnitCost(0);
+    setSelectedMatrixSizes([]);
     setMatrixQtyMap({});
+    setMatrixCostMap({});
+    setMatrixCostManualMap({});
+    setExcludedMatrixVariants({});
     setActiveMatrixColors([]);
     setIsShadePickerModalOpen(true);
+    setIsSizePickerModalOpen(false);
+  };
+
+  const handleBaseUnitCostChange = (value: string) => {
+    const nextCost = value === '' ? '' : Number(value) || 0;
+    setUnitCost(nextCost);
+
+    const numericCost = Number(nextCost) || 0;
+    setMatrixCostMap((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((key) => {
+        if (!matrixCostManualMap[key]) {
+          next[key] = numericCost;
+        }
+      });
+      return next;
+    });
+  };
+
+  const handleToggleSizeSelection = (sizeName: string) => {
+    const isSelected = selectedMatrixSizes.includes(sizeName);
+
+    if (isSelected) {
+      setSelectedMatrixSizes((prev) => prev.filter((size) => size !== sizeName));
+      setMatrixQtyMap((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          if (key.endsWith(`:::${sizeName}`)) delete next[key];
+        });
+        return next;
+      });
+      setMatrixCostMap((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          if (key.endsWith(`:::${sizeName}`)) delete next[key];
+        });
+        return next;
+      });
+      setMatrixCostManualMap((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          if (key.endsWith(`:::${sizeName}`)) delete next[key];
+        });
+        return next;
+      });
+      return;
+    }
+
+    setSelectedMatrixSizes((prev) => [...prev, sizeName]);
+    setExcludedMatrixVariants((prev) => {
+      const next = { ...prev };
+      activeMatrixColors.forEach((color) => delete next[`${color}:::${sizeName}`]);
+      return next;
+    });
+    const defaultCost = Number(unitCost) || 0;
+    setMatrixCostMap((prev) => {
+      const next = { ...prev };
+      activeMatrixColors.forEach((color) => {
+        const key = `${color}:::${sizeName}`;
+        if (next[key] === undefined) next[key] = defaultCost;
+      });
+      return next;
+    });
+    setMatrixCostManualMap((prev) => {
+      const next = { ...prev };
+      activeMatrixColors.forEach((color) => {
+        const key = `${color}:::${sizeName}`;
+        if (next[key] === undefined) next[key] = false;
+      });
+      return next;
+    });
   };
 
   const handleToggleShadeSelection = (shadeName: string) => {
@@ -675,18 +861,95 @@ export default function PurchaseManager() {
         });
         return next;
       });
+      setMatrixCostMap((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((k) => {
+          if (k.startsWith(`${shadeName}:::`)) delete next[k];
+        });
+        return next;
+      });
+      setMatrixCostManualMap((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((k) => {
+          if (k.startsWith(`${shadeName}:::`)) delete next[k];
+        });
+        return next;
+      });
     } else {
       setActiveMatrixColors((prev) => [...prev, shadeName]);
+      setExcludedMatrixVariants((prev) => {
+        const next = { ...prev };
+        selectedMatrixSizes.forEach((size) => delete next[`${shadeName}:::${size}`]);
+        return next;
+      });
+      const defaultCost = Number(unitCost) || 0;
+      setMatrixCostMap((prev) => {
+        const next = { ...prev };
+        selectedMatrixSizes.forEach((size) => {
+          const key = `${shadeName}:::${size}`;
+          if (next[key] === undefined) next[key] = defaultCost;
+        });
+        return next;
+      });
+      setMatrixCostManualMap((prev) => {
+        const next = { ...prev };
+        selectedMatrixSizes.forEach((size) => {
+          const key = `${shadeName}:::${size}`;
+          if (next[key] === undefined) next[key] = false;
+        });
+        return next;
+      });
     }
   };
 
   const handleRemoveColorFromMatrix = (colorToRemove: string) => {
     setActiveMatrixColors((prev) => prev.filter((c) => c !== colorToRemove));
+    setExcludedMatrixVariants((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith(`${colorToRemove}:::`)) delete next[k];
+      });
+      return next;
+    });
     setMatrixQtyMap((prev) => {
       const next = { ...prev };
       Object.keys(next).forEach((k) => {
         if (k.startsWith(`${colorToRemove}:::`)) delete next[k];
       });
+      return next;
+    });
+    setMatrixCostMap((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith(`${colorToRemove}:::`)) delete next[k];
+      });
+      return next;
+    });
+    setMatrixCostManualMap((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith(`${colorToRemove}:::`)) delete next[k];
+      });
+      return next;
+    });
+  };
+
+  const handleRemoveVariantFromMatrix = (color: string, size: string) => {
+    const key = `${color}:::${size}`;
+    setExcludedMatrixVariants((prev) => ({ ...prev, [key]: true }));
+    setMatrixQtyMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setMatrixCostMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setMatrixCostManualMap((prev) => {
+      const next = { ...prev };
+      delete next[key];
       return next;
     });
   };
@@ -697,6 +960,19 @@ export default function PurchaseManager() {
     setMatrixQtyMap((prev) => ({
       ...prev,
       [key]: isNaN(count) || count < 0 ? 0 : count
+    }));
+  };
+
+  const handleMatrixCostChange = (color: string, size: string, value: string) => {
+    const cost = value === '' ? 0 : Math.max(0, Number(value) || 0);
+    const key = `${color}:::${size}`;
+    setMatrixCostMap((prev) => ({
+      ...prev,
+      [key]: cost
+    }));
+    setMatrixCostManualMap((prev) => ({
+      ...prev,
+      [key]: true
     }));
   };
 
@@ -746,26 +1022,35 @@ export default function PurchaseManager() {
       alert('Product select cheyandi.');
       return;
     }
-    const cost = Number(unitCost) || 0;
-    if (cost <= 0) {
-      alert('Cost Price (CP Rate) enter cheyandi.');
-      return;
-    }
 
     if (activeMatrixColors.length === 0) {
       alert('Kanisam oka shade card select cheyandi.');
       return;
     }
 
-    const pricing = calculateSmartPricing(cost, currentTransportPercent);
-    const pCode = activeProduct.code || activeProduct.id;
+    if (selectedMatrixSizes.length === 0) {
+      alert('Ee purchase ki kavalsina size(s) select cheyandi.');
+      return;
+    }
 
+    const pCode = activeProduct.code || activeProduct.id;
     const newAdditions: StagedMatrixItem[] = [];
+    let missingCostVariant = '';
+
     activeMatrixColors.forEach((clr) => {
-      productSizes.forEach((sz) => {
+      selectedMatrixSizes.forEach((sz) => {
         const key = `${clr}:::${sz}`;
-        const count = matrixQtyMap[key] || 0;
+        if (excludedMatrixVariants[key]) return;
+        const count = Number(matrixQtyMap[key]) || 0;
         if (count > 0) {
+          const cost = Number(matrixCostMap[key]) || 0;
+          if (cost <= 0 && !missingCostVariant) {
+            missingCostVariant = `${clr} / ${sz}`;
+            return;
+          }
+
+          const pricing = calculateSmartPricing(cost, currentTransportPercent);
+
           newAdditions.push({
             product_id: activeProduct.id,
             product_code: pCode,
@@ -785,6 +1070,11 @@ export default function PurchaseManager() {
       });
     });
 
+    if (missingCostVariant) {
+      alert(`${missingCostVariant} ki Cost Price enter cheyandi.`);
+      return;
+    }
+
     if (newAdditions.length === 0) {
       alert('Matrix lo quantity numbers enter cheyandi.');
       return;
@@ -794,7 +1084,11 @@ export default function PurchaseManager() {
     setSelectedProductId('');
     setProductSearchTerm('');
     setActiveMatrixColors([]);
+    setSelectedMatrixSizes([]);
     setMatrixQtyMap({});
+    setMatrixCostMap({});
+    setMatrixCostManualMap({});
+    setExcludedMatrixVariants({});
     setUnitCost(0);
   };
 
@@ -869,24 +1163,66 @@ export default function PurchaseManager() {
         }
         if (updateErr) throw updateErr;
 
-        // Auto-update existing items pricing when transport changes
-        if (existingItems.length > 0) {
-          for (const it of existingItems) {
-            const revisedPricing = calculateSmartPricing(it.unit_cost, currentTransportPercent);
+        // IMPORTANT: Recalculate pricing for ALL already-saved purchase variants
+        // from fresh DB data. Do not depend on stale React state or the old
+        // purchase total. This makes Edit -> Save reliably update Inventory.
+        const { data: freshExistingItems, error: freshExistingItemsErr } = await supabase
+          .from('purchase_items')
+          .select('id, product_id, variant_color, variant_size, quantity, unit_cost, total_cost')
+          .eq('purchase_id', editingPurchase.id);
 
-            await supabase
-              .from('products')
-              .update({
-                offline_price: revisedPricing.storePrice,
-                online_price: revisedPricing.onlinePrice,
-                selling_price: revisedPricing.storePrice
-              })
-              .eq('id', it.product_id);
+        if (freshExistingItemsErr) throw freshExistingItemsErr;
 
-            await supabase
-              .from('purchase_items')
-              .update({ selling_price: revisedPricing.storePrice })
-              .eq('id', it.id);
+        const freshItems = freshExistingItems || [];
+        const freshExistingBaseTotal = freshItems.reduce(
+          (sum: number, item: any) =>
+            sum + (Number(item.total_cost) || ((Number(item.quantity) || 0) * (Number(item.unit_cost) || 0))),
+          0
+        );
+
+        const fullBillBaseTotal = freshExistingBaseTotal + stagedNewlyAddedBaseTotal;
+        const currentTransportAmountForPricing = Number(actualTransportAmount || 0);
+        const effectiveTransportPercentForPricing =
+          fullBillBaseTotal > 0
+            ? (currentTransportAmountForPricing / fullBillBaseTotal) * 100
+            : 0;
+
+        for (const it of freshItems) {
+          const itemCost = Number(it.unit_cost) || 0;
+          const revisedPricing = calculateSmartPricing(itemCost, effectiveTransportPercentForPricing);
+
+          const { data: existingInv, error: existingInvErr } = await supabase
+            .from('inventory')
+            .select('id')
+            .eq('product_id', it.product_id)
+            .eq('variant_color', it.variant_color)
+            .eq('variant_size', it.variant_size)
+            .maybeSingle();
+
+          if (existingInvErr) throw existingInvErr;
+
+          if (!existingInv) {
+            throw new Error(
+              `Inventory variant not found: ${it.product_id} / ${it.variant_color} / ${it.variant_size}`
+            );
+          }
+
+          const { data: verifiedInv, error: priceErr } = await supabase
+            .from('inventory')
+            .update({
+              cost_price: itemCost,
+              store_price: revisedPricing.storePrice,
+              online_price: revisedPricing.onlinePrice,
+              mrp: revisedPricing.mrpPrice,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingInv.id)
+            .select('id, cost_price, store_price, online_price, mrp')
+            .maybeSingle();
+
+          if (priceErr) throw priceErr;
+          if (!verifiedInv) {
+            throw new Error(`Inventory price update failed for ${it.product_id} / ${it.variant_color} / ${it.variant_size}`);
           }
         }
 
@@ -899,7 +1235,6 @@ export default function PurchaseManager() {
             variant_size: it.size,
             quantity: it.quantity,
             unit_cost: it.unit_cost,
-            selling_price: it.store_price,
             total_cost: it.total_cost
           }));
 
@@ -909,7 +1244,7 @@ export default function PurchaseManager() {
           for (const it of computedStagedItems) {
             const { data: existInv } = await supabase
               .from('inventory')
-              .select('id, stock_quantity')
+              .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
               .eq('product_id', it.product_id)
               .eq('variant_color', it.color)
               .eq('variant_size', it.size)
@@ -920,6 +1255,10 @@ export default function PurchaseManager() {
                 .from('inventory')
                 .update({
                   stock_quantity: existInv.stock_quantity + it.quantity,
+                  cost_price: it.unit_cost,
+                  store_price: it.store_price,
+                  online_price: it.online_price,
+                  mrp: it.mrp_price,
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', existInv.id);
@@ -931,19 +1270,34 @@ export default function PurchaseManager() {
                   variant_color: it.color,
                   variant_size: it.size,
                   stock_quantity: it.quantity,
-                  low_stock_threshold: 3
+                  reserved_quantity: 0,
+                  cost_price: it.unit_cost,
+                  store_price: it.store_price,
+                  online_price: it.online_price,
+                  mrp: it.mrp_price,
+                  updated_at: new Date().toISOString()
                 }
               ]);
             }
 
-            await supabase
-              .from('products')
-              .update({
-                offline_price: it.store_price,
-                online_price: it.online_price,
-                selling_price: it.store_price
-              })
-              .eq('id', it.product_id);
+            const { data: movementInv, error: movementInvErr } = await supabase
+              .from('inventory')
+              .select('id')
+              .eq('product_id', it.product_id)
+              .eq('variant_color', it.color)
+              .eq('variant_size', it.size)
+              .maybeSingle();
+            if (movementInvErr) throw movementInvErr;
+            await recordStockMovement({
+              productId: it.product_id,
+              inventoryId: movementInv?.id || null,
+              variantColor: it.color,
+              variantSize: it.size,
+              quantity: it.quantity,
+              movementType: 'PURCHASE_IN',
+              referenceId: editingPurchase.id,
+              notes: `Purchase inward ${editingPurchase.id}`
+            });
           }
 
           const checklistData: TaggingChecklistItem[] = computedStagedItems.map((it, idx) => ({
@@ -1014,7 +1368,6 @@ export default function PurchaseManager() {
         variant_size: it.size,
         quantity: it.quantity,
         unit_cost: it.unit_cost,
-        selling_price: it.store_price,
         total_cost: it.total_cost
       }));
 
@@ -1031,7 +1384,7 @@ export default function PurchaseManager() {
 
         const { data: existInv } = await supabase
           .from('inventory')
-          .select('id, stock_quantity')
+          .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
           .eq('product_id', it.product_id)
           .eq('variant_color', it.color)
           .eq('variant_size', it.size)
@@ -1042,6 +1395,10 @@ export default function PurchaseManager() {
             .from('inventory')
             .update({
               stock_quantity: existInv.stock_quantity + it.quantity,
+              cost_price: it.unit_cost,
+              store_price: it.store_price,
+              online_price: it.online_price,
+              mrp: it.mrp_price,
               updated_at: new Date().toISOString()
             })
             .eq('id', existInv.id);
@@ -1053,19 +1410,34 @@ export default function PurchaseManager() {
               variant_color: it.color,
               variant_size: it.size,
               stock_quantity: it.quantity,
-              low_stock_threshold: 3
+              reserved_quantity: 0,
+              cost_price: it.unit_cost,
+              store_price: it.store_price,
+              online_price: it.online_price,
+              mrp: it.mrp_price,
+              updated_at: new Date().toISOString()
             }
           ]);
         }
 
-        await supabase
-          .from('products')
-          .update({
-            offline_price: it.store_price,
-            online_price: it.online_price,
-            selling_price: it.store_price
-          })
-          .eq('id', it.product_id);
+        const { data: movementInv, error: movementInvErr } = await supabase
+          .from('inventory')
+          .select('id')
+          .eq('product_id', it.product_id)
+          .eq('variant_color', it.color)
+          .eq('variant_size', it.size)
+          .maybeSingle();
+        if (movementInvErr) throw movementInvErr;
+        await recordStockMovement({
+          productId: it.product_id,
+          inventoryId: movementInv?.id || null,
+          variantColor: it.color,
+          variantSize: it.size,
+          quantity: it.quantity,
+          movementType: 'PURCHASE_IN',
+          referenceId: purchaseNo.trim(),
+          notes: `Purchase inward ${purchaseNo.trim()}`
+        });
       }
 
       for (const [prodId, newColors] of productInwardColorsMap.entries()) {
@@ -1587,7 +1959,7 @@ export default function PurchaseManager() {
                                         </span>
                                       </div>
                                       <span className="text-[9.5px] font-mono text-[#8b9bb4] shrink-0 ml-2">
-                                        {p.sub_category || 'General'}
+                                        {subCategories.find((sc) => String(sc.id) === String(p.sub_category_id))?.name || 'General'}
                                       </span>
                                     </div>
                                   ))
@@ -1604,7 +1976,7 @@ export default function PurchaseManager() {
                             step="any"
                             placeholder="Base CP (₹) *"
                             value={unitCost}
-                            onChange={(e) => setUnitCost(e.target.value)}
+                            onChange={(e) => handleBaseUnitCostChange(e.target.value)}
                             className="w-full px-3 py-2 rounded-xl bg-[#101628] border border-white/20 text-[#00ff9d] font-bold outline-none text-xs focus:border-[#00ff9d]"
                           />
                         </div>
@@ -1641,113 +2013,154 @@ export default function PurchaseManager() {
 
                       {activeProduct ? (
                         <div className="space-y-3 pt-2 border-t border-white/5">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <span className="text-xs font-mono font-bold text-white uppercase block">
-                                2. Pick Color Shades for [{activeProduct.id}]
-                              </span>
-                              <span className="text-[10.5px] text-[#8b9bb4]">
-                                Sub-Category: <strong className="text-white">{activeProduct.sub_category || 'General'}</strong>
-                              </span>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => setIsShadePickerModalOpen(true)}
-                              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-xs flex items-center gap-2 cursor-pointer shadow-md shadow-[#6d4aff]/30 active:scale-95"
-                            >
-                              <Palette className="w-4 h-4" />
-                              <span>Select Shades in Popup ({activeMatrixColors.length} Selected)</span>
-                            </button>
-                          </div>
-
-                          {activeMatrixColors.length > 0 ? (
-                            <div className="space-y-2 pt-1 border-t border-white/5">
-                              <span className="text-[10px] font-mono font-bold text-[#00ff9d] uppercase block">
-                                3. Enter Inward Quantities in Matrix
-                              </span>
-
-                              <div className="border border-white/10 rounded-xl overflow-x-auto bg-[#101628] max-h-56">
-                                <table className="w-full text-center border-collapse">
-                                  <thead>
-                                    <tr className="bg-[#0a0e17] text-[#8b9bb4] font-mono text-[9px] uppercase border-b border-white/10 sticky top-0 z-10">
-                                      <th className="py-2 px-2.5 text-left min-w-[110px]">Colour \ Size</th>
-                                      {productSizes.map((sz) => (
-                                        <th key={sz} className="py-2 px-2 text-center text-[#00d9ff] min-w-[55px]">
-                                          {sz}
-                                        </th>
-                                      ))}
-                                      <th className="py-2 px-2 text-center min-w-[40px] text-[#ff6b6b]">Action</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-white/5">
-                                    {activeMatrixColors.map((clr) => {
-                                      const shadeObj = masterColours.find((c) => c.name === clr);
-                                      return (
-                                        <tr key={clr} className="hover:bg-white/[0.02]">
-                                          <td className="py-1.5 px-2.5 text-left font-bold text-white text-xs whitespace-nowrap">
-                                            <span className="inline-flex items-center gap-1.5">
-                                              <span
-                                                className="w-3 h-3 rounded-full border border-white/30 shrink-0 shadow"
-                                                style={{ backgroundColor: shadeObj?.hex_code || '#6d4aff' }}
-                                              />
-                                              <span>{clr}</span>
-                                            </span>
-                                          </td>
-                                          {productSizes.map((sz) => {
-                                            const key = `${clr}:::${sz}`;
-                                            return (
-                                              <td key={sz} className="py-1.5 px-1 text-center">
-                                                <input
-                                                  type="number"
-                                                  min="0"
-                                                  placeholder="0"
-                                                  value={matrixQtyMap[key] || ''}
-                                                  onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)}
-                                                  className="w-13 py-1 px-1 text-center font-mono font-bold bg-[#0a0e17] text-[#00ff9d] border border-white/15 rounded-lg outline-none text-xs focus:border-[#00ff9d]"
-                                                />
-                                              </td>
-                                            );
-                                          })}
-                                          <td className="py-1.5 px-2 text-center">
-                                            <button
-                                              type="button"
-                                              onClick={() => handleRemoveColorFromMatrix(clr)}
-                                              className="p-1.5 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b] cursor-pointer transition-colors"
-                                              title={`Remove ${clr} from matrix`}
-                                            >
-                                              <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-
-                              <div className="flex items-center justify-between pt-1">
-                                <span className="font-mono text-[11px] text-[#00ff9d] font-bold">
-                                  Units in Matrix: {currentConfiguredTotalQty}
+                          <div className="rounded-xl bg-[#101628] border border-white/10 overflow-hidden">
+                            <div className="px-3 py-2.5 border-b border-white/10">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <span className="text-xs font-mono font-bold text-white uppercase block">
+                                    2. Configure Colours, Sizes & Pricing
+                                  </span>
+                                  <span className="text-[9px] text-[#8b9bb4] font-mono">
+                                    Select only the colours and sizes required for this purchase.
+                                  </span>
+                                </div>
+                                <span className="text-[9px] text-[#8b9bb4] font-mono text-right shrink-0">
+                                  Cost change → prices auto recalculate
                                 </span>
+                              </div>
 
-                                <button
-                                  type="button"
-                                  disabled={currentConfiguredTotalQty === 0}
-                                  onClick={handleAddMatrixToStaged}
-                                  className="px-5 py-2 bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] hover:opacity-95 text-neutral-950 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow active:scale-95"
-                                >
-                                  <span>Add to Matrix Queue</span>
-                                  <ArrowRight className="w-3.5 h-3.5" />
-                                </button>
+                              <div className="grid grid-cols-2 gap-2 mt-2.5">
+                                <div className="rounded-xl bg-[#0b101d] border border-white/10 p-2 flex items-center justify-between gap-2 min-w-0">
+                                  <div className="min-w-0">
+                                    <span className="text-[9px] font-mono font-bold text-[#ffa500] uppercase block">Colour Shades</span>
+                                    <span className="text-[8px] text-[#8b9bb4] font-mono block truncate">
+                                      {activeMatrixColors.length > 0
+                                        ? `${activeMatrixColors.length} selected`
+                                        : 'Choose colours'}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsShadePickerModalOpen(true)}
+                                    className="shrink-0 px-2.5 py-2 rounded-xl bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-[9px] flex items-center gap-1 cursor-pointer shadow-md shadow-[#6d4aff]/30 active:scale-95"
+                                  >
+                                    <Palette className="w-3.5 h-3.5" />
+                                    <span>Colours ({activeMatrixColors.length})</span>
+                                  </button>
+                                </div>
+
+                                <div className="rounded-xl bg-[#0b101d] border border-white/10 p-2 flex items-center justify-between gap-2 min-w-0">
+                                  <div className="min-w-0">
+                                    <span className="text-[9px] font-mono font-bold text-[#00d9ff] uppercase block">Sizes</span>
+                                    <span className="text-[8px] text-[#8b9bb4] font-mono block truncate">
+                                      {selectedMatrixSizes.length > 0
+                                        ? `${selectedMatrixSizes.length} selected`
+                                        : 'Choose sizes'}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsSizePickerModalOpen(true)}
+                                    disabled={activeMatrixColors.length === 0}
+                                    className="shrink-0 px-2.5 py-2 rounded-xl bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-[9px] flex items-center gap-1 cursor-pointer shadow-md shadow-[#6d4aff]/30 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  >
+                                    <Layers className="w-3.5 h-3.5" />
+                                    <span>Sizes ({selectedMatrixSizes.length})</span>
+                                  </button>
+                                </div>
                               </div>
                             </div>
-                          ) : (
-                            <div className="p-4 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
-                              Click &quot;Select Shades in Popup&quot; above to pick dress colour shades and open the size matrix.
-                            </div>
-                          )}
 
+                            {activeMatrixColors.length > 0 ? (
+                              <div className="p-2.5 space-y-2.5">
+                                {selectedMatrixSizes.length > 0 ? (
+                                  <div className="border border-white/10 rounded-xl overflow-hidden bg-[#0a0e17] max-h-72 custom-scrollbar">
+                                    <table className="w-full table-fixed text-left border-collapse">
+                                      <colgroup>
+                                        <col />
+                                        <col style={{ width: '52px' }} />
+                                        <col style={{ width: '68px' }} />
+                                        <col style={{ width: '56px' }} />
+                                        <col style={{ width: '62px' }} />
+                                        <col style={{ width: '56px' }} />
+                                        <col style={{ width: '34px' }} />
+                                      </colgroup>
+                                      <thead className="bg-[#101628] text-[#8b9bb4] font-mono text-[8px] uppercase sticky top-0 z-10">
+                                        <tr>
+                                          <th className="py-2 px-2">Variant</th>
+                                          <th className="py-2 px-1 text-center text-[#00ff9d]">QTY</th>
+                                          <th className="py-2 px-1 text-center text-[#00ff9d]">COST</th>
+                                          <th className="py-2 px-1 text-center text-[#ffa500]">STORE</th>
+                                          <th className="py-2 px-1 text-center text-[#00d9ff]">ONLINE</th>
+                                          <th className="py-2 px-1 text-center text-[#e056fd]">MRP</th>
+                                          <th className="py-2 px-1"></th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-white/5">
+                                        {activeMatrixColors.flatMap((clr) => selectedMatrixSizes.map((sz) => {
+                                          const key = `${clr}:::${sz}`;
+                                          if (excludedMatrixVariants[key]) return null;
+                                          const variantCost = Number(matrixCostMap[key]) || 0;
+                                          const variantPricing = calculateSmartPricing(variantCost, currentTransportPercent);
+                                          const shadeObj = masterColours.find((c) => c.name === clr);
+                                          return (
+                                            <tr key={key} className="hover:bg-white/[0.02]">
+                                              <td className="py-1.5 px-2 whitespace-nowrap overflow-hidden">
+                                                <span className="inline-flex items-center gap-1.5 max-w-full">
+                                                  <span className="w-2.5 h-2.5 rounded-full border border-white/30 shrink-0 shadow" style={{ backgroundColor: shadeObj?.hex_code || '#6d4aff' }} />
+                                                  <span className="text-white font-bold text-[10px] truncate">{clr}</span>
+                                                  <span className="text-[#8b9bb4] shrink-0">/</span>
+                                                  <span className="text-[#00d9ff] font-bold text-[10px] shrink-0">{sz}</span>
+                                                </span>
+                                              </td>
+                                              <td className="py-1.5 px-1 text-center">
+                                                <input type="number" min="0" placeholder="0" value={matrixQtyMap[key] || ''} onChange={(e) => handleMatrixQtyChange(clr, sz, e.target.value)} className="w-11 py-1 px-0.5 text-center font-mono font-bold bg-[#101628] text-[#00ff9d] border border-[#00ff9d]/25 rounded-lg outline-none text-[10px] focus:border-[#00ff9d]" />
+                                              </td>
+                                              <td className="py-1.5 px-1 text-center">
+                                                <input type="number" min="0" step="any" value={matrixCostMap[key] ?? ''} onChange={(e) => handleMatrixCostChange(clr, sz, e.target.value)} className="w-16 py-1 px-1 text-center font-mono font-bold bg-[#101628] text-[#00ff9d] border border-[#00ff9d]/30 rounded-lg outline-none text-[10px] focus:border-[#00ff9d]" />
+                                              </td>
+                                              <td className="py-1.5 px-1 text-center text-[#ffa500] font-mono font-bold text-[10px] whitespace-nowrap">₹{variantPricing.storePrice}</td>
+                                              <td className="py-1.5 px-1 text-center text-[#00d9ff] font-mono font-bold text-[10px] whitespace-nowrap">₹{variantPricing.onlinePrice}</td>
+                                              <td className="py-1.5 px-1 text-center text-[#e056fd] font-mono font-bold text-[10px] whitespace-nowrap">₹{variantPricing.mrpPrice}</td>
+                                              <td className="py-1.5 px-1 text-center">
+                                                <button type="button" onClick={() => handleRemoveVariantFromMatrix(clr, sz)} className="p-1 rounded-lg bg-white/5 hover:bg-[#ff6b6b]/20 text-[#8b9bb4] hover:text-[#ff6b6b] cursor-pointer transition-colors" title={`Remove ${clr} / ${sz} from matrix`}>
+                                                  <Trash2 className="w-3 h-3" />
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          );
+                                        }))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <div className="p-3 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-[10px]">
+                                    Ee purchase ki kavalsina sizes paina select cheyandi.
+                                  </div>
+                                )}
+
+                                <div className="flex items-center justify-between pt-1">
+                                  <span className="font-mono text-[11px] text-[#00ff9d] font-bold">
+                                    Units in Matrix: {currentConfiguredTotalQty}
+                                  </span>
+
+                                  <button
+                                    type="button"
+                                    disabled={currentConfiguredTotalQty === 0}
+                                    onClick={handleAddMatrixToStaged}
+                                    className="px-5 py-2 bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] hover:opacity-95 text-neutral-950 font-bold text-xs rounded-xl flex items-center gap-1.5 cursor-pointer disabled:opacity-40 shadow active:scale-95"
+                                  >
+                                    <span>Add to Matrix Queue</span>
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-4 text-center text-[#8b9bb4] italic text-xs">
+                                Click &quot;Select Shades in Popup&quot; above to pick dress colour shades and open the size matrix.
+                              </div>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <div className="p-4 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
@@ -1957,6 +2370,70 @@ export default function PurchaseManager() {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 4. DEDICATED POPUP FOR SIZE SELECTION */}
+      {isSizePickerModalOpen && activeProduct && (
+        <div className="fixed inset-0 z-[100010] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-2xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
+              <div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[#00d9ff]" />
+                  <span>Select Sizes for [{activeProduct.id}] {activeProduct.name}</span>
+                </h4>
+                <span className="text-xs text-[#8b9bb4]">
+                  Select only the sizes required for this purchase. Unselected sizes will not appear in the variant matrix.
+                </span>
+              </div>
+              <button type="button" onClick={() => setIsSizePickerModalOpen(false)} className="text-[#8b9bb4] hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
+              {productSizes.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-[#0a0e17] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
+                  No sizes are available for this product.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {productSizes.map((size) => {
+                    const isSelected = selectedMatrixSizes.includes(size);
+                    return (
+                      <button
+                        key={size}
+                        type="button"
+                        onClick={() => handleToggleSizeSelection(size)}
+                        className={`min-h-[72px] p-3 rounded-2xl cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-2 shadow-lg border-2 ${
+                          isSelected
+                            ? 'bg-[#00d9ff]/15 border-[#00d9ff] shadow-[0_0_20px_rgba(0,217,255,0.25)] ring-2 ring-[#00d9ff]/30 scale-[1.02]'
+                            : 'bg-[#0a0e17] border-white/10 text-[#8b9bb4] hover:text-white hover:border-white/30'
+                        }`}
+                      >
+                        <span className={`text-sm font-extrabold font-mono ${isSelected ? 'text-[#00d9ff]' : 'text-white'}`}>{size}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-mono font-bold uppercase tracking-wider ${isSelected ? 'bg-[#00d9ff] text-neutral-950' : 'bg-white/5 text-[#8b9bb4]'}`}>
+                          {isSelected ? 'SELECTED' : 'SELECT'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-white/10 shrink-0">
+              <span className="font-mono text-xs text-[#00ff9d] font-bold">Selected: {selectedMatrixSizes.length} Size(s)</span>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setIsSizePickerModalOpen(false)} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs cursor-pointer">Cancel</button>
+                <button type="button" onClick={() => setIsSizePickerModalOpen(false)} className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer active:scale-95">
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>Confirm Sizes (OK)</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2560,7 +3037,7 @@ export default function PurchaseManager() {
               setIsProductMasterOpen(false);
               supabase
                 .from('products')
-                .select('*')
+                .select('id, name, category_id, sub_category_id, colour, size, unit, brand, sub_brand, barcode, weight, weight_unit, images, active, created_at, variants, description, fabric')
                 .then(({ data }) => {
                   if (data) {
                     const sorted = [...data].sort((a, b) =>

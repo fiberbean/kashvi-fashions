@@ -262,11 +262,26 @@ setNewOrdersCount(freshOrders);
     if (!confirm(`Permanently delete order ${orderId}?`)) return;
 
     try {
-      await supabase.from('orders').delete().eq('id', orderId);
+      // Stock restoration + ORDER_DELETE movement + order deletion
+      // are handled atomically inside the database function.
+      const { error: deleteError } = await supabase.rpc(
+        'delete_order_with_inventory_restore',
+        {
+          order_id: orderId
+        }
+      );
+
+      if (deleteError) {
+        throw deleteError;
+      }
+
       setRecentOrders((prev) => prev.filter((o) => o.id !== orderId));
       if (selectedOrder?.id === orderId) setSelectedOrder(null);
     } catch (err) {
       console.error('Delete failed:', err);
+      alert(
+        `Order ${orderId} was not deleted. Stock was not intentionally changed. Please check the console for details.`
+      );
     }
   };
 
@@ -1063,4 +1078,4 @@ setNewOrdersCount(freshOrders);
 
     </div>
   );
-}
+} 

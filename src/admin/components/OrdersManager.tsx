@@ -26,7 +26,8 @@ import {
   ShieldCheck,
   Check,
   ChevronDown,
-  ArrowLeft
+  ArrowLeft,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -179,6 +180,7 @@ export default function OrdersManager() {
 
   const [refundOrderId, setRefundOrderId] = useState<string | null>(null);
   const [refundUtr, setRefundUtr] = useState<string>('');
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const fetchStoreConfig = async () => {
     try {
@@ -370,6 +372,48 @@ export default function OrdersManager() {
     });
     setRefundOrderId(null);
     setRefundUtr('');
+  };
+
+  const handleDeleteOrderFromModal = async (order: OrderRecord) => {
+    if (deletingOrderId) return;
+
+    const confirmed = window.confirm(
+      `Permanently delete order ${order.id}?\n\n` +
+      `The database transaction will restore stock for every exact variant ` +
+      `(product + color + size), create ORDER_DELETE inventory movement records, ` +
+      `and then delete the order.\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingOrderId(order.id);
+
+    try {
+      const { error } = await supabase.rpc(
+        'delete_order_with_inventory_restore',
+        { order_id: order.id }
+      );
+
+      if (error) throw error;
+
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      setSelectedOrder(null);
+      setShowDetailModal(false);
+
+      alert(
+        `Order ${order.id} deleted successfully.\n\n` +
+        `Exact variant stock was restored and ORDER_DELETE movement records were created.`
+      );
+    } catch (err: any) {
+      console.error('Order delete / stock rollback failed:', err);
+      alert(
+        `Order ${order.id} was NOT deleted.\n\n` +
+        `Stock rollback was handled by the database transaction.\n\n` +
+        `Error: ${err?.message || 'Unknown error'}`
+      );
+    } finally {
+      setDeletingOrderId(null);
+    }
   };
 
   const printShippingLabel = (order: OrderRecord) => {
@@ -1144,62 +1188,22 @@ export default function OrdersManager() {
   return (
     <div className="space-y-4 font-sans text-xs select-none">
       
-      {/* 1. TOP HEADER & MAIN SEARCH BAR */}
-      <div className="p-4 rounded-3xl bg-[#101628]/95 border border-white/10 shadow-xl backdrop-blur-2xl flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#667eea] to-[#764ba2] text-white flex items-center justify-center shadow-lg shadow-[#6d4aff]/30">
-            <Package className="w-5 h-5 text-[#00d9ff]" />
-          </div>
-          <div>
-            <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
-              <span>Orders Command Deck</span>
-              <span className="px-2 py-0.5 rounded-full bg-[#00ff9d]/20 text-[#00ff9d] border border-[#00ff9d]/40 text-[9.5px] font-mono">
-                {orders.length} Online Web Orders
-              </span>
-            </h2>
-            <span className="text-[10px] text-[#8b9bb4]">
-              {storeConfig.store_name} • 8-Stage Dispatch Pipeline • India Post Speed Post
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-1 max-w-lg justify-end">
-          <div className="relative flex-1 max-w-xs">
+      {/* 1. ORDER SEARCH, FILTERS & PIPELINE CONTROL */}
+      <div className="p-3 rounded-3xl bg-[#101628]/95 border border-white/10 shadow-xl backdrop-blur-2xl space-y-3">
+        {/* Search + main controls */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="relative flex-1 min-w-[220px]">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search Order ID, Name, Phone, AWB..."
-              className="w-full pl-8 pr-3 py-2 bg-[#0a0e17] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/50"
+              className="w-full pl-8 pr-3 py-2.5 bg-[#0a0e17] rounded-xl text-white text-[11px] outline-none border border-white/10 focus:border-[#00d9ff] placeholder:text-[#8b9bb4]/50"
             />
             <Search className="w-3.5 h-3.5 text-[#8b9bb4] absolute left-2.5 top-1/2 -translate-y-1/2" />
           </div>
 
-          <button
-            type="button"
-            onClick={handleExportCSV}
-            className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
-            title="Export filtered orders to CSV"
-          >
-            <Download className="w-3.5 h-3.5 text-[#00ff9d]" />
-            <span className="hidden sm:inline">Export</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={loadOrders}
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/15 text-[#00d9ff] cursor-pointer transition-colors"
-            title="Refresh Live Feed"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* 2. FINE-TUNING FILTER CONTROL BAR */}
-      <div className="p-3 rounded-2xl bg-[#0a0e17]/80 border border-white/10 flex flex-wrap items-center justify-between gap-3 text-[11px]">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-[#101628] border border-white/10 rounded-xl px-2.5 py-1">
+          <div className="flex items-center gap-1.5 bg-[#0a0e17] border border-white/10 rounded-xl px-2.5 py-2">
             <Calendar className="w-3 h-3 text-[#00d9ff]" />
             <select
               value={dateFilter}
@@ -1213,7 +1217,7 @@ export default function OrdersManager() {
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-[#101628] border border-white/10 rounded-xl px-2.5 py-1">
+          <div className="flex items-center gap-1.5 bg-[#0a0e17] border border-white/10 rounded-xl px-2.5 py-2">
             <CreditCard className="w-3 h-3 text-[#00ff9d]" />
             <select
               value={paymentFilter}
@@ -1226,61 +1230,85 @@ export default function OrdersManager() {
               <option value="refunded">Refunded</option>
             </select>
           </div>
+
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors"
+            title="Export filtered orders to CSV"
+          >
+            <Download className="w-3.5 h-3.5 text-[#00ff9d]" />
+            <span>Export</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={loadOrders}
+            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-[#00d9ff] cursor-pointer transition-colors"
+            title="Refresh Live Feed"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+
+          <div className="ml-auto text-[10px] font-mono text-[#8b9bb4] whitespace-nowrap">
+            Showing <strong className="text-white">{filteredOrders.length}</strong> online orders
+          </div>
         </div>
 
-        <div className="text-[10px] font-mono text-[#8b9bb4]">
-          Showing <strong className="text-white">{filteredOrders.length}</strong> online orders
-        </div>
-      </div>
-
-      {/* 3. PIPELINE STATUS FILTER PILLS */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-        <button
-          type="button"
-          onClick={() => setCurrentStageFilter('all')}
-          className={`px-3.5 py-1.5 rounded-xl font-mono text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 ${
-            currentStageFilter === 'all'
-              ? 'bg-[#6d4aff] text-white border-[#6d4aff] shadow-md shadow-[#6d4aff]/40'
-              : 'bg-[#101628] text-[#8b9bb4] border-white/10 hover:text-white'
-          }`}
-        >
-          All ({orders.length})
-        </button>
-
-        {PIPELINE_STAGES.map((st) => {
-          const count = orders.filter((o) => (o.status || o.order_status || '').toLowerCase() === st.key).length;
-          const isActive = currentStageFilter === st.key;
-          return (
+        {/* Pipeline status filters */}
+        <div className="pt-2 border-t border-white/10">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
             <button
-              key={st.key}
               type="button"
-              onClick={() => setCurrentStageFilter(st.key)}
-              className={`px-3 py-1.5 rounded-xl font-mono text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                isActive
-                  ? 'bg-white/15 text-white border-[#00d9ff] shadow-md shadow-[#00d9ff]/20'
+              onClick={() => setCurrentStageFilter('all')}
+              className={`px-3.5 py-1.5 rounded-xl font-mono text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 ${
+                currentStageFilter === 'all'
+                  ? 'bg-[#6d4aff] text-white border-[#6d4aff] shadow-md shadow-[#6d4aff]/40'
                   : 'bg-[#101628] text-[#8b9bb4] border-white/10 hover:text-white'
               }`}
             >
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: st.color }} />
-              <span>{st.label}</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-black/40 text-white/80">
-                {count}
-              </span>
+              All ({orders.length})
             </button>
-          );
-        })}
 
-        <button
-          type="button"
-          onClick={() => setCurrentStageFilter('cancelled')}
-          className={`px-3 py-1.5 rounded-xl font-mono text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 ${
-            currentStageFilter === 'cancelled'
-              ? 'bg-[#ff6b6b]/20 text-[#ff6b6b] border-[#ff6b6b]/50'
-              : 'bg-[#101628] text-[#8b9bb4] border-white/10 hover:text-white'
-          }`}
-        >
-          Cancelled ({orders.filter((o) => (o.status || o.order_status) === 'cancelled').length})
-        </button>
+            {PIPELINE_STAGES.map((st) => {
+              const count = orders.filter(
+                (o) => (o.status || o.order_status || '').toLowerCase() === st.key
+              ).length;
+              const isActive = currentStageFilter === st.key;
+
+              return (
+                <button
+                  key={st.key}
+                  type="button"
+                  onClick={() => setCurrentStageFilter(st.key)}
+                  className={`px-3 py-1.5 rounded-xl font-mono text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-white/15 text-white border-[#00d9ff] shadow-md shadow-[#00d9ff]/20'
+                      : 'bg-[#101628] text-[#8b9bb4] border-white/10 hover:text-white'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: st.color }} />
+                  <span>{st.label}</span>
+                  <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-black/40 text-white/80">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => setCurrentStageFilter('cancelled')}
+              className={`px-3 py-1.5 rounded-xl font-mono text-[10.5px] font-bold border transition-all cursor-pointer shrink-0 ${
+                currentStageFilter === 'cancelled'
+                  ? 'bg-[#ff6b6b]/20 text-[#ff6b6b] border-[#ff6b6b]/50'
+                  : 'bg-[#101628] text-[#8b9bb4] border-white/10 hover:text-white'
+              }`}
+            >
+              Cancelled ({orders.filter((o) => (o.status || o.order_status || '').toLowerCase() === 'cancelled').length})
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* 4. ORDERS TABLE */}
@@ -1520,6 +1548,38 @@ export default function OrdersManager() {
                 </div>
               </div>
 
+              <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-mono text-[#00d9ff] uppercase font-bold block">
+                      Order Status Control
+                    </span>
+                    <span className="text-[9.5px] text-[#8b9bb4]">
+                      Status changes, dispatch tracking and cancellation/refund are managed from this modal.
+                    </span>
+                  </div>
+                  <select
+                    value={selectedOrder.status || selectedOrder.order_status || 'new'}
+                    onChange={(e) =>
+                      handleStageSelectChange(
+                        selectedOrder.id,
+                        e.target.value,
+                        selectedOrder.status || selectedOrder.order_status || 'new'
+                      )
+                    }
+                    disabled={!!deletingOrderId}
+                    className="min-w-[190px] px-3 py-2 bg-[#101628] rounded-xl text-white font-mono text-[10.5px] font-bold outline-none border border-white/15 focus:border-[#00d9ff] cursor-pointer disabled:opacity-50 [&>option]:bg-[#101628] [&>option]:text-white"
+                  >
+                    {PIPELINE_STAGES.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                    <option value="cancelled">Cancelled / Refund</option>
+                  </select>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="p-3.5 rounded-2xl bg-[#0a0e17] border border-white/10 space-y-1.5">
                   <span className="text-[10px] font-mono text-[#00d9ff] uppercase font-bold flex items-center gap-1.5">
@@ -1584,8 +1644,13 @@ export default function OrdersManager() {
                               )}
                               <div>
                                 <strong className="block leading-tight">{itm.name}</strong>
-                                <div className="text-[9.5px] text-[#8b9bb4] flex gap-1.5 mt-0.5">
-                                  {itm.color && <span>Color: {itm.color}</span>}
+                                <div className="text-[9.5px] text-[#8b9bb4] flex flex-wrap gap-x-1.5 gap-y-0.5 mt-0.5">
+                                  {(itm.product_code || itm.sku || itm.code) && (
+                                    <span className="text-[#c4b5fd]">
+                                      Code: {itm.product_code || itm.sku || itm.code}
+                                    </span>
+                                  )}
+                                  {itm.color && <span>• Color: {itm.color}</span>}
                                   {itm.size && <span>• Size: {itm.size}</span>}
                                 </div>
                               </div>
@@ -1622,11 +1687,22 @@ export default function OrdersManager() {
                     ₹ {Number(selectedOrder.total || selectedOrder.total_amount || 0).toLocaleString('en-IN')}
                   </span>
                 </div>
-                <div className="pt-1 text-[10px] text-[#8b9bb4] flex justify-between border-t border-white/5">
-                  <span>Payment Gateway: {selectedOrder.payment_method || selectedOrder.payment?.method || 'Online'}</span>
+                <div className="pt-1 text-[10px] text-[#8b9bb4] flex flex-wrap justify-between gap-2 border-t border-white/5">
+                  <span>
+                    Payment: {selectedOrder.payment_method || selectedOrder.payment?.method || 'Online'}
+                  </span>
                   <span className="text-[#00ff9d] font-bold capitalize">
                     {selectedOrder.payment_status || selectedOrder.payment?.status || 'Paid'}
                   </span>
+                </div>
+                <div className="text-[9.5px] text-[#8b9bb4] font-mono">
+                  Reference: {
+                    selectedOrder.payment_reference ||
+                    selectedOrder.bank_reference ||
+                    selectedOrder.payment?.utr ||
+                    selectedOrder.payment?.bank_reference ||
+                    '—'
+                  }
                 </div>
               </div>
 
@@ -1657,6 +1733,20 @@ export default function OrdersManager() {
                 >
                   <Printer className="w-3.5 h-3.5 text-[#00ff9d]" />
                   <span>4x6 Label</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteOrderFromModal(selectedOrder)}
+                  disabled={deletingOrderId === selectedOrder.id}
+                  className="px-3.5 py-2 bg-[#ff6b6b]/10 hover:bg-[#ff6b6b]/20 text-[#ff6b6b] border border-[#ff6b6b]/30 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Delete order and atomically restore exact variant stock"
+                >
+                  {deletingOrderId === selectedOrder.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  <span>{deletingOrderId === selectedOrder.id ? 'Deleting…' : 'Delete Order'}</span>
                 </button>
               </div>
 

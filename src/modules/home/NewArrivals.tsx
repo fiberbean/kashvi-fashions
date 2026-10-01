@@ -46,9 +46,10 @@ interface Product {
   sub_category_name?: string | null;
   colour?: string | null;
   size?: string | null;
-  selling_price?: number | null;
-  price?: number | null;
-  mrp?: number | null;
+  online_price?: number | null;
+  inventory_mrp?: number | null;
+  inventory_sizes?: string[];
+  inventory_colors?: string[];
   images?: any;
   active?: boolean | null;
   fabric?: string | null;
@@ -166,16 +167,16 @@ function NewArrivalCard({
   const [copied, setCopied] = useState(false);
 
   const isJewellery = department === 'jewellery';
-  const currentPrice = Number(product.selling_price ?? product.price ?? 0);
-  const mrp = Number(product.mrp ?? 0);
+  const currentPrice = Number(product.online_price ?? 0);
+  const mrp = Number(product.inventory_mrp ?? 0);
   const originalPrice = mrp > currentPrice ? mrp : null;
   const discountPercent = originalPrice
     ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
     : 0;
   const isFav = isInWishlist(String(product.id));
   const imageUrl = getImage(product.images, department);
-  const colors = splitValues(product.colour);
-  const sizes = splitValues(product.size);
+  const colors = product.inventory_colors || [];
+  const sizes = product.inventory_sizes || [];
 
   const handleWishlist = (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -422,6 +423,81 @@ async function fetchNewArrivalProducts(department: Department) {
     return subCategoryIsJewellery(subCategory || {}) === (department === 'jewellery');
   });
 
+  const recentProductIds = recent.map((product) => String(product.id).trim()).filter(Boolean);
+  const inventoryPriceMap = new Map<string, { online_price: number; mrp: number; sizes: string[]; colors: string[] }>();
+
+  if (recentProductIds.length > 0) {
+    const { data: inventoryData, error: inventoryError } = await supabase
+      .from('inventory')
+      .select('product_id, variant_color, variant_size, stock_quantity, updated_at, online_price, mrp')
+      .in('product_id', recentProductIds);
+
+    if (inventoryError) {
+      console.error('New Arrivals inventory price fetch error:', inventoryError);
+    } else {
+      const grouped = new Map<string, any[]>();
+
+      (inventoryData || []).forEach((row: any) => {
+        const pid = String(row.product_id || '').trim();
+        if (!pid) return;
+        const rows = grouped.get(pid) || [];
+        rows.push(row);
+        grouped.set(pid, rows);
+      });
+
+      grouped.forEach((rows, pid) => {
+        const usableRows = rows
+          .filter((row) => Number(row.online_price) > 0)
+          .sort((a, b) => {
+            const stockDiff = Number(b.stock_quantity || 0) - Number(a.stock_quantity || 0);
+            if (stockDiff !== 0) return stockDiff;
+            return (
+              new Date(String(b.updated_at || 0)).getTime() -
+              new Date(String(a.updated_at || 0)).getTime()
+            );
+          });
+
+        if (usableRows.length > 0) {
+          const row = usableRows[0];
+          const inStockRows = rows.filter((item) => Number(item.stock_quantity || 0) > 0);
+          const variantRows = inStockRows.length > 0 ? inStockRows : usableRows;
+          const sizes = Array.from(
+            new Set(
+              variantRows
+                .map((item) => String(item.variant_size || '').trim())
+                .filter((value) => value && value.toLowerCase() !== 'free size')
+            )
+          );
+          const colors = Array.from(
+            new Set(
+              variantRows
+                .map((item) => String(item.variant_color || '').trim())
+                .filter((value) => value && value.toLowerCase() !== 'standard')
+            )
+          );
+
+          inventoryPriceMap.set(pid, {
+            online_price: Number(row.online_price) || 0,
+            mrp: Number(row.mrp) || 0,
+            sizes,
+            colors,
+          });
+        }
+      });
+    }
+  }
+
+  const productsWithInventoryPrice = recent.map((product) => {
+    const pricing = inventoryPriceMap.get(String(product.id).trim());
+    return {
+      ...product,
+      online_price: pricing?.online_price || 0,
+      inventory_mrp: pricing?.mrp || 0,
+      inventory_sizes: pricing?.sizes || [],
+      inventory_colors: pricing?.colors || [],
+    };
+  });
+
   return {
     categories: categories.filter(
       (category) => categoryIsJewellery(category) === (department === 'jewellery')
@@ -431,7 +507,7 @@ async function fetchNewArrivalProducts(department: Department) {
       if (allowedCategoryIds.has(parentId)) return true;
       return !parentId && subCategoryIsJewellery(sub) === (department === 'jewellery');
     }),
-    products: uniqueNewArrivalVariants(uniqueById(recent)),
+    products: uniqueNewArrivalVariants(uniqueById(productsWithInventoryPrice)),
   };
 }
 
@@ -523,12 +599,20 @@ export default function NewArrivals({ department }: NewArrivalsProps) {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-end justify-between gap-4 mb-4 sm:mb-5">
           <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className={`w-4 h-4 sm:w-5 sm:h-5 ${accent}`} />
+              <span className={`text-[9px] sm:text-[10px] uppercase tracking-[0.25em] font-extrabold ${accent}`}>
+                New Arrivals
+              </span>
+            </div>
+
             <div className="flex items-center gap-2.5">
               <h2 className={`text-xl sm:text-2xl md:text-3xl font-bold tracking-tight ${heading}`}>
                 New Arrivals
               </h2>
               <span className={`h-1 w-8 sm:w-10 rounded-full ${isJewellery ? 'bg-[#D4AF37]' : 'bg-[#ff2d85]'}`} />
             </div>
+
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -689,7 +773,7 @@ export function NewArrivalsCollectionPage() {
       const productColours = splitValues(product.colour).map(clean);
       const productSizes = splitValues(product.size).map(clean);
       const brand = clean(product.brand);
-      const price = Number(product.selling_price ?? product.price ?? 0);
+      const price = Number(product.online_price ?? 0);
 
       if (selectedColour && !productColours.includes(clean(selectedColour))) return false;
       if (selectedSize && !productSizes.includes(clean(selectedSize))) return false;
@@ -704,8 +788,8 @@ export function NewArrivalsCollectionPage() {
     });
 
     return result.sort((a, b) => {
-      if (sortBy === 'price-asc') return Number(a.selling_price ?? a.price ?? 0) - Number(b.selling_price ?? b.price ?? 0);
-      if (sortBy === 'price-desc') return Number(b.selling_price ?? b.price ?? 0) - Number(a.selling_price ?? a.price ?? 0);
+      if (sortBy === 'price-asc') return Number(a.online_price ?? 0) - Number(b.online_price ?? 0);
+      if (sortBy === 'price-desc') return Number(b.online_price ?? 0) - Number(a.online_price ?? 0);
       if (sortBy === 'name-asc') return String(a.name).localeCompare(String(b.name));
       return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
     });
@@ -893,7 +977,7 @@ export function NewArrivalsCollectionPage() {
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles className={`w-4 h-4 ${accent}`} />
                 <span className={`text-[10px] uppercase tracking-[0.25em] font-extrabold ${accent}`}>
-                   · 
+                  New Arrivals
                 </span>
               </div>
               <h1

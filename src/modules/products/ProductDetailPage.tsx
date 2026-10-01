@@ -36,9 +36,6 @@ interface Product {
   size?: string | null;
   sizes?: any;
   available_sizes?: any;
-  selling_price?: number | null;
-  price?: number | null;
-  mrp?: number | null;
   images?: any;
   active?: boolean | null;
   fabric?: string | null;
@@ -52,6 +49,11 @@ interface InventoryItem {
   variant_color: string;
   variant_size: string;
   stock_quantity: number;
+  reserved_quantity: number;
+  cost_price: number;
+  store_price: number;
+  online_price: number;
+  mrp: number;
 }
 
 interface ComboItem {
@@ -81,6 +83,8 @@ export default function ProductDetailPage() {
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [singleQty, setSingleQty] = useState<number>(1);
+  const [selectedInventoryPrice, setSelectedInventoryPrice] = useState<number>(0);
+  const [selectedInventoryMrp, setSelectedInventoryMrp] = useState<number>(0);
   const [comboList, setComboList] = useState<ComboItem[]>([]);
   const [isZoomOpen, setIsZoomOpen] = useState<boolean>(false);
   const [isCopied, setIsCopied] = useState<boolean>(false);
@@ -194,7 +198,7 @@ export default function ProductDetailPage() {
           const inStockItems = (invData || []).filter((item: any) => Number(item.stock_quantity) > 0);
 
           if (inStockItems.length > 0) {
-            setModalStock(inStockItems);
+            setModalStock(inStockItems as InventoryItem[]);
             const uniqueColors = Array.from(
               new Set(inStockItems.map((item: any) => (item.variant_color || '').trim()).filter(Boolean))
             );
@@ -212,38 +216,24 @@ export default function ProductDetailPage() {
                     .filter(Boolean)
                 )
               );
-              setSelectedSize(sizesForFirst.length > 0 ? sizesForFirst[0] : '');
+              const firstSize = sizesForFirst.length > 0 ? sizesForFirst[0] : '';
+              setSelectedSize(firstSize);
+
+              const firstVariant = inStockItems.find(
+                (item: any) =>
+                  String(item.variant_color || '').trim().toLowerCase() === firstColor.toLowerCase() &&
+                  String(item.variant_size || '').trim().toLowerCase() === firstSize.toLowerCase()
+              );
+              setSelectedInventoryPrice(Number(firstVariant?.online_price) || 0);
+              setSelectedInventoryMrp(Number(firstVariant?.mrp) || 0);
             }
           } else {
-            const prodColors = (prodData.colour || prodData.colors || '')
-              .split(',')
-              .map((c: string) => c.trim())
-              .filter(Boolean);
-            const prodSizes = (prodData.size || prodData.sizes || prodData.available_sizes || '')
-              .split(',')
-              .map((s: string) => s.trim())
-              .filter(Boolean);
-
-            const finalColors = prodColors.length > 0 ? prodColors : ['Standard'];
-            const finalSizes = prodSizes.length > 0 ? prodSizes : ['Free Size'];
-
-            const simulatedStock: InventoryItem[] = [];
-            finalColors.forEach((c: string) => {
-              finalSizes.forEach((s: string) => {
-                simulatedStock.push({
-                  id: `${prodData.id}-${c}-${s}`,
-                  product_id: prodData.id,
-                  variant_color: c,
-                  variant_size: s,
-                  stock_quantity: 10,
-                });
-              });
-            });
-
-            setModalStock(simulatedStock);
-            setStockColors(finalColors);
-            setSelectedColor(finalColors[0]);
-            setSelectedSize(finalSizes[0]);
+            setModalStock([]);
+            setStockColors([]);
+            setSelectedColor('');
+            setSelectedSize('');
+            setSelectedInventoryPrice(0);
+            setSelectedInventoryMrp(0);
           }
         }
       } catch (err) {
@@ -276,6 +266,20 @@ export default function ProductDetailPage() {
       )
     : [];
 
+  const syncSelectedInventoryPricing = (colorName: string, sizeName: string) => {
+    const colorLower = colorName.trim().toLowerCase();
+    const sizeLower = sizeName.trim().toLowerCase();
+    const exactVariant = modalStock.find(
+      (item) =>
+        String(item.variant_color || '').trim().toLowerCase() === colorLower &&
+        String(item.variant_size || '').trim().toLowerCase() === sizeLower &&
+        Number(item.stock_quantity) > 0
+    );
+
+    setSelectedInventoryPrice(Number(exactVariant?.online_price) || 0);
+    setSelectedInventoryMrp(Number(exactVariant?.mrp) || 0);
+  };
+
   const handleColorShadeClick = (colorName: string) => {
     setSelectedColor(colorName);
     const sizes = modalStock
@@ -283,8 +287,14 @@ export default function ProductDetailPage() {
       .map((item) => (item.variant_size || '').trim())
       .filter(Boolean);
 
-    if (sizes.length > 0) setSelectedSize(sizes[0]);
-    else setSelectedSize('');
+    if (sizes.length > 0) {
+      setSelectedSize(sizes[0]);
+      syncSelectedInventoryPricing(colorName, sizes[0]);
+    } else {
+      setSelectedSize('');
+      setSelectedInventoryPrice(0);
+      setSelectedInventoryMrp(0);
+    }
 
     const colorLower = colorName.toLowerCase().trim();
     const matched = images.find((img) => img.color && img.color.toLowerCase().trim() === colorLower);
@@ -345,7 +355,7 @@ export default function ProductDetailPage() {
   // Robust Cart Synchronization
   const handleFinalCheckoutAction = (shouldOpenCart: boolean = false) => {
     if (!product) return;
-    const finalPrice = product.selling_price || product.price || 0;
+    const finalPrice = selectedInventoryPrice;
 
     const buildPayload = (sizeVal?: string, colorVal?: string, quantityNum: number = 1) => {
       const s = sizeVal || 'Free Size';
@@ -356,8 +366,7 @@ export default function ProductDetailPage() {
         product_id: product.id,
         name: product.name,
         price: finalPrice,
-        selling_price: finalPrice,
-        mrp: product.mrp || undefined,
+        mrp: selectedInventoryMrp || undefined,
         image: selectedImage,
         image_url: selectedImage,
         color: c,
@@ -394,8 +403,8 @@ export default function ProductDetailPage() {
       addToWishlist({
         id: pid,
         name: product.name,
-        price: product.selling_price || product.price || 0,
-        originalPrice: product.mrp || undefined,
+        price: selectedInventoryPrice,
+        originalPrice: selectedInventoryMrp || undefined,
         image: selectedImage,
         fabric: product.fabric || undefined,
         department: isJewellery ? 'jewellery' : 'fashions',
@@ -429,8 +438,8 @@ export default function ProductDetailPage() {
     }
   };
 
-  const sellingPrice = product?.selling_price || product?.price || 0;
-  const mrp = product?.mrp || 0;
+  const sellingPrice = selectedInventoryPrice;
+  const mrp = selectedInventoryMrp;
   const discountPercent = mrp > sellingPrice ? Math.round(((mrp - sellingPrice) / mrp) * 100) : 0;
   const isOutOfStock = stockColors.length === 0;
   const showColors = stockColors.filter((c) => c.toLowerCase() !== 'standard');
@@ -701,7 +710,7 @@ export default function ProductDetailPage() {
                                 <button
                                   key={sz}
                                   type="button"
-                                  onClick={() => setSelectedSize(sz)}
+                                  onClick={() => { setSelectedSize(sz); syncSelectedInventoryPricing(selectedColor, sz); }}
                                   className={`min-w-11 h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
                                     isSelected
                                       ? isJewellery

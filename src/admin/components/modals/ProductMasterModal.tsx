@@ -151,11 +151,6 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
   const [selectedUnit, setSelectedUnit] = useState<string>('');
   const [images, setImages] = useState<TaggedImage[]>([]);
 
-  // Pricing fields
-  const [sellingPrice, setSellingPrice] = useState<number | string>(0);
-  const [mrp, setMrp] = useState<number | string>(0);
-  const [costPrice, setCostPrice] = useState<number | string>(0);
-
   const [isSubCatDropdownOpen, setIsSubCatDropdownOpen] = useState<boolean>(false);
   const [subCatSearch, setSubCatSearch] = useState<string>('');
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -209,10 +204,6 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
       setProductCode(initialProduct.id);
       setName(initialProduct.name || '');
       setDescription(initialProduct.description || '');
-      setSellingPrice(initialProduct.selling_price ?? 0);
-      setMrp(initialProduct.mrp ?? 0);
-      setCostPrice(initialProduct.cost_price ?? 0);
-
       const isJewel = (initialProduct.brand || '').toLowerCase().includes('jewel') || initialProduct.id.startsWith('KJ');
       setBrand(isJewel ? 'jewellery' : 'fashions');
 
@@ -472,30 +463,23 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
       const payload: any = {
         id: productCode.trim(),
         name: name.trim(),
-        category: catName,
-        sub_category: subCatObj?.name || null,
         category_id: catId,
         sub_category_id: selectedSubCategory || null,
         colour: colorsToSave[0] || null,
         size: selectedSizes[0] || null,
         unit: unitValue,
         brand: brand === 'jewellery' ? 'Kashvi Jewellery' : 'Kashvi Fashions',
-        sub_brand: null,
-        model_no: productCode.trim(),
         barcode: productCode.trim(),
-        selling_price: Number(sellingPrice) || 0,
-        mrp: Number(mrp) || 0,
-        cost_price: Number(costPrice) || 0,
+        weight: 0,
+        weight_unit: 'grams',
         images: images,
         active: true,
-        variants: { 
-          colors: colorsToSave, 
-          sizes: selectedSizes, 
-          fabrics: selectedFabrics 
+        variants: {
+          colors: colorsToSave,
+          sizes: selectedSizes,
+          fabrics: selectedFabrics
         },
         description: description.trim(),
-        features: '',
-        notes: '',
         fabric: selectedFabrics.join(', ') || null
       };
 
@@ -507,17 +491,14 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
         if (error) throw error;
         alert(`Product ${productCode} updated successfully!`);
       } else {
-        const { error } = await supabase.from('products').insert([
-          {
-            ...payload,
-            gst: 0,
-            weight: 0,
-            weight_unit: 'grams',
-            stock_quantity: 0,
-            low_stock_threshold: 3,
-            created_at: new Date().toISOString()
-          }
-        ]);
+        const { error } = await supabase
+          .from('products')
+          .insert([
+            {
+              ...payload,
+              created_at: new Date().toISOString()
+            }
+          ]);
         if (error) throw error;
         alert(`Product ${productCode} saved successfully!`);
       }
@@ -768,59 +749,6 @@ export default function ProductMasterModal({ onClose, initialProduct }: ProductM
                   <option key={u.id} value={u.name || u.id}>{u.name}</option>
                 ))}
               </select>
-            </div>
-          </div>
-
-          {/* Pricing Grid */}
-          <div className="p-4 bg-[#0a0e17]/80 rounded-3xl border border-white/10 space-y-2.5">
-            <span className="text-[11px] font-mono font-bold text-[#00ff9d] block uppercase tracking-wider flex items-center gap-1.5">
-              <IndianRupee className="w-3.5 h-3.5" /> Pricing & Rates
-            </span>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
-                  Selling Price (₹) *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={sellingPrice}
-                  onChange={(e) => setSellingPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3.5 py-2 rounded-xl border border-white/10 bg-[#101628] font-bold text-[#00ff9d] outline-none focus:border-[#00ff9d] transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
-                  MRP (₹)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={mrp}
-                  onChange={(e) => setMrp(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3.5 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#00d9ff] transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase tracking-wider block mb-1">
-                  Cost Price (₹)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={costPrice}
-                  onChange={(e) => setCostPrice(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full px-3.5 py-2 rounded-xl border border-white/10 bg-[#101628] font-semibold text-white outline-none focus:border-[#6d4aff] transition-colors"
-                />
-              </div>
             </div>
           </div>
 
