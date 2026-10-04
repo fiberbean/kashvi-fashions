@@ -193,6 +193,46 @@ async function recordStockMovement({
 }
 
 
+async function rebuildSupplierLedger(supplierId: string) {
+  const sid = String(supplierId || '').trim();
+  if (!sid) throw new Error('Supplier ID is required for supplier ledger rebuild.');
+
+  const { data: ledgerRows, error: ledgerError } = await supabase
+    .from('supplier_ledger')
+    .select('id, amount, created_at')
+    .eq('supplier_id', sid)
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
+
+  if (ledgerError) throw ledgerError;
+
+  let balance = 0;
+  for (const row of ledgerRows || []) {
+    balance += Number(row.amount || 0);
+
+    const { error: rowError } = await supabase
+      .from('supplier_ledger')
+      .update({ balance_after: balance })
+      .eq('id', row.id);
+
+    if (rowError) throw rowError;
+  }
+
+  const { data: updatedSupplier, error: supplierError } = await supabase
+    .from('suppliers')
+    .update({ balance_due: balance })
+    .eq('id', sid)
+    .select('id,balance_due')
+    .maybeSingle();
+
+  if (supplierError) throw supplierError;
+  if (!updatedSupplier) {
+    throw new Error(`Supplier outstanding could not be updated for ${sid}.`);
+  }
+
+  return Number(updatedSupplier.balance_due || 0);
+}
+
 async function applySupplierLedgerEntry({
   supplierId,
   purchaseId,
@@ -221,15 +261,32 @@ async function applySupplierLedgerEntry({
   if (!supplier) throw new Error(`Supplier not found: ${normalizedSupplierId}`);
 
   const oldBalance = Number(supplier.balance_due || 0);
-  const newBalance = oldBalance + delta;
+  const projectedBalance = oldBalance + delta;
 
-  if (newBalance < 0) {
+  if (projectedBalance < 0) {
     throw new Error(
       `Supplier outstanding cannot become negative. Current outstanding: ₹${oldBalance.toLocaleString('en-IN')}, adjustment: ₹${delta.toLocaleString('en-IN')}.`
     );
   }
 
+  // A completed purchase may have only one initial PURCHASE ledger entry.
+  // Adjustment/change entries are intentionally repeatable because each edit
+  // represents a separate financial delta.
+  if (purchaseId && transactionType === 'PURCHASE') {
+    const { data: existing, error: duplicateError } = await supabase
+      .from('supplier_ledger')
+      .select('id')
+      .eq('purchase_id', purchaseId)
+      .eq('transaction_type', 'PURCHASE')
+      .limit(1);
+    if (duplicateError) throw duplicateError;
+    if (existing && existing.length > 0) {
+      throw new Error(`Supplier purchase ledger entry already exists for ${purchaseId}.`);
+    }
+  }
+
   const ledgerId = `led_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+  const referenceType = transactionType.startsWith('PURCHASE') ? 'PURCHASE' : null;
 
   const { error: ledgerErr } = await supabase
     .from('supplier_ledger')
@@ -239,20 +296,29 @@ async function applySupplierLedgerEntry({
       purchase_id: purchaseId || null,
       transaction_type: transactionType,
       amount: delta,
-      balance_after: newBalance,
-      description
+      balance_after: 0,
+      description,
+      reference_id: purchaseId || null,
+      reference_type: referenceType
     }]);
 
   if (ledgerErr) throw ledgerErr;
 
-  const { error: balanceErr } = await supabase
-    .from('suppliers')
-    .update({ balance_due: newBalance })
-    .eq('id', normalizedSupplierId);
-
-  if (balanceErr) {
+  try {
+    // Rebuild from the complete ledger instead of incrementing the cached
+    // supplier balance. This repairs stale balance_due values and guarantees
+    // the saved purchase is reflected in the supplier outstanding immediately.
+    await rebuildSupplierLedger(normalizedSupplierId);
+  } catch (rebuildError) {
     await supabase.from('supplier_ledger').delete().eq('id', ledgerId);
-    throw balanceErr;
+    // Best-effort rebuild after removing the failed entry so the supplier cache
+    // remains aligned with the surviving ledger history.
+    try {
+      await rebuildSupplierLedger(normalizedSupplierId);
+    } catch (rollbackError) {
+      console.error('Supplier ledger rollback rebuild failed:', rollbackError);
+    }
+    throw rebuildError;
   }
 }
 
