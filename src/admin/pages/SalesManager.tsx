@@ -69,6 +69,12 @@ interface InventoryItemRecord {
   variant_color?: string | null;
   variant_size?: string | null;
   stock_quantity?: number | null;
+  reserved_quantity?: number | null;
+  cost_price?: number | null;
+  store_price?: number | null;
+  online_price?: number | null;
+  mrp?: number | null;
+  updated_at?: string | null;
 }
 
 interface ColourMasterRecord {
@@ -77,6 +83,19 @@ interface ColourMasterRecord {
   hex_code?: string;
   parent_colour?: string | null;
   parent_color?: string | null;
+}
+
+interface StoreSettingsRecord {
+  id: string;
+  store_name?: string | null;
+  logo_url?: string | null;
+  sender_address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  support_phone?: string | null;
+  support_email?: string | null;
+  whatsapp_no?: string | null;
 }
 
 interface CartItem {
@@ -151,23 +170,29 @@ function getBaseFamily(colorName: string): string {
   return 'OTHER';
 }
 
-function getProductStorePrice(p: ProductRecord): number {
-  if (p.offline_price && Number(p.offline_price) > 0) return Number(p.offline_price);
-  if (p.store_price && Number(p.store_price) > 0) return Number(p.store_price);
-  if (p.selling_price && Number(p.selling_price) > 0) return Number(p.selling_price);
-  if (p.price && Number(p.price) > 0) return Number(p.price);
-  return 0;
+function getProductStorePrice(
+  p: ProductRecord,
+  inventoryList: InventoryItemRecord[]
+): number {
+  // Centralized inventory is the single source of truth for Store prices.
+  // Never fall back to product-level/legacy price columns for Store billing.
+  const inventoryPrices = inventoryList
+    .filter((row) => cleanStr(row.product_id) === cleanStr(p.id))
+    .map((row) => Number(row.store_price ?? 0))
+    .filter((price) => Number.isFinite(price) && price > 0);
+
+  return inventoryPrices.length > 0 ? inventoryPrices[0] : 0;
 }
 
 export default function SalesManager({ currentUser }: SalesManagerProps) {
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [productsList, setProductsList] = useState<ProductRecord[]>([]);
   const [inventoryList, setInventoryList] = useState<InventoryItemRecord[]>([]);
-  const [purchaseItemsList, setPurchaseItemsList] = useState<any[]>([]);
   const [coloursList, setColoursList] = useState<ColourMasterRecord[]>([]);
   const [customersList, setCustomersList] = useState<CustomerRecord[]>([]);
   const [allSizesList, setAllSizesList] = useState<any[]>([]);
   const [subCategoriesList, setSubCategoriesList] = useState<any[]>([]);
+  const [storeSettings, setStoreSettings] = useState<StoreSettingsRecord | null>(null);
 
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -225,10 +250,20 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
 
   // Edit Invoice State
   const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
+  const [editCustomerName, setEditCustomerName] = useState<string>('');
   const [editPaymentMode, setEditPaymentMode] = useState<'cash' | 'upi'>('cash');
   const [editUtrNumber, setEditUtrNumber] = useState<string>('');
   const [editStatus, setEditStatus] = useState<string>('paid');
+  const [editCartItems, setEditCartItems] = useState<CartItem[]>([]);
+  const [editDiscountAmount, setEditDiscountAmount] = useState<number | string>(0);
+  const [editDiscountError, setEditDiscountError] = useState<string | null>(null);
+  const [editProductId, setEditProductId] = useState<string>('');
+  const [editColor, setEditColor] = useState<string>('');
+  const [editSize, setEditSize] = useState<string>('');
+  const [editQty, setEditQty] = useState<number>(1);
+  const [editReplaceCartId, setEditReplaceCartId] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   const activeRole = String(currentUser?.role || sessionStorage.getItem('kfmama_auth_role') || 'admin').toLowerCase().trim();
   const canEdit = activeRole === 'admin' || activeRole === 'manager';
@@ -260,24 +295,35 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     }
   };
 
+  const getNextInvoiceNumber = async (): Promise<string> => {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id')
+      .like('id', 'KFINV%')
+      .order('id', { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      const match = String(data[0].id).match(/\d+$/);
+      const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
+      return `KFINV${String(nextNum).padStart(4, '0')}`;
+    }
+
+    return 'KFINV0001';
+  };
+
   const generateBillNumber = async () => {
     try {
-      const { data } = await supabase
-        .from('orders')
-        .select('id')
-        .like('id', 'KFINV%')
-        .order('id', { ascending: false })
-        .limit(1);
-
-      if (data && data.length > 0) {
-        const match = String(data[0].id).match(/\d+$/);
-        const nextNum = match ? parseInt(match[0], 10) + 1 : 1;
-        setInvoiceNo(`KFINV${String(nextNum).padStart(4, '0')}`);
-      } else {
-        setInvoiceNo('KFINV0001');
-      }
+      const nextInvoice = await getNextInvoiceNumber();
+      setInvoiceNo(nextInvoice);
+      return nextInvoice;
     } catch {
-      setInvoiceNo(`KFINV${Math.floor(1000 + Math.random() * 9000)}`);
+      // Keep the established KFINV series. A random number is avoided because
+      // invoice numbering must remain predictable and auditable.
+      setInvoiceNo('KFINV0001');
+      return 'KFINV0001';
     }
   };
 
@@ -285,15 +331,15 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     setLoading(true);
     try {
       // Offline POS orders only for Sales Billing Desk
-      const [orderRes, prodRes, invRes, purchRes, clrRes, custRes, sizeRes, subCatRes] = await Promise.all([
+      const [orderRes, prodRes, invRes, clrRes, custRes, sizeRes, subCatRes, settingsRes] = await Promise.all([
         supabase.from('orders').select('*').like('id', 'KFINV%').order('created_at', { ascending: false }),
         supabase.from('products').select('*'),
         supabase.from('inventory').select('*'),
-        supabase.from('purchase_items').select('*'),
         supabase.from('colours').select('*'),
         supabase.from('customers').select('*').order('created_at', { ascending: false }),
         supabase.from('sizes').select('*').order('display_order', { ascending: true }),
-        supabase.from('sub_categories').select('*')
+        supabase.from('sub_categories').select('*'),
+        supabase.from('store_settings').select('*').eq('id', 'main_settings').maybeSingle()
       ]);
 
       if (orderRes.data) setOrders(orderRes.data);
@@ -304,11 +350,11 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
         setProductsList(sorted);
       }
       if (invRes.data) setInventoryList(invRes.data);
-      if (purchRes.data) setPurchaseItemsList(purchRes.data);
       if (clrRes.data) setColoursList(clrRes.data);
       if (custRes.data) setCustomersList(custRes.data);
       if (sizeRes.data) setAllSizesList(sizeRes.data);
       if (subCatRes.data) setSubCategoriesList(subCatRes.data);
+      if (!settingsRes.error && settingsRes.data) setStoreSettings(settingsRes.data as StoreSettingsRecord);
     } catch (err) {
       console.error('Failed to load sales data:', err);
     } finally {
@@ -429,9 +475,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
 
   const handleOpenVariantPicker = (prod: ProductRecord) => {
     setSelectedProductForModal(prod);
-    const storePrice = getProductStorePrice(prod);
-
-    setModalRate(storePrice);
+    setModalRate(0);
     setSelectedParentColor('');
     setModalColor('');
     setModalSize('');
@@ -468,106 +512,45 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     });
   }, [selectedProductForModal, productKeySet, inventoryList]);
 
-  const currentProductPurchases = useMemo(() => {
-    if (!selectedProductForModal || productKeySet.size === 0) return [];
-
-    return purchaseItemsList.filter((pi) => {
-      const piPId = cleanStr(pi.product_id);
-      return productKeySet.has(piPId) || productKeySet.has(piPId.replace(/\s+/g, ''));
-    });
-  }, [selectedProductForModal, productKeySet, purchaseItemsList]);
-
-  const getCentralizedStock = (colorName: string, sizeName?: string): number => {
+  const findInventoryVariants = (colorName: string, sizeName?: string): InventoryItemRecord[] => {
     const cTarget = cleanStr(colorName);
     const sTarget = sizeName ? cleanStr(sizeName) : null;
 
-    const invMatches = currentProductInventory.filter((inv) => {
+    return currentProductInventory.filter((inv) => {
       const c = cleanStr(inv.variant_color || 'STANDARD');
-      if (sTarget) {
-        const s = cleanStr(inv.variant_size || 'FREE SIZE');
-        return c === cTarget && s === sTarget;
-      }
-      return c === cTarget;
+      const s = cleanStr(inv.variant_size || 'FREE SIZE');
+      return c === cTarget && (!sTarget || s === sTarget);
     });
+  };
 
-    if (invMatches.length > 0) {
-      return invMatches.reduce((sum, inv) => sum + Number(inv.stock_quantity ?? 0), 0);
-    }
+  const getInventoryVariant = (colorName: string, sizeName: string): InventoryItemRecord | null => {
+    const matches = findInventoryVariants(colorName, sizeName);
+    if (matches.length !== 1) return null;
+    return matches[0];
+  };
 
-    const purchMatches = currentProductPurchases.filter((pi) => {
-      const c = cleanStr(pi.variant_color || pi.color || 'STANDARD');
-      if (sTarget) {
-        const s = cleanStr(pi.variant_size || pi.size || 'FREE SIZE');
-        return c === cTarget && s === sTarget;
-      }
-      return c === cTarget;
-    });
-
-    return purchMatches.reduce((sum, pi) => sum + Number(pi.quantity ?? 0), 0);
+  const getCentralizedStock = (colorName: string, sizeName?: string): number => {
+    const matches = findInventoryVariants(colorName, sizeName);
+    if (matches.length !== 1) return 0;
+    return Number(matches[0].stock_quantity ?? 0);
   };
 
   const allShadesForProduct = useMemo(() => {
     if (!selectedProductForModal) return [];
+
     const map = new Map<string, { stock: number; hex?: string; parent?: string }>();
 
     currentProductInventory.forEach((r) => {
       const clrKey = cleanStr(r.variant_color || 'STANDARD');
-      if (clrKey && !map.has(clrKey)) {
-        const liveStock = getCentralizedStock(clrKey);
-        const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
-        map.set(clrKey, {
-          stock: liveStock,
-          hex: matched?.hex_code || '#6d4aff',
-          parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
-        });
-      }
+      if (!clrKey || map.has(clrKey)) return;
+
+      const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
+      map.set(clrKey, {
+        stock: getCentralizedStock(clrKey),
+        hex: matched?.hex_code || '#6d4aff',
+        parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
+      });
     });
-
-    currentProductPurchases.forEach((pi) => {
-      const clrKey = cleanStr(pi.variant_color || pi.color || 'STANDARD');
-      if (clrKey && !map.has(clrKey)) {
-        const liveStock = getCentralizedStock(clrKey);
-        const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
-        map.set(clrKey, {
-          stock: liveStock,
-          hex: matched?.hex_code || '#6d4aff',
-          parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
-        });
-      }
-    });
-
-    if (map.size === 0) {
-      const prod = selectedProductForModal;
-      if (prod.colour) {
-        const rawColors = typeof prod.colour === 'string'
-          ? prod.colour.split(',').map((c) => cleanStr(c))
-          : [cleanStr(prod.colour)];
-        rawColors.filter(Boolean).forEach((clrKey) => {
-          if (!map.has(clrKey)) {
-            const matched = coloursList.find((c) => cleanStr(c.name) === clrKey);
-            map.set(clrKey, {
-              stock: 0,
-              hex: matched?.hex_code || '#6d4aff',
-              parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
-            });
-          }
-        });
-      }
-
-      if (prod.variants?.colors && Array.isArray(prod.variants.colors)) {
-        prod.variants.colors.forEach((c: string) => {
-          const clrKey = cleanStr(c);
-          if (!map.has(clrKey)) {
-            const matched = coloursList.find((x) => cleanStr(x.name) === clrKey);
-            map.set(clrKey, {
-              stock: 0,
-              hex: matched?.hex_code || '#6d4aff',
-              parent: matched?.parent_colour || matched?.parent_color || getBaseFamily(clrKey)
-            });
-          }
-        });
-      }
-    }
 
     return Array.from(map.entries()).map(([color, data]) => ({
       color,
@@ -575,7 +558,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
       hex: data.hex || '#6d4aff',
       parent: (data.parent || getBaseFamily(color)).toUpperCase()
     }));
-  }, [currentProductInventory, currentProductPurchases, selectedProductForModal, coloursList]);
+  }, [currentProductInventory, selectedProductForModal, coloursList]);
 
   const parentColorFamilies = useMemo(() => {
     const map = new Map<string, { totalStock: number; sampleHex: string; shadeCount: number }>();
@@ -620,60 +603,36 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
       .forEach((r) => {
         const szKey = cleanStr(r.variant_size || 'FREE SIZE');
         if (!map.has(szKey)) {
-          const liveStock = getCentralizedStock(chosenColor, szKey);
-          map.set(szKey, liveStock);
+          map.set(szKey, Number(r.stock_quantity ?? 0));
         }
       });
 
-    currentProductPurchases
-      .filter((pi) => cleanStr(pi.variant_color || pi.color || 'STANDARD') === chosenColor)
-      .forEach((pi) => {
-        const szKey = cleanStr(pi.variant_size || pi.size || 'FREE SIZE');
-        if (!map.has(szKey)) {
-          const liveStock = getCentralizedStock(chosenColor, szKey);
-          map.set(szKey, liveStock);
-        }
-      });
-
-    if (map.size === 0) {
-      const prod = selectedProductForModal;
-      if (prod.size) {
-        const rawSizes = typeof prod.size === 'string'
-          ? prod.size.split(',').map((s) => cleanStr(s))
-          : [cleanStr(prod.size)];
-        rawSizes.filter(Boolean).forEach((szKey) => {
-          if (!map.has(szKey)) {
-            const liveStock = getCentralizedStock(chosenColor, szKey);
-            map.set(szKey, liveStock);
-          }
-        });
-      }
-
-      if (prod.variants?.sizes && Array.isArray(prod.variants.sizes)) {
-        prod.variants.sizes.forEach((s: string) => {
-          const szKey = cleanStr(s);
-          if (!map.has(szKey)) {
-            const liveStock = getCentralizedStock(chosenColor, szKey);
-            map.set(szKey, liveStock);
-          }
-        });
-      }
-    }
-
-    if (map.size === 0) {
-      map.set('FREE SIZE', 0);
-    }
-
-    return Array.from(map.entries()).map(([size, stock]) => ({
-      size,
-      stock
-    }));
-  }, [currentProductInventory, currentProductPurchases, selectedProductForModal, modalColor]);
+    return Array.from(map.entries()).map(([size, stock]) => ({ size, stock }));
+  }, [currentProductInventory, selectedProductForModal, modalColor]);
 
   const modalCurrentStock = useMemo(() => {
     if (!modalColor || !modalSize) return 0;
     return getCentralizedStock(modalColor, modalSize);
-  }, [modalColor, modalSize, currentProductInventory, currentProductPurchases]);
+  }, [modalColor, modalSize, currentProductInventory]);
+
+  const selectedInventoryVariant = useMemo(() => {
+    if (!modalColor || !modalSize) return null;
+    return getInventoryVariant(modalColor, modalSize);
+  }, [modalColor, modalSize, currentProductInventory]);
+
+  useEffect(() => {
+    if (!modalColor || !modalSize) {
+      setModalRate(0);
+      return;
+    }
+
+    const matches = findInventoryVariants(modalColor, modalSize);
+    if (matches.length === 1) {
+      setModalRate(Number(matches[0].store_price ?? 0));
+    } else {
+      setModalRate(0);
+    }
+  }, [modalColor, modalSize, currentProductInventory]);
 
   const handleConfirmVariantToCart = () => {
     if (!selectedProductForModal) return;
@@ -690,8 +649,25 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
       return;
     }
 
+    const matches = findInventoryVariants(modalColor, modalSize);
+    if (matches.length === 0) {
+      alert('EE PRODUCT / COLOUR / SIZE KI INVENTORY VARIANT LEDU. SALES MANAGER NEW INVENTORY VARIANT CREATE CHEYYADU.');
+      return;
+    }
+    if (matches.length > 1) {
+      alert(`DUPLICATE INVENTORY VARIANTS FOUND FOR ${modalColor} / ${modalSize}. PLEASE CLEAN DUPLICATE INVENTORY ROWS FIRST.`);
+      return;
+    }
+
+    const inventoryVariant = matches[0];
+    const storePrice = Number(inventoryVariant.store_price ?? 0);
+    if (!Number.isFinite(storePrice) || storePrice <= 0) {
+      alert(`STORE PRICE INVENTORY LO 0/EMPTY GA UNDI FOR ${inventoryVariant.variant_color} / ${inventoryVariant.variant_size}.`);
+      return;
+    }
+
     const matchedHex = coloursList.find((c) => cleanStr(c.name) === cleanStr(modalColor))?.hex_code;
-    const cartId = `${selectedProductForModal.id}_${modalColor}_${modalSize}`.toUpperCase();
+    const cartId = `${selectedProductForModal.id}_${inventoryVariant.variant_color}_${inventoryVariant.variant_size}`.toUpperCase();
 
     const existingIndex = cartItems.findIndex((c) => c.cart_id === cartId);
     if (existingIndex >= 0) {
@@ -707,12 +683,12 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
           cart_id: cartId,
           product_id: selectedProductForModal.id.toUpperCase(),
           product_name: selectedProductForModal.name.toUpperCase(),
-          color: modalColor.toUpperCase(),
-          size: modalSize.toUpperCase(),
+          color: String(inventoryVariant.variant_color || modalColor).trim(),
+          size: String(inventoryVariant.variant_size || modalSize).trim(),
           quantity: modalQty,
-          unit_price: modalRate,
-          total_price: modalQty * modalRate,
-          available_stock: modalCurrentStock,
+          unit_price: storePrice,
+          total_price: modalQty * storePrice,
+          available_stock: Number(inventoryVariant.stock_quantity ?? 0),
           hex_code: matchedHex || '#6d4aff'
         }
       ]);
@@ -753,8 +729,65 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
     return cartItems.reduce((sum, item) => sum + item.quantity, 0);
   }, [cartItems]);
 
+  const editSubtotalAmount = useMemo(() => {
+    return editCartItems.reduce((sum, item) => sum + Number(item.total_price || 0), 0);
+  }, [editCartItems]);
+
+  const editMaxAllowedDiscount = useMemo(() => {
+    return Math.floor(editSubtotalAmount * 0.10);
+  }, [editSubtotalAmount]);
+
+  const editFinalPayableAmount = useMemo(() => {
+    const disc = Math.min(Number(editDiscountAmount) || 0, editMaxAllowedDiscount);
+    return Math.max(0, editSubtotalAmount - disc);
+  }, [editSubtotalAmount, editDiscountAmount, editMaxAllowedDiscount]);
+
+  const editProductInventory = useMemo(() => {
+    if (!editProductId) return [];
+    return inventoryList.filter((inv) => cleanStr(inv.product_id) === cleanStr(editProductId));
+  }, [inventoryList, editProductId]);
+
+  const editColors = useMemo(() => {
+    const seen = new Set<string>();
+    return editProductInventory
+      .map((inv) => String(inv.variant_color || 'Standard').trim())
+      .filter((color) => {
+        const key = cleanStr(color);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b));
+  }, [editProductInventory]);
+
+  const editSizes = useMemo(() => {
+    if (!editColor) return [];
+    const seen = new Set<string>();
+    return editProductInventory
+      .filter((inv) => cleanStr(inv.variant_color || 'Standard') === cleanStr(editColor))
+      .map((inv) => String(inv.variant_size || 'Free Size').trim())
+      .filter((size) => {
+        const key = cleanStr(size);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  }, [editProductInventory, editColor]);
+
+  const editSelectedInventory = useMemo(() => {
+    if (!editProductId || !editColor || !editSize) return null;
+    const matches = editProductInventory.filter(
+      (inv) =>
+        cleanStr(inv.variant_color || 'Standard') === cleanStr(editColor) &&
+        cleanStr(inv.variant_size || 'Free Size') === cleanStr(editSize)
+    );
+    return matches.length === 1 ? matches[0] : null;
+  }, [editProductInventory, editProductId, editColor, editSize]);
+
   const handleCompleteSale = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!selectedCustomer) {
       alert('CUSTOMER SELECT CHEYALI.');
       return;
@@ -764,350 +797,1356 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
       return;
     }
 
-    const appliedDisc = Math.min(Number(discountAmount) || 0, maxAllowedDiscount);
+    const numericDiscount = Number(discountAmount);
+    if (!Number.isFinite(numericDiscount) || numericDiscount < 0) {
+      alert('DISCOUNT VALUE INVALID GA UNDI.');
+      return;
+    }
+
+    const appliedDisc = Math.min(numericDiscount, maxAllowedDiscount);
     const cleanUtr = utrNumber.trim().toUpperCase();
     const isUtrPending = paymentMode === 'upi' && !cleanUtr;
 
     setSubmitting(true);
-    try {
-      const custPhoneVal = selectedCustomer.phone || selectedCustomer.mobile || undefined;
+    let orderPayload: any = null;
+    const completedMovements: Array<{
+      product_id: string;
+      variant_color: string;
+      variant_size: string;
+      quantity: number;
+    }> = [];
+    let compensationFailed = false;
 
-      const orderPayload: any = {
-        id: invoiceNo.trim().toUpperCase(),
+    try {
+      // Re-read inventory immediately before completing the sale. This prevents
+      // stale browser state from deciding the final price/variant mapping.
+      const productIds = Array.from(
+        new Set(cartItems.map((item) => item.product_id.trim().toUpperCase()))
+      );
+
+      const { data: freshInventory, error: freshInventoryError } = await supabase
+        .from('inventory')
+        .select('*')
+        .in('product_id', productIds);
+
+      if (freshInventoryError) throw freshInventoryError;
+      const freshRows = (freshInventory || []) as InventoryItemRecord[];
+
+      const normalizedItems = cartItems.map((item) => {
+        const productId = item.product_id.trim().toUpperCase();
+        const color = item.color.trim();
+        const size = item.size.trim();
+        const quantity = Number(item.quantity);
+
+        if (!Number.isInteger(quantity) || quantity <= 0) {
+          throw new Error(`INVALID QUANTITY FOR ${productId} / ${color} / ${size}`);
+        }
+
+        const matches = freshRows.filter(
+          (inv) =>
+            cleanStr(inv.product_id) === cleanStr(productId) &&
+            cleanStr(inv.variant_color || 'STANDARD') === cleanStr(color) &&
+            cleanStr(inv.variant_size || 'FREE SIZE') === cleanStr(size)
+        );
+
+        if (matches.length === 0) {
+          throw new Error(`INVENTORY VARIANT NOT FOUND: ${productId} / ${color} / ${size}`);
+        }
+        if (matches.length > 1) {
+          throw new Error(`DUPLICATE INVENTORY VARIANTS FOUND: ${productId} / ${color} / ${size}. CLEAN INVENTORY FIRST.`);
+        }
+
+        const inv = matches[0];
+        const storePrice = Number(inv.store_price ?? 0);
+        if (!Number.isFinite(storePrice) || storePrice <= 0) {
+          throw new Error(`STORE PRICE MISSING/INVALID IN INVENTORY: ${productId} / ${color} / ${size}`);
+        }
+
+        return {
+          product_id: productId,
+          product_name: item.product_name,
+          color: String(inv.variant_color || color).trim(),
+          size: String(inv.variant_size || size).trim(),
+          quantity,
+          unit_price: storePrice,
+          total_price: quantity * storePrice,
+          available_stock: Number(inv.stock_quantity ?? 0),
+          hex_code: item.hex_code
+        };
+      });
+
+      const refreshedSubtotal = normalizedItems.reduce(
+        (sum, item) => sum + item.total_price,
+        0
+      );
+      const refreshedMaxDiscount = Math.floor(refreshedSubtotal * 0.10);
+      const safeDiscount = Math.min(appliedDisc, refreshedMaxDiscount);
+      const refreshedFinalAmount = Math.max(0, refreshedSubtotal - safeDiscount);
+
+      // Get the invoice number again at the moment of save. This avoids relying
+      // on a number fetched when the billing window was opened.
+      const freshInvoiceNo = await getNextInvoiceNumber();
+      setInvoiceNo(freshInvoiceNo);
+
+      // Final duplicate-ID preflight. The database primary key remains the last
+      // line of defence; if another terminal wins the race, compensation below
+      // restores every movement before the error is surfaced.
+      const { data: existingInvoice, error: invoiceCheckError } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('id', freshInvoiceNo)
+        .maybeSingle();
+
+      if (invoiceCheckError) throw invoiceCheckError;
+      if (existingInvoice) {
+        throw new Error(`INVOICE NUMBER ${freshInvoiceNo} ALREADY EXISTS. PLEASE RETRY.`);
+      }
+
+      const custPhoneVal = selectedCustomer.phone || selectedCustomer.mobile || undefined;
+      orderPayload = {
+        id: freshInvoiceNo,
         customer_id: selectedCustomer.id.toUpperCase(),
         customer_name: selectedCustomer.name.toUpperCase(),
         customer_phone: custPhoneVal,
-        total: finalPayableAmount,
-        total_amount: subTotalAmount,
-        subtotal: subTotalAmount,
-        discount: appliedDisc,
-        discount_amount: appliedDisc,
-        final_amount: finalPayableAmount,
+        total: refreshedFinalAmount,
+        total_amount: refreshedSubtotal,
+        subtotal: refreshedSubtotal,
+        discount: safeDiscount,
+        discount_amount: safeDiscount,
+        discount_percentage: refreshedSubtotal > 0 ? (safeDiscount / refreshedSubtotal) * 100 : 0,
+        final_amount: refreshedFinalAmount,
         payment_mode: paymentMode,
         payment_method: paymentMode.toUpperCase(),
         payment_ref: paymentMode === 'upi' && cleanUtr ? cleanUtr : null,
         payment_status: isUtrPending ? 'utr_pending' : 'paid',
         order_status: 'delivered',
         status: 'completed',
-        items: cartItems,
-        created_at: new Date().toISOString()
+        items: normalizedItems,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
+
+      // Stock is intentionally not blocked at zero/negative for Store Sale.
+      // Physical stock can exist while the system stock is temporarily behind.
+      for (const item of normalizedItems) {
+        const exactRows = freshRows.filter(
+          (inv) =>
+            cleanStr(inv.product_id) === cleanStr(item.product_id) &&
+            cleanStr(inv.variant_color || 'STANDARD') === cleanStr(item.color) &&
+            cleanStr(inv.variant_size || 'FREE SIZE') === cleanStr(item.size)
+        );
+        const inventoryVariant = exactRows[0];
+
+        const { error: movementError } = await supabase.rpc('record_inventory_movement', {
+          p_product_id: inventoryVariant.product_id,
+          p_variant_color: inventoryVariant.variant_color,
+          p_variant_size: inventoryVariant.variant_size,
+          p_stock_delta: -Math.abs(item.quantity),
+          p_reserved_delta: 0,
+          p_movement_type: 'STORE_SALE',
+          p_reference_id: orderPayload.id,
+          p_notes: `STORE SALE ${orderPayload.id}`
+        });
+
+        if (movementError) throw movementError;
+
+        completedMovements.push({
+          product_id: inventoryVariant.product_id,
+          variant_color: inventoryVariant.variant_color || item.color,
+          variant_size: inventoryVariant.variant_size || item.size,
+          quantity: item.quantity
+        });
+      }
 
       const { error: orderError } = await supabase.from('orders').insert([orderPayload]);
       if (orderError) throw orderError;
 
-      try {
-        const orderItemsPayload = cartItems.map((item, idx) => ({
-          id: `oi_${invoiceNo}_${Date.now()}_${idx}`.toUpperCase(),
-          order_id: invoiceNo.trim().toUpperCase(),
-          product_id: item.product_id.toUpperCase(),
-          variant_color: item.color.toUpperCase(),
-          variant_size: item.size.toUpperCase(),
-          quantity: item.quantity,
-          price: item.unit_price,
-          total: item.total_price
-        }));
-        await supabase.from('order_items').insert(orderItemsPayload);
-      } catch (e) {
-        console.warn('order_items insert skipped:', e);
-      }
-
-      for (const item of cartItems) {
-        const { data: invRow } = await supabase
-          .from('inventory')
-          .select('id, stock_quantity')
-          .ilike('product_id', item.product_id.trim())
-          .ilike('variant_color', item.color.trim())
-          .ilike('variant_size', item.size.trim())
-          .maybeSingle();
-
-        if (invRow) {
-          const currentStock = Number(invRow.stock_quantity ?? 0);
-          const newStock = currentStock - item.quantity;
-          await supabase
-            .from('inventory')
-            .update({ stock_quantity: newStock, updated_at: new Date().toISOString() })
-            .eq('id', invRow.id);
-        } else {
-          const liveStockBeforeSale = getCentralizedStock(item.color, item.size);
-          const newStock = liveStockBeforeSale - item.quantity;
-
-          await supabase.from('inventory').insert([
-            {
-              id: `inv_${item.product_id}_${item.color}_${item.size}_${Date.now()}`.toUpperCase(),
-              product_id: item.product_id.toUpperCase(),
-              variant_color: item.color.toUpperCase(),
-              variant_size: item.size.toUpperCase(),
-              stock_quantity: newStock,
-              low_stock_threshold: 3,
-              updated_at: new Date().toISOString()
-            }
-          ]);
-        }
-      }
-
-      setCompletedInvoice({ ...orderPayload, discount_amount: appliedDisc });
-      setCompletedItems([...cartItems]);
+      setCompletedInvoice({ ...orderPayload, discount_amount: safeDiscount });
+      setCompletedItems([...normalizedItems]);
+      setCartItems([]);
       setIsBillingModalOpen(false);
-      loadData();
+      await loadData();
     } catch (err: any) {
-      alert('Failed to save order: ' + err.message);
+      // App-level transaction compensation: if any stock movement succeeded but
+      // the order was not created, reverse every successful movement through the
+      // same inventory function. Never write inventory directly from the UI.
+      for (const movement of [...completedMovements].reverse()) {
+        let compensated = false;
+        for (let attempt = 1; attempt <= 2 && !compensated; attempt += 1) {
+          try {
+            const { error: rollbackError } = await supabase.rpc('record_inventory_movement', {
+              p_product_id: movement.product_id,
+              p_variant_color: movement.variant_color,
+              p_variant_size: movement.variant_size,
+              p_stock_delta: movement.quantity,
+              p_reserved_delta: 0,
+              p_movement_type: 'STORE_SALE_ROLLBACK',
+              p_reference_id: orderPayload?.id || invoiceNo.trim().toUpperCase(),
+              p_notes: `ROLLBACK FAILED STORE SALE ${orderPayload?.id || invoiceNo.trim().toUpperCase()} (ATTEMPT ${attempt})`
+            });
+            if (!rollbackError) compensated = true;
+            else if (attempt === 2) console.error('Inventory compensation failed:', rollbackError);
+          } catch (rollbackError) {
+            if (attempt === 2) console.error('Inventory compensation failed:', rollbackError);
+          }
+        }
+        if (!compensated) compensationFailed = true;
+      }
+
+      if (compensationFailed) {
+        alert(
+          `CRITICAL: BILL WAS NOT SAVED, BUT STOCK RESTORATION FAILED FOR ONE OR MORE ITEMS.\n\nDO NOT RETRY THIS BILL. PLEASE CHECK INVENTORY MOVEMENTS BEFORE CONTINUING.`
+        );
+      } else {
+        alert('FAILED TO SAVE STORE BILL: ' + (err?.message || 'UNKNOWN ERROR'));
+      }
+      await loadData();
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleOpenEditOrder = (ord: OrderRecord) => {
+  const handleOpenEditOrder = async (ord: OrderRecord) => {
     setEditingOrder(ord);
-    setEditPaymentMode((ord.payment_mode === 'upi' ? 'upi' : 'cash'));
+    setEditCustomerName(ord.customer_name || '');
+    setEditPaymentMode(ord.payment_mode === 'upi' ? 'upi' : 'cash');
     setEditUtrNumber(ord.payment_ref || '');
     setEditStatus(ord.payment_status || 'paid');
+    setEditDiscountAmount(Number(ord.discount_amount ?? ord.discount ?? 0));
+    setEditDiscountError(null);
+    setEditProductId('');
+    setEditColor('');
+    setEditSize('');
+    setEditQty(1);
+    setEditReplaceCartId(null);
+
+    let sourceItems: any[] = Array.isArray(ord.items) ? ord.items : [];
+    if (sourceItems.length === 0) {
+      try {
+        const { data, error } = await supabase
+          .from('order_items')
+          .select('*')
+          .eq('order_id', ord.id);
+
+        if (!error && Array.isArray(data)) {
+          sourceItems = data;
+        }
+      } catch {
+        // Keep an empty cart; the modal will show a clear message.
+      }
+    }
+
+    const normalized: CartItem[] = sourceItems.map((item: any, index: number) => {
+      const productId = String(item.product_id || item.productId || '').trim().toUpperCase();
+      const color = String(item.color || item.variant_color || 'Standard').trim();
+      const size = String(item.size || item.variant_size || 'Free Size').trim();
+      const quantity = Math.max(1, Number(item.quantity ?? item.qty ?? 1) || 1);
+      const unitPrice = Number(item.unit_price ?? item.price ?? 0) || 0;
+
+      return {
+        cart_id: String(
+          item.cart_id ||
+          `${productId}_${color}_${size}_${index}`
+        ).toUpperCase(),
+        product_id: productId,
+        product_name: String(item.product_name || item.name || productId).trim().toUpperCase(),
+        color,
+        size,
+        quantity,
+        unit_price: unitPrice,
+        total_price: quantity * unitPrice,
+        available_stock: Number(item.available_stock ?? 0),
+        hex_code: item.hex_code || '#6d4aff'
+      };
+    });
+
+    setEditCartItems(normalized);
+    setEditingOrder({ ...ord, items: normalized });
+  };
+
+  const handleEditDiscountChange = (val: string) => {
+    const num = Number(val) || 0;
+
+    if (num > editMaxAllowedDiscount) {
+      setEditDiscountAmount(editMaxAllowedDiscount);
+      setEditDiscountError(`MAXIMUM 10% DISCOUNT ALLOWED (₹${editMaxAllowedDiscount})`);
+    } else {
+      setEditDiscountAmount(val);
+      setEditDiscountError(null);
+    }
+  };
+
+  const handleEditRemoveItem = (cartId: string) => {
+    setEditCartItems((prev) => prev.filter((item) => item.cart_id !== cartId));
+
+    if (editReplaceCartId === cartId) {
+      setEditReplaceCartId(null);
+      setEditProductId('');
+      setEditColor('');
+      setEditSize('');
+      setEditQty(1);
+    }
+  };
+
+  const handleEditApplySelectedItem = () => {
+    if (!editProductId || !editColor || !editSize) {
+      alert('PRODUCT, COLOUR MARIYU SIZE SELECT CHEYALI.');
+      return;
+    }
+
+    if (!editSelectedInventory) {
+      alert('SELECTED PRODUCT / COLOUR / SIZE KI EXACT CENTRAL INVENTORY VARIANT LEDU.');
+      return;
+    }
+
+    if (editQty <= 0) {
+      alert('QUANTITY KANISAM 1 UNDALI.');
+      return;
+    }
+
+    const inventoryVariant = editSelectedInventory;
+    const product = productsList.find((p) => cleanStr(p.id) === cleanStr(editProductId));
+    const storePrice = Number(inventoryVariant.store_price ?? 0);
+
+    if (!Number.isFinite(storePrice) || storePrice <= 0) {
+      alert(`STORE PRICE INVENTORY LO 0/EMPTY GA UNDI FOR ${inventoryVariant.variant_color} / ${inventoryVariant.variant_size}.`);
+      return;
+    }
+
+    const color = String(inventoryVariant.variant_color || editColor).trim();
+    const size = String(inventoryVariant.variant_size || editSize).trim();
+    const productId = String(inventoryVariant.product_id || editProductId).trim().toUpperCase();
+    const cartId = `${productId}_${color}_${size}`.toUpperCase();
+    const matchedHex =
+      coloursList.find((c) => cleanStr(c.name) === cleanStr(color))?.hex_code ||
+      '#6d4aff';
+
+    const replacement: CartItem = {
+      cart_id: cartId,
+      product_id: productId,
+      product_name: String(product?.name || productId).trim().toUpperCase(),
+      color,
+      size,
+      quantity: editQty,
+      unit_price: storePrice,
+      total_price: editQty * storePrice,
+      available_stock: Number(inventoryVariant.stock_quantity ?? 0),
+      hex_code: matchedHex
+    };
+
+    setEditCartItems((prev) => {
+      const replaceId = editReplaceCartId;
+
+      if (replaceId) {
+        return prev.map((item) =>
+          item.cart_id === replaceId ? replacement : item
+        );
+      }
+
+      const existingIndex = prev.findIndex(
+        (item) =>
+          cleanStr(item.product_id) === cleanStr(replacement.product_id) &&
+          cleanStr(item.color) === cleanStr(replacement.color) &&
+          cleanStr(item.size) === cleanStr(replacement.size)
+      );
+
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        const existing = updated[existingIndex];
+        const newQty = existing.quantity + replacement.quantity;
+        updated[existingIndex] = {
+          ...existing,
+          quantity: newQty,
+          total_price: newQty * existing.unit_price
+        };
+        return updated;
+      }
+
+      return [...prev, replacement];
+    });
+
+    setEditReplaceCartId(null);
+    setEditProductId('');
+    setEditColor('');
+    setEditSize('');
+    setEditQty(1);
+  };
+
+  const handleEditLoadItem = (item: CartItem) => {
+    setEditReplaceCartId(item.cart_id);
+    setEditProductId(item.product_id);
+    setEditColor(item.color);
+    setEditSize(item.size);
+    setEditQty(item.quantity);
+  };
+
+  const handleEditQuantityChange = (cartId: string, quantity: number) => {
+    const safeQty = Math.max(1, Math.floor(Number(quantity) || 1));
+
+    setEditCartItems((prev) =>
+      prev.map((item) =>
+        item.cart_id === cartId
+          ? { ...item, quantity: safeQty, total_price: safeQty * item.unit_price }
+          : item
+      )
+    );
   };
 
   const handleSaveEditedOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingOrder) return;
+
+    if (editCartItems.length === 0) {
+      alert('INVOICE LO KANISAM OKA ITEM AINA UNDALI.');
+      return;
+    }
+
+    const numericDiscount = Number(editDiscountAmount);
+    if (!Number.isFinite(numericDiscount) || numericDiscount < 0) {
+      alert('DISCOUNT VALUE INVALID GA UNDI.');
+      return;
+    }
+
+    const safeDiscount = Math.min(numericDiscount, editMaxAllowedDiscount);
+    const cleanCustomerName = editCustomerName.trim().toUpperCase();
+
+    if (!cleanCustomerName) {
+      alert('CUSTOMER NAME KHALI GA UNDARADU.');
+      return;
+    }
+
     setSavingEdit(true);
 
-    try {
-      const cleanUtr = editUtrNumber.trim().toUpperCase();
-      const statusToSave = editPaymentMode === 'upi' && !cleanUtr ? 'utr_pending' : editStatus;
+    const appliedMovements: Array<{
+      product_id: string;
+      variant_color: string;
+      variant_size: string;
+      stock_delta: number;
+      movement_type: string;
+    }> = [];
 
-      const { error } = await supabase
+    try {
+      const productIds = Array.from(
+        new Set(editCartItems.map((item) => item.product_id.trim().toUpperCase()))
+      );
+
+      const { data: freshInventory, error: inventoryError } = await supabase
+        .from('inventory')
+        .select('*')
+        .in('product_id', productIds);
+
+      if (inventoryError) throw inventoryError;
+
+      const freshRows = (freshInventory || []) as InventoryItemRecord[];
+
+      // Every edited item must already exist in central inventory.
+      // SalesManager never creates an inventory variant.
+      const validatedItems = editCartItems.map((item) => {
+        const matches = freshRows.filter(
+          (inv) =>
+            cleanStr(inv.product_id) === cleanStr(item.product_id) &&
+            cleanStr(inv.variant_color || 'Standard') === cleanStr(item.color) &&
+            cleanStr(inv.variant_size || 'Free Size') === cleanStr(item.size)
+        );
+
+        if (matches.length === 0) {
+          throw new Error(
+            `INVENTORY VARIANT NOT FOUND: ${item.product_id} / ${item.color} / ${item.size}`
+          );
+        }
+
+        if (matches.length > 1) {
+          throw new Error(
+            `DUPLICATE INVENTORY VARIANTS FOUND: ${item.product_id} / ${item.color} / ${item.size}. CLEAN INVENTORY FIRST.`
+          );
+        }
+
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+          throw new Error(`INVALID QUANTITY FOR ${item.product_id} / ${item.color} / ${item.size}`);
+        }
+
+        return {
+          ...item,
+          product_id: String(matches[0].product_id).trim().toUpperCase(),
+          color: String(matches[0].variant_color || item.color).trim(),
+          size: String(matches[0].variant_size || item.size).trim()
+        };
+      });
+
+      const refreshedSubtotal = validatedItems.reduce(
+        (sum, item) => sum + item.quantity * Number(item.unit_price || 0),
+        0
+      );
+
+      const refreshedMaxDiscount = Math.floor(refreshedSubtotal * 0.10);
+      const finalDiscount = Math.min(safeDiscount, refreshedMaxDiscount);
+      const finalAmount = Math.max(0, refreshedSubtotal - finalDiscount);
+
+      // Build old/new quantity maps by exact normalized Product/Colour/Size key.
+      const makeKey = (productId: string, color: string, size: string) =>
+        `${cleanStr(productId)}|${cleanStr(color)}|${cleanStr(size)}`;
+
+      const oldItems: any[] = Array.isArray(editingOrder.items) ? editingOrder.items : [];
+      const oldMap = new Map<string, {
+        product_id: string;
+        color: string;
+        size: string;
+        quantity: number;
+      }>();
+
+      for (const item of oldItems) {
+        const productId = String(item.product_id || item.productId || '').trim().toUpperCase();
+        const color = String(item.color || item.variant_color || 'Standard').trim();
+        const size = String(item.size || item.variant_size || 'Free Size').trim();
+        const quantity = Math.max(0, Number(item.quantity ?? item.qty ?? 0) || 0);
+
+        if (!productId || quantity <= 0) continue;
+
+        const key = makeKey(productId, color, size);
+        const existing = oldMap.get(key);
+
+        oldMap.set(key, {
+          product_id: productId,
+          color,
+          size,
+          quantity: (existing?.quantity || 0) + quantity
+        });
+      }
+
+      const newMap = new Map<string, {
+        product_id: string;
+        color: string;
+        size: string;
+        quantity: number;
+      }>();
+
+      for (const item of validatedItems) {
+        const key = makeKey(item.product_id, item.color, item.size);
+        const existing = newMap.get(key);
+
+        newMap.set(key, {
+          product_id: item.product_id,
+          color: item.color,
+          size: item.size,
+          quantity: (existing?.quantity || 0) + item.quantity
+        });
+      }
+
+      const allKeys = new Set([...oldMap.keys(), ...newMap.keys()]);
+
+      // Positive delta = old quantity is being removed from the bill -> restore stock.
+      // Negative delta = new quantity is being added to the bill -> deduct stock.
+      for (const key of allKeys) {
+        const oldItem = oldMap.get(key);
+        const newItem = newMap.get(key);
+
+        const oldQty = oldItem?.quantity || 0;
+        const newQty = newItem?.quantity || 0;
+        const delta = oldQty - newQty;
+
+        if (delta === 0) continue;
+
+        const item = newItem || oldItem!;
+        const movementType = delta > 0 ? 'ORDER_EDIT' : 'STORE_SALE';
+        const stockDelta = delta;
+
+        const { error: movementError } = await supabase.rpc('record_inventory_movement', {
+          p_product_id: item.product_id,
+          p_variant_color: item.color,
+          p_variant_size: item.size,
+          p_stock_delta: stockDelta,
+          p_reserved_delta: 0,
+          p_movement_type: movementType,
+          p_reference_id: editingOrder.id,
+          p_notes:
+            delta > 0
+              ? `ORDER EDIT RESTORE ${editingOrder.id}`
+              : `ORDER EDIT SALE ${editingOrder.id}`
+        });
+
+        if (movementError) throw movementError;
+
+        appliedMovements.push({
+          product_id: item.product_id,
+          variant_color: item.color,
+          variant_size: item.size,
+          stock_delta: stockDelta,
+          movement_type: movementType
+        });
+      }
+
+      const cleanUtr = editUtrNumber.trim().toUpperCase();
+      const statusToSave =
+        editPaymentMode === 'upi' && !cleanUtr ? 'utr_pending' : editStatus;
+
+      const now = new Date().toISOString();
+
+      const { error: orderError } = await supabase
         .from('orders')
         .update({
+          customer_name: cleanCustomerName,
+          subtotal: refreshedSubtotal,
+          total_amount: refreshedSubtotal,
+          total: finalAmount,
+          discount: finalDiscount,
+          discount_amount: finalDiscount,
+          discount_percentage: refreshedSubtotal > 0
+            ? (finalDiscount / refreshedSubtotal) * 100
+            : 0,
+          final_amount: finalAmount,
           payment_mode: editPaymentMode,
           payment_method: editPaymentMode.toUpperCase(),
           payment_ref: editPaymentMode === 'upi' && cleanUtr ? cleanUtr : null,
           payment_status: statusToSave,
-          updated_at: new Date().toISOString()
+          items: validatedItems,
+          updated_at: now
         })
         .eq('id', editingOrder.id);
 
-      if (error) throw error;
+      if (orderError) throw orderError;
 
       setEditingOrder(null);
-      loadData();
+      setEditCartItems([]);
+      setEditDiscountAmount(0);
+      setEditDiscountError(null);
+      await loadData();
     } catch (err: any) {
-      alert('Failed to update invoice: ' + err.message);
+      // If the order update failed after inventory changes, compensate every
+      // successful movement through the same centralized inventory function.
+      let compensationFailed = false;
+
+      for (const movement of [...appliedMovements].reverse()) {
+        const reverseDelta = -movement.stock_delta;
+
+        const rollbackMovementType = reverseDelta < 0 ? 'STORE_SALE' : 'ORDER_EDIT';
+
+        const { error: rollbackError } = await supabase.rpc(
+          'record_inventory_movement',
+          {
+            p_product_id: movement.product_id,
+            p_variant_color: movement.variant_color,
+            p_variant_size: movement.variant_size,
+            p_stock_delta: reverseDelta,
+            p_reserved_delta: 0,
+            p_movement_type: rollbackMovementType,
+            p_reference_id: editingOrder.id,
+            p_notes: `ROLLBACK ORDER EDIT ${editingOrder.id}`
+          }
+        );
+
+        if (rollbackError) {
+          compensationFailed = true;
+          console.error('Order edit inventory compensation failed:', rollbackError);
+        }
+      }
+
+      if (compensationFailed) {
+        alert(
+          `CRITICAL: INVOICE WAS NOT UPDATED, BUT STOCK RESTORATION FAILED FOR ONE OR MORE ITEMS.\n\n` +
+          `DO NOT RETRY THIS EDIT. PLEASE CHECK INVENTORY MOVEMENTS FOR ${editingOrder.id}.`
+        );
+      } else {
+        alert('FAILED TO UPDATE STORE BILL: ' + (err?.message || 'UNKNOWN ERROR'));
+      }
+
+      await loadData();
     } finally {
       setSavingEdit(false);
     }
   };
 
   const handleDeleteOrder = async (ord: OrderRecord) => {
-    if (!confirm(`Are you sure you want to delete invoice ${ord.id}? The sold quantities will be automatically restored back to stock.`)) {
-      return;
-    }
+    if (deletingOrderId) return;
 
+    const amount = Number(ord.final_amount ?? ord.total ?? ord.total_amount ?? 0);
+    const confirmed = window.confirm(
+      `DELETE STORE BILL ${ord.id}?\n\n` +
+      `Customer: ${ord.customer_name || '-'}\n` +
+      `Amount: ₹${amount.toLocaleString('en-IN')}\n\n` +
+      `The inventory quantities will be restored only if the database restore operation succeeds.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingOrderId(ord.id);
     try {
-      let itemsToRollback: any[] = [];
-      if (ord.items && Array.isArray(ord.items)) {
-        itemsToRollback = ord.items;
-      } else {
-        const { data: dbItems } = await supabase.from('order_items').select('*').eq('order_id', ord.id);
-        itemsToRollback = dbItems || [];
-      }
+      const { error } = await supabase.rpc(
+        'delete_order_with_inventory_restore',
+        { order_id: ord.id }
+      );
 
-      for (const it of itemsToRollback) {
-        const pId = String(it.product_id || '').toUpperCase().trim();
-        const color = String(it.color || it.variant_color || 'STANDARD').toUpperCase().trim();
-        const size = String(it.size || it.variant_size || 'FREE SIZE').toUpperCase().trim();
-        const qty = Number(it.quantity || 0);
-
-        const { data: invRow } = await supabase
-          .from('inventory')
-          .select('id, stock_quantity')
-          .ilike('product_id', pId)
-          .ilike('variant_color', color)
-          .ilike('variant_size', size)
-          .maybeSingle();
-
-        if (invRow) {
-          const restoredQty = Number(invRow.stock_quantity ?? 0) + qty;
-          await supabase
-            .from('inventory')
-            .update({ stock_quantity: restoredQty, updated_at: new Date().toISOString() })
-            .eq('id', invRow.id);
-        }
-      }
-
-      await supabase.from('order_items').delete().eq('order_id', ord.id);
-      const { error } = await supabase.from('orders').delete().eq('id', ord.id);
       if (error) throw error;
 
       setOrders((prev) => prev.filter((o) => o.id !== ord.id));
+      setViewingOrder((current) => current?.id === ord.id ? null : current);
+      setViewingOrderItems((current) => current);
+      await loadData();
     } catch (err: any) {
-      alert('Failed to delete invoice: ' + err.message);
+      alert(
+        'BILL DELETE FAILED.\n\n' +
+        (err?.message || 'UNKNOWN ERROR') +
+        '\n\nBILL WAS NOT REMOVED FROM THE SCREEN. PLEASE VERIFY INVENTORY BEFORE RETRYING.'
+      );
+    } finally {
+      setDeletingOrderId(null);
     }
   };
 
   const handlePrintReceipt = (inv: OrderRecord, itemsList: any[]) => {
     const lineItems = itemsList.length > 0 ? itemsList : (inv.items || inv.items_summary || []);
-    const printWindow = window.open('', '_blank', 'width=850,height=900');
+    const printWindow = window.open('', '_blank', 'width=1000,height=1000');
+
     if (!printWindow) {
       alert('Please allow popups to generate receipt PDF.');
       return;
     }
 
-    const itemsRowsHtml = lineItems.map((it: any, idx: number) => `
-      <tr style="border-bottom: 1px dashed #ddd;">
-        <td style="padding: 8px 4px; font-weight: bold;">
-          ${idx + 1}. ${(it.product_name || it.product_id || '').toUpperCase()}
-          <div style="font-size: 11px; color: #555; font-weight: normal; margin-top: 2px;">
-            ${(it.color || it.variant_color || '').toUpperCase()} • ${(it.size || it.variant_size || '').toUpperCase()}
+    const settings = storeSettings;
+    const businessName = settings?.store_name || 'Kashvi Fashions';
+    const logoUrl = settings?.logo_url || '';
+    const businessAddress = [
+      settings?.sender_address,
+      settings?.city,
+      settings?.state,
+      settings?.pincode
+    ].filter(Boolean).join(', ');
+    const businessPhone = settings?.support_phone || settings?.whatsapp_no || '';
+    const businessEmail = settings?.support_email || '';
+
+    const money = (value: any) =>
+      `₹${Number(value || 0).toLocaleString('en-IN', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      })}`;
+
+    const phoneDisplay = businessPhone
+      ? `+91 ${String(businessPhone).replace(/\D/g, '').slice(-10)}`
+      : '';
+
+    const lineItemsHtml = lineItems.map((it: any, idx: number) => `
+      <tr>
+        <td class="serial">${String(idx + 1).padStart(2, '0')}</td>
+        <td class="description">
+          <div class="product-name">${(it.product_name || it.product_id || '').toUpperCase()}</div>
+          <div class="variant">
+            ${(it.color || it.variant_color || '').toUpperCase()}
+            ${(it.size || it.variant_size)
+              ? `<span class="dot">•</span>${(it.size || it.variant_size || '').toUpperCase()}`
+              : ''}
           </div>
         </td>
-        <td style="padding: 8px 4px; text-align: center; font-weight: bold;">${it.quantity}</td>
-        <td style="padding: 8px 4px; text-align: right; color: #333;">₹${Number(it.unit_price || it.price || 0).toLocaleString('en-IN')}</td>
-        <td style="padding: 8px 4px; text-align: right; font-weight: bold;">₹${Number(it.total_price || it.total || 0).toLocaleString('en-IN')}</td>
+        <td class="number center">${it.quantity}</td>
+        <td class="number right">${money(it.unit_price || it.price)}</td>
+        <td class="number right strong">${money(it.total_price || it.total)}</td>
       </tr>
     `).join('');
 
     const subtotalVal = Number(inv.total_amount || inv.subtotal || inv.total || 0);
     const discountVal = Number(inv.discount_amount || inv.discount || 0);
     const finalVal = Number(inv.final_amount || inv.total || 0);
+    const paymentLabel = (inv.payment_mode || 'CASH').toUpperCase();
+    const paymentStatus = inv.payment_status === 'utr_pending' ? 'UTR PENDING' : 'PAID';
+    const dateText = new Date(inv.created_at).toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const logoHtml = logoUrl
+      ? `<img class="logo" src="${logoUrl}" alt="${businessName}" onerror="this.style.display='none'; document.getElementById('brandFallback').style.display='block';" />`
+      : '';
 
     const invoiceHtml = `
       <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="UTF-8" />
           <title>Invoice_${inv.id}</title>
           <style>
             @page {
               size: A4 portrait;
-              margin: 15mm;
-            }
-            body {
-              font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-              color: #111;
               margin: 0;
-              padding: 20px;
-              background: #fff;
+            }
+
+            * {
+              box-sizing: border-box;
+            }
+
+            html,
+            body {
+              margin: 0;
+              padding: 0;
+              background: #e9e4da;
+              color: #211d18;
               -webkit-print-color-adjust: exact;
               print-color-adjust: exact;
             }
-            .invoice-box {
-              max-width: 650px;
-              margin: auto;
-              border: 1px solid #eee;
-              padding: 25px;
-              box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+
+            body {
+              font-family: Arial, Helvetica, sans-serif;
             }
-            .header-table, .meta-table, .items-table, .totals-table {
+
+            .page {
+              width: 210mm;
+              min-height: 297mm;
+              padding: 8mm;
+              margin: 0 auto;
+              background: #e9e4da;
+            }
+
+            .invoice {
+              position: relative;
+              width: 100%;
+              min-height: 281mm;
+              padding: 11mm 11mm 9mm;
+              overflow: hidden;
+              background: #fffdf8;
+              border: 1px solid #c2a25d;
+            }
+
+            .invoice::before {
+              content: "";
+              position: absolute;
+              inset: 4px;
+              border: 1px solid #ead9b0;
+              pointer-events: none;
+            }
+
+            .top-band {
+              height: 7px;
+              margin: -11mm -11mm 0;
+              background: #27211b;
+              border-bottom: 2px solid #c4a15a;
+            }
+
+            .header {
+              display: grid;
+              grid-template-columns: 55% 45%;
+              min-height: 100px;
+              padding-top: 18px;
+              align-items: center;
+            }
+
+            .brand {
+              display: flex;
+              align-items: center;
+              min-width: 0;
+            }
+
+            .logo-wrap {
+              width: 150px;
+              min-height: 74px;
+              display: flex;
+              align-items: center;
+              justify-content: flex-start;
+            }
+
+            .logo {
+              display: block;
+              max-width: 145px;
+              max-height: 72px;
+              width: auto;
+              height: auto;
+              object-fit: contain;
+            }
+
+            .brand-fallback {
+              display: ${logoUrl ? 'none' : 'block'};
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 25px;
+              line-height: 1.05;
+              font-weight: 700;
+              letter-spacing: 1.2px;
+              color: #29221b;
+              text-transform: uppercase;
+            }
+
+            .brand-details {
+              padding-left: 16px;
+              border-left: 1px solid #d8c79f;
+              max-width: 290px;
+            }
+
+            .brand-label {
+              margin-bottom: 6px;
+              font-size: 8px;
+              line-height: 1;
+              letter-spacing: 2.4px;
+              font-weight: 800;
+              color: #a17d32;
+              text-transform: uppercase;
+            }
+
+            .brand-address {
+              font-size: 9.5px;
+              line-height: 1.55;
+              color: #61584e;
+            }
+
+            .brand-contact {
+              margin-top: 5px;
+              font-size: 8.7px;
+              color: #786d61;
+            }
+
+            .invoice-head {
+              text-align: right;
+            }
+
+            .invoice-word {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 43px;
+              line-height: .9;
+              font-weight: 700;
+              letter-spacing: 2px;
+              color: #211c17;
+            }
+
+            .invoice-kicker {
+              margin-bottom: 8px;
+              font-size: 7.5px;
+              font-weight: 800;
+              letter-spacing: 3px;
+              color: #a17d32;
+              text-transform: uppercase;
+            }
+
+            .invoice-number {
+              display: inline-block;
+              margin-top: 13px;
+              padding: 8px 14px;
+              background: #29221b;
+              color: #f6e9c9;
+              font-size: 10px;
+              line-height: 1;
+              font-weight: 800;
+              letter-spacing: 1.4px;
+            }
+
+            .invoice-date {
+              margin-top: 7px;
+              font-size: 9px;
+              color: #71675d;
+            }
+
+            .gold-rule {
+              height: 1px;
+              margin: 10px 0 17px;
+              background: #c4a15a;
+            }
+
+            .section-bar {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              border-top: 2px solid #2a231c;
+              border-bottom: 1px solid #d7c49a;
+              background: #faf6ed;
+            }
+
+            .section {
+              min-height: 82px;
+              padding: 12px 15px;
+            }
+
+            .section + .section {
+              border-left: 1px solid #d7c49a;
+            }
+
+            .section-label {
+              margin-bottom: 8px;
+              font-size: 7.5px;
+              font-weight: 800;
+              letter-spacing: 2px;
+              color: #9d7830;
+              text-transform: uppercase;
+            }
+
+            .customer-name {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 19px;
+              line-height: 1.05;
+              font-weight: 700;
+              color: #29221b;
+              text-transform: uppercase;
+            }
+
+            .customer-phone {
+              margin-top: 7px;
+              font-size: 9.5px;
+              color: #625950;
+            }
+
+            .payment-row {
+              display: flex;
+              align-items: center;
+              gap: 7px;
+              margin-top: 4px;
+            }
+
+            .payment-pill {
+              padding: 7px 11px;
+              border: 1px solid #b9954e;
+              background: #fffdf8;
+              color: #4c3918;
+              font-size: 8.5px;
+              line-height: 1;
+              font-weight: 800;
+              letter-spacing: 1px;
+            }
+
+            .payment-ref {
+              margin-top: 7px;
+              font-size: 8.5px;
+              color: #776d63;
+            }
+
+            .items-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: end;
+              margin-top: 21px;
+              margin-bottom: 7px;
+            }
+
+            .items-title {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 18px;
+              font-weight: 700;
+              color: #28211b;
+            }
+
+            .items-count {
+              font-size: 7.5px;
+              font-weight: 800;
+              letter-spacing: 1.5px;
+              color: #9d7830;
+              text-transform: uppercase;
+            }
+
+            .items-table {
               width: 100%;
               border-collapse: collapse;
+              table-layout: fixed;
             }
-            .title {
-              font-size: 24px;
-              font-weight: 900;
-              letter-spacing: 1.5px;
-              color: #111;
-            }
-            .subtitle {
-              font-size: 11px;
-              color: #666;
+
+            .items-table thead th {
+              padding: 10px 8px;
+              background: #29221b;
+              color: #f4e5c1;
+              border-top: 2px solid #bd984f;
+              border-bottom: 2px solid #bd984f;
+              font-size: 7.8px;
+              font-weight: 800;
+              letter-spacing: 1.4px;
               text-transform: uppercase;
-              letter-spacing: 1px;
-              margin-top: 3px;
             }
-            .tag {
-              display: inline-block;
-              padding: 3px 8px;
-              border-radius: 4px;
-              font-size: 11px;
-              font-weight: bold;
-              background: #f0fdf4;
-              color: #166534;
-              border: 1px solid #bbf7d0;
+
+            .items-table tbody tr {
+              border-bottom: 1px solid #ded6c8;
             }
-            .totals-table td {
+
+            .items-table tbody tr:last-child {
+              border-bottom: 1px solid #bfa36a;
+            }
+
+            .items-table tbody td {
+              padding: 13px 8px;
+              vertical-align: middle;
+            }
+
+            .serial {
+              width: 8%;
+              text-align: center;
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 10px;
+              font-weight: 700;
+              color: #9c7831;
+            }
+
+            .description {
+              width: 44%;
+            }
+
+            .product-name {
+              font-size: 11.5px;
+              line-height: 1.25;
+              font-weight: 800;
+              color: #28221c;
+            }
+
+            .variant {
+              margin-top: 5px;
+              font-size: 8.5px;
+              letter-spacing: .8px;
+              color: #81766a;
+            }
+
+            .dot {
+              padding: 0 5px;
+              color: #b58d3f;
+            }
+
+            .number {
+              width: 16%;
+              font-size: 10.5px;
+              color: #3f3730;
+              white-space: nowrap;
+            }
+
+            .center {
+              text-align: center;
+            }
+
+            .right {
+              text-align: right;
+            }
+
+            .strong {
+              font-weight: 800;
+              color: #28221c;
+            }
+
+            .summary-area {
+              display: grid;
+              grid-template-columns: 54% 46%;
+              gap: 18px;
+              margin-top: 21px;
+              align-items: stretch;
+            }
+
+            .thankyou {
+              padding: 16px 18px;
+              border-left: 4px solid #b58e42;
+              background: #f8f3e7;
+            }
+
+            .thankyou-title {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 15px;
+              line-height: 1.15;
+              font-weight: 700;
+              color: #3a2b18;
+            }
+
+            .thankyou-copy {
+              margin-top: 7px;
+              max-width: 390px;
+              font-size: 8.8px;
+              line-height: 1.6;
+              color: #766b61;
+            }
+
+            .totals {
+              padding: 14px 16px;
+              border: 1px solid #bfa36a;
+              background: #fffdf8;
+            }
+
+            .total-line {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
               padding: 4px 0;
+              font-size: 9.5px;
+              color: #6f655b;
             }
+
+            .discount-line {
+              color: #9a5046;
+            }
+
+            .total-separator {
+              height: 1px;
+              margin: 8px 0 7px;
+              background: #c8aa66;
+            }
+
+            .net-line {
+              display: flex;
+              justify-content: space-between;
+              align-items: baseline;
+            }
+
+            .net-label {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 16px;
+              font-weight: 700;
+              color: #28211b;
+            }
+
+            .net-value {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 22px;
+              font-weight: 700;
+              color: #8b6825;
+            }
+
+            .bottom-rule {
+              height: 1px;
+              margin: 26px 0 10px;
+              background: #d8c7a3;
+            }
+
+            .footer {
+              text-align: center;
+              padding-bottom: 2px;
+            }
+
+            .footer-thanks {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 12px;
+              font-weight: 700;
+              color: #3c2e1c;
+            }
+
+            .footer-contact {
+              margin-top: 5px;
+              font-size: 8px;
+              line-height: 1.5;
+              color: #776c61;
+            }
+
+            .footer-brand {
+              margin-top: 6px;
+              font-size: 7px;
+              font-weight: 800;
+              letter-spacing: 3px;
+              color: #a17d32;
+              text-transform: uppercase;
+            }
+
             @media print {
-              .no-print { display: none; }
-              .invoice-box { border: none; box-shadow: none; padding: 0; }
+              html,
+              body {
+                background: #e9e4da;
+              }
+
+              .page {
+                margin: 0;
+              }
             }
           </style>
         </head>
+
         <body>
-          <div class="invoice-box">
-            <table class="header-table">
-              <tr>
-                <td>
-                  <div class="title">KASHVI CREATIONS</div>
-                  <div class="subtitle">Premium Ethnic & Contemporary Studio</div>
-                  <div style="font-size: 11px; color: #444; margin-top: 4px;">Kakinada, Andhra Pradesh • Mobile: +91 86863 53574</div>
-                </td>
-                <td style="text-align: right; vertical-align: top;">
-                  <div style="font-size: 18px; font-weight: 900; color: #000;">TAX INVOICE</div>
-                  <div style="font-size: 13px; font-weight: bold; color: #0284c7; margin-top: 3px;">#${inv.id}</div>
-                  <div style="font-size: 11px; color: #666; margin-top: 2px;">Date: ${new Date(inv.created_at).toLocaleDateString('en-IN')}</div>
-                </td>
-              </tr>
-            </table>
+          <div class="page">
+            <div class="invoice">
+              <div class="top-band"></div>
 
-            <hr style="border: 0; border-top: 1.5px solid #222; margin: 15px 0;" />
-
-            <table class="meta-table" style="font-size: 12px; margin-bottom: 20px;">
-              <tr>
-                <td style="width: 50%; vertical-align: top;">
-                  <div style="font-size: 10px; color: #777; font-weight: bold; text-transform: uppercase;">Billed To:</div>
-                  <div style="font-size: 14px; font-weight: bold; margin-top: 2px;">${inv.customer_name} ${inv.customer_id ? '<span style="font-size: 11px; color: #666;">[' + inv.customer_id + ']</span>' : ''}</div>
-                  <div style="color: #444; margin-top: 2px;">Phone: ${inv.customer_phone || 'Walk-in Customer'}</div>
-                </td>
-                <td style="width: 50%; text-align: right; vertical-align: top;">
-                  <div style="font-size: 10px; color: #777; font-weight: bold; text-transform: uppercase;">Payment Details:</div>
-                  <div style="margin-top: 3px;">
-                    <span class="tag">${(inv.payment_mode || 'CASH').toUpperCase()} - ${inv.payment_status === 'utr_pending' ? 'UTR PENDING' : 'PAID'}</span>
+              <div class="header">
+                <div class="brand">
+                  <div class="logo-wrap">
+                    ${logoHtml}
+                    <div id="brandFallback" class="brand-fallback">${businessName}</div>
                   </div>
-                  ${inv.payment_ref ? `<div style="font-size: 10.5px; color: #555; margin-top: 4px;">Ref/UTR: ${inv.payment_ref}</div>` : ''}
-                </td>
-              </tr>
-            </table>
 
-            <table class="items-table" style="font-size: 12px;">
-              <thead>
-                <tr style="background: #f8fafc; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
-                  <th style="padding: 8px 4px; text-align: left; font-weight: 800;">ITEM DESCRIPTION</th>
-                  <th style="padding: 8px 4px; text-align: center; font-weight: 800; width: 60px;">QTY</th>
-                  <th style="padding: 8px 4px; text-align: right; font-weight: 800; width: 90px;">PRICE</th>
-                  <th style="padding: 8px 4px; text-align: right; font-weight: 800; width: 100px;">AMOUNT</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${itemsRowsHtml}
-              </tbody>
-            </table>
+                  <div class="brand-details">
+                    <div class="brand-label">Kashvi Fashions</div>
+                    ${businessAddress ? `<div class="brand-address">${businessAddress}</div>` : ''}
+                    ${(phoneDisplay || businessEmail)
+                      ? `<div class="brand-contact">${phoneDisplay}${phoneDisplay && businessEmail ? ' &nbsp;•&nbsp; ' : ''}${businessEmail}</div>`
+                      : ''}
+                  </div>
+                </div>
 
-            <table class="totals-table" style="font-size: 12px; margin-top: 15px;">
-              <tr>
-                <td style="width: 60%;"></td>
-                <td style="width: 20%; color: #666;">Subtotal:</td>
-                <td style="width: 20%; text-align: right; font-weight: bold;">₹${subtotalVal.toLocaleString('en-IN')}</td>
-              </tr>
-              ${discountVal > 0 ? `
-                <tr>
-                  <td></td>
-                  <td style="color: #dc2626;">Discount:</td>
-                  <td style="text-align: right; color: #dc2626; font-weight: bold;">-₹${discountVal.toLocaleString('en-IN')}</td>
-                </tr>
-              ` : ''}
-              <tr style="border-top: 1.5px solid #222; font-size: 15px;">
-                <td></td>
-                <td style="font-weight: 900; padding-top: 8px;">Net Payable:</td>
-                <td style="text-align: right; font-weight: 900; color: #059669; padding-top: 8px;">₹${finalVal.toLocaleString('en-IN')}</td>
-              </tr>
-            </table>
+                <div class="invoice-head">
+                  <div class="invoice-kicker">Official Sales Document</div>
+                  <div class="invoice-word">INVOICE</div>
+                  <div class="invoice-number"># ${inv.id}</div>
+                  <div class="invoice-date">Issued ${dateText}</div>
+                </div>
+              </div>
 
-            <div style="margin-top: 35px; padding-top: 15px; border-top: 1px dashed #cbd5e1; text-align: center; font-size: 11px; color: #64748b;">
-              <strong>Thank you for choosing Kashvi Creations!</strong><br />
-              Goods once sold can be exchanged within 7 days with original invoice & tags intact.
+              <div class="gold-rule"></div>
+
+              <div class="section-bar">
+                <div class="section">
+                  <div class="section-label">Billed To</div>
+                  <div class="customer-name">${inv.customer_name || 'Walk-in Customer'}</div>
+                  <div class="customer-phone">Mobile: ${inv.customer_phone || '—'}</div>
+                </div>
+
+                <div class="section">
+                  <div class="section-label">Payment Details</div>
+                  <div class="payment-row">
+                    <span class="payment-pill">${paymentLabel}</span>
+                    <span class="payment-pill">${paymentStatus}</span>
+                  </div>
+                  ${inv.payment_ref
+                    ? `<div class="payment-ref">Reference / UTR: ${inv.payment_ref}</div>`
+                    : ''}
+                </div>
+              </div>
+
+              <div class="items-header">
+                <div class="items-title">Order Details</div>
+                <div class="items-count">${lineItems.length} ${lineItems.length === 1 ? 'Item' : 'Items'} &nbsp;•&nbsp; Kashvi Fashions</div>
+              </div>
+
+              <table class="items-table">
+                <thead>
+                  <tr>
+                    <th style="width:8%; text-align:center;">No.</th>
+                    <th style="width:44%; text-align:left;">Item Description</th>
+                    <th style="width:16%; text-align:center;">Qty</th>
+                    <th style="width:16%; text-align:right;">Unit Price</th>
+                    <th style="width:16%; text-align:right;">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${lineItemsHtml}
+                </tbody>
+              </table>
+
+              <div class="summary-area">
+                <div class="thankyou">
+                  <div class="thankyou-title">Thank you for choosing ${businessName}</div>
+                  <div class="thankyou-copy">
+                    We appreciate your purchase. Please retain this invoice for your records.
+                    We look forward to serving you again.
+                  </div>
+                </div>
+
+                <div class="totals">
+                  <div class="total-line">
+                    <span>Subtotal</span>
+                    <strong>${money(subtotalVal)}</strong>
+                  </div>
+
+                  ${discountVal > 0
+                    ? `<div class="total-line discount-line"><span>Discount</span><strong>− ${money(discountVal)}</strong></div>`
+                    : ''}
+
+                  <div class="total-separator"></div>
+
+                  <div class="net-line">
+                    <span class="net-label">Net Payable</span>
+                    <span class="net-value">${money(finalVal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="bottom-rule"></div>
+
+              <div class="footer">
+                <div class="footer-thanks">Thank you for shopping with us</div>
+                <div class="footer-contact">
+                  ${businessAddress || ''}
+                  ${businessAddress && (phoneDisplay || businessEmail) ? ' &nbsp;•&nbsp; ' : ''}
+                  ${phoneDisplay}
+                  ${phoneDisplay && businessEmail ? ' &nbsp;•&nbsp; ' : ''}
+                  ${businessEmail || ''}
+                </div>
+                <div class="footer-brand">${businessName}</div>
+              </div>
             </div>
           </div>
+
           <script>
             window.onload = function() {
-              window.print();
+              setTimeout(function() {
+                window.print();
+              }, 300);
             };
           </script>
         </body>
@@ -1395,10 +2434,15 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                             <button
                               type="button"
                               onClick={() => handleDeleteOrder(ord)}
-                              className="p-1.5 rounded-lg bg-[#ff6b6b]/15 hover:bg-[#ff6b6b]/30 text-[#ff6b6b] cursor-pointer"
-                              title="Delete Invoice"
+                              disabled={deletingOrderId === ord.id}
+                              className="p-1.5 rounded-lg bg-[#ff6b6b]/15 hover:bg-[#ff6b6b]/30 text-[#ff6b6b] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={deletingOrderId === ord.id ? 'Deleting and restoring stock...' : 'Delete Invoice'}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              {deletingOrderId === ord.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-3.5 h-3.5" />
+                              )}
                             </button>
                           )}
                         </div>
@@ -1414,47 +2458,72 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
 
       {/* EDIT INVOICE MODAL */}
       {editingOrder && (
-        <div className="fixed inset-0 z-[100020] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-md w-full p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div className="fixed inset-0 z-[100020] p-2 sm:p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none overflow-y-auto">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[94vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-[#00d9ff]" />
-                <h3 className="text-sm font-bold text-white uppercase">EDIT INVOICE #{editingOrder.id}</h3>
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase">
+                    EDIT INVOICE #{editingOrder.id}
+                  </h3>
+                  <span className="text-[9px] text-[#8b9bb4] font-mono uppercase">
+                    FULL INVOICE EDIT • INVENTORY DIFFERENCE ONLY
+                  </span>
+                </div>
               </div>
+
               <button
                 type="button"
                 onClick={() => setEditingOrder(null)}
-                className="text-[#8b9bb4] hover:text-white p-1"
+                className="text-[#8b9bb4] hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditedOrder} className="space-y-3.5">
-              <div>
-                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  CUSTOMER NAME
-                </label>
-                <input
-                  type="text"
-                  disabled
-                  value={editingOrder.customer_name}
-                  className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/10 text-white font-mono font-bold text-xs"
-                />
-              </div>
+            <form onSubmit={handleSaveEditedOrder} className="space-y-3 overflow-y-auto custom-scrollbar pr-1">
+              {/* Customer + Payment */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                    CUSTOMER NAME
+                  </label>
+                  <input
+                    type="text"
+                    value={editCustomerName}
+                    onChange={(e) => setEditCustomerName(e.target.value.toUpperCase())}
+                    className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono font-bold text-xs outline-none focus:border-[#00d9ff] uppercase"
+                  />
+                </div>
 
-              <div>
-                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  PAYMENT MODE
-                </label>
-                <select
-                  value={editPaymentMode}
-                  onChange={(e) => setEditPaymentMode(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
-                >
-                  <option value="cash">CASH</option>
-                  <option value="upi">UPI PAYMENT</option>
-                </select>
+                <div>
+                  <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                    PAYMENT MODE
+                  </label>
+                  <select
+                    value={editPaymentMode}
+                    onChange={(e) => setEditPaymentMode(e.target.value as 'cash' | 'upi')}
+                    className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
+                  >
+                    <option value="cash">CASH</option>
+                    <option value="upi">UPI PAYMENT</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
+                    PAYMENT STATUS
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
+                  >
+                    <option value="paid">PAID</option>
+                    <option value="utr_pending">UTR PENDING</option>
+                  </select>
+                </div>
               </div>
 
               {editPaymentMode === 'upi' && (
@@ -1467,26 +2536,267 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                     value={editUtrNumber}
                     onChange={(e) => setEditUtrNumber(e.target.value.toUpperCase())}
                     placeholder="ENTER UTR NO..."
-                    className="w-full px-3 py-1.5 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00d9ff] font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
+                    className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-[#00d9ff] font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
                   />
                 </div>
               )}
 
-              <div>
-                <label className="text-[10px] font-mono text-[#8b9bb4] uppercase block mb-1 font-bold">
-                  PAYMENT STATUS
-                </label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-[#0a0e17] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
-                >
-                  <option value="paid">PAID</option>
-                  <option value="utr_pending">UTR PENDING</option>
-                </select>
+              {/* Current Invoice Items */}
+              <div className="rounded-2xl bg-[#0a0e17] border border-white/10 overflow-hidden">
+                <div className="px-3 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-[#00ff9d] uppercase">
+                    INVOICE ITEMS ({editCartItems.length})
+                  </span>
+                  <span className="text-[9px] text-[#8b9bb4] font-mono uppercase">
+                    Change / Remove / Quantity
+                  </span>
+                </div>
+
+                {editCartItems.length === 0 ? (
+                  <div className="p-6 text-center text-[#ff6b6b] text-xs font-mono uppercase">
+                    NO ITEMS IN THIS INVOICE.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#101628]/80 text-[#8b9bb4] font-mono text-[8.5px] uppercase">
+                        <tr>
+                          <th className="py-2 px-2.5">ITEM</th>
+                          <th className="py-2 px-2.5">VARIANT</th>
+                          <th className="py-2 px-2.5 text-center">QTY</th>
+                          <th className="py-2 px-2.5 text-right">RATE</th>
+                          <th className="py-2 px-2.5 text-right">TOTAL</th>
+                          <th className="py-2 px-2.5 text-center">ACTION</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {editCartItems.map((item) => (
+                          <tr key={item.cart_id}>
+                            <td className="py-2 px-2.5">
+                              <span className="block font-bold text-white uppercase max-w-[190px] truncate">
+                                {item.product_name}
+                              </span>
+                              <span className="block text-[9px] text-[#8b9bb4] font-mono">
+                                {item.product_id}
+                              </span>
+                            </td>
+
+                            <td className="py-2 px-2.5">
+                              <span className="text-[#00d9ff] font-mono uppercase">
+                                {item.color} • {item.size}
+                              </span>
+                            </td>
+
+                            <td className="py-2 px-2.5 text-center">
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  handleEditQuantityChange(item.cart_id, Number(e.target.value))
+                                }
+                                className="w-16 px-2 py-1 rounded-lg bg-[#101628] border border-white/15 text-[#00ff9d] font-mono text-center font-bold outline-none focus:border-[#00d9ff]"
+                              />
+                            </td>
+
+                            <td className="py-2 px-2.5 text-right font-mono text-[#ffa500]">
+                              ₹{Number(item.unit_price || 0).toLocaleString('en-IN')}
+                            </td>
+
+                            <td className="py-2 px-2.5 text-right font-mono font-bold text-white">
+                              ₹{Number(item.total_price || 0).toLocaleString('en-IN')}
+                            </td>
+
+                            <td className="py-2 px-2.5">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditLoadItem(item)}
+                                  className="px-2 py-1 rounded-lg bg-[#00d9ff]/10 hover:bg-[#00d9ff]/20 text-[#00d9ff] font-mono text-[9px] font-bold cursor-pointer uppercase"
+                                >
+                                  CHANGE
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditRemoveItem(item.cart_id)}
+                                  className="p-1.5 rounded-lg bg-[#ff6b6b]/10 hover:bg-[#ff6b6b]/25 text-[#ff6b6b] cursor-pointer"
+                                  title="Remove item"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
+              {/* Add / Change Product */}
+              <div className="rounded-2xl bg-[#0a0e17] border border-white/10 p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold text-[#00d9ff] uppercase">
+                    {editReplaceCartId ? 'CHANGE EXISTING ITEM' : 'ADD PRODUCT TO INVOICE'}
+                  </span>
+
+                  {editReplaceCartId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditReplaceCartId(null);
+                        setEditProductId('');
+                        setEditColor('');
+                        setEditSize('');
+                        setEditQty(1);
+                      }}
+                      className="text-[9px] font-mono text-[#ff6b6b] hover:text-white cursor-pointer uppercase"
+                    >
+                      CANCEL CHANGE
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                  <select
+                    value={editProductId}
+                    onChange={(e) => {
+                      setEditProductId(e.target.value);
+                      setEditColor('');
+                      setEditSize('');
+                    }}
+                    className="px-2.5 py-2 rounded-xl bg-[#101628] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase"
+                  >
+                    <option value="">SELECT PRODUCT</option>
+                    {productsList.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.id} — {product.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={editColor}
+                    onChange={(e) => {
+                      setEditColor(e.target.value);
+                      setEditSize('');
+                    }}
+                    disabled={!editProductId}
+                    className="px-2.5 py-2 rounded-xl bg-[#101628] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase disabled:opacity-50"
+                  >
+                    <option value="">SELECT COLOUR</option>
+                    {editColors.map((color) => (
+                      <option key={color} value={color}>
+                        {color}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={editSize}
+                    onChange={(e) => setEditSize(e.target.value)}
+                    disabled={!editColor}
+                    className="px-2.5 py-2 rounded-xl bg-[#101628] border border-white/15 text-white font-mono text-xs outline-none focus:border-[#00d9ff] uppercase disabled:opacity-50"
+                  >
+                    <option value="">SELECT SIZE</option>
+                    {editSizes.map((size) => {
+                      const inv = editProductInventory.find(
+                        (row) =>
+                          cleanStr(row.variant_color || 'Standard') === cleanStr(editColor) &&
+                          cleanStr(row.variant_size || 'Free Size') === cleanStr(size)
+                      );
+
+                      return (
+                        <option key={size} value={size}>
+                          {size} — STOCK {Number(inv?.stock_quantity ?? 0)}
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      min="1"
+                      value={editQty}
+                      onChange={(e) =>
+                        setEditQty(Math.max(1, parseInt(e.target.value, 10) || 1))
+                      }
+                      className="w-20 px-2 py-2 rounded-xl bg-[#101628] border border-white/15 text-[#00ff9d] font-mono font-bold text-center outline-none focus:border-[#00d9ff]"
+                    />
+
+                    <button
+                      type="button"
+                      disabled={!editSelectedInventory}
+                      onClick={handleEditApplySelectedItem}
+                      className="flex-1 px-3 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-[10px] cursor-pointer disabled:opacity-40 uppercase"
+                    >
+                      {editReplaceCartId ? 'APPLY CHANGE' : 'ADD ITEM'}
+                    </button>
+                  </div>
+                </div>
+
+                {editSelectedInventory && (
+                  <div className="flex flex-wrap items-center gap-3 text-[9px] font-mono uppercase">
+                    <span className="text-[#ffa500]">
+                      STORE PRICE: ₹{Number(editSelectedInventory.store_price || 0).toLocaleString('en-IN')}
+                    </span>
+                    <span className={Number(editSelectedInventory.stock_quantity || 0) > 0 ? 'text-[#00ff9d]' : 'text-[#ff6b6b]'}>
+                      CENTRAL STOCK: {Number(editSelectedInventory.stock_quantity || 0)}
+                    </span>
+                    <span className="text-[#8b9bb4]">
+                      EXISTING VARIANTS ONLY
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Discount + Totals */}
+              <div className="rounded-2xl bg-[#0a0e17] border border-white/10 p-3 space-y-2">
+                <div className="flex justify-between text-[#8b9bb4] font-mono text-xs uppercase">
+                  <span>SUBTOTAL:</span>
+                  <span>₹{editSubtotalAmount.toLocaleString('en-IN')}</span>
+                </div>
+
+                <div className="flex justify-between items-center text-[#8b9bb4] font-mono text-xs uppercase">
+                  <div className="flex items-center gap-1">
+                    <span>DISCOUNT:</span>
+                    <span className="text-[9px] text-[#00d9ff] font-bold">
+                      MAX 10%: ₹{editMaxAllowedDiscount}
+                    </span>
+                  </div>
+
+                  <input
+                    type="number"
+                    min="0"
+                    max={editMaxAllowedDiscount}
+                    value={editDiscountAmount}
+                    onChange={(e) => handleEditDiscountChange(e.target.value)}
+                    className={`w-24 px-2 py-1 rounded-lg bg-[#101628] border font-mono text-right text-xs outline-none ${
+                      editDiscountError
+                        ? 'border-[#ff6b6b] text-[#ff6b6b]'
+                        : 'border-white/15 text-white'
+                    }`}
+                  />
+                </div>
+
+                {editDiscountError && (
+                  <div className="flex items-center gap-1 text-[9.5px] text-[#ff6b6b] font-bold">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>{editDiscountError}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                  <span className="text-white font-bold text-xs uppercase">NET PAYABLE:</span>
+                  <span className="text-lg font-extrabold text-[#00ff9d]">
+                    ₹{editFinalPayableAmount.toLocaleString('en-IN')}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setEditingOrder(null)}
@@ -1494,19 +2804,25 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                 >
                   CANCEL
                 </button>
+
                 <button
                   type="submit"
-                  disabled={savingEdit}
+                  disabled={savingEdit || editCartItems.length === 0}
                   className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#6d4aff] text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-lg active:scale-95 disabled:opacity-50 uppercase"
                 >
-                  {savingEdit ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>SAVE CHANGES</span>
+                  {savingEdit ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>SAVE INVOICE CHANGES</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
 
       {/* DIALOG 1: CUSTOMER CHOICE */}
       {isCustomerPromptOpen && (
@@ -1967,7 +3283,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                       </div>
                     ) : (
                       filteredDeskProducts.map((p) => {
-                        const storePrice = getProductStorePrice(p);
+                        const storePrice = getProductStorePrice(p, inventoryList);
                         const displayCode = p.code || p.id;
 
                         return (
@@ -2279,7 +3595,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
 
                 {activeSubShades.length === 0 ? (
                   <div className="p-4 text-center text-[#ff6b6b] italic text-xs uppercase font-mono">
-                    NO PURCHASED VARIANTS FOUND FOR THIS PRODUCT.
+                    NO INVENTORY VARIANTS FOUND FOR THIS PRODUCT.
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2 max-h-44 overflow-y-auto custom-scrollbar p-1">
@@ -2350,7 +3666,7 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                           }`}
                         >
                           <span>{s.size}</span>
-                          <span className={`text-[9.5px] ml-1.5 font-black ${s.stock > 0 ? 'text-[#00ff9d] bg-[#00ff9d]/20 px-1 py-0.2 rounded' : 'text-[#ff6b6b]'}`}>
+                          <span className={`text-[9.5px] ml-1.5 font-black ${s.stock > 0 ? 'text-[#00ff9d] bg-[#00ff9d]/20 px-1 py-0.2 rounded' : 'text-[#ff6b6b] bg-[#ff6b6b]/10 px-1 py-0.2 rounded'}`}>
                             [{s.stock}]
                           </span>
                         </button>
@@ -2370,9 +3686,10 @@ export default function SalesManager({ currentUser }: SalesManagerProps) {
                     <input
                       type="number"
                       value={modalRate}
-                      onChange={(e) => setModalRate(Number(e.target.value))}
-                      className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#ffa500] font-mono font-bold text-xs outline-none"
+                      readOnly
+                      className="w-full px-3 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-[#ffa500] font-mono font-bold text-xs outline-none cursor-not-allowed"
                     />
+                    <span className="text-[8.5px] font-mono text-[#8b9bb4] uppercase mt-1 block">FROM CENTRAL INVENTORY</span>
                   </div>
 
                   <div>

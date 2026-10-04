@@ -68,6 +68,13 @@ interface PaymentStatusState {
   orderId?: string;
 }
 
+interface PaymentGateway {
+  id: string;
+  name: string;
+  gateway_id: string;
+  environment: 'test' | 'production' | string;
+}
+
 async function generateOrderNumber(): Promise<string> {
   const PREFIX = 'KFOD';
   const PADDING = 4;
@@ -127,7 +134,9 @@ export default function CartDrawer() {
 
   const [activeStep, setActiveStep] = useState<'cart' | 'address' | 'order_result'>('cart');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [activeGatewayName, setActiveGatewayName] = useState<string>('Cashfree Payments');
+  const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
+  const [selectedGatewayId, setSelectedGatewayId] = useState<string>('');
+  const [selectedGatewayEnvironment, setSelectedGatewayEnvironment] = useState<string>('');
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderInfo | null>(null);
   const [paymentResult, setPaymentResult] = useState<PaymentStatusState | null>(null);
 
@@ -314,26 +323,66 @@ export default function CartDrawer() {
   }, [user, customer]);
 
   useEffect(() => {
-    const fetchActiveGateway = async () => {
+    const fetchActiveGateways = async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('payment_gateway_configs')
-          .select('name')
+          .select('id,name,gateway_id,environment')
           .eq('is_active', true)
-          .limit(1)
-          .maybeSingle();
+          .order('name', { ascending: true })
+          .order('environment', { ascending: true });
 
-        if (data?.name) {
-          setActiveGatewayName(data.name);
+        if (error) {
+          console.error('Error reading gateway configs:', error);
+          return;
+        }
+
+        const gateways: PaymentGateway[] = (data || []).map((row: any) => ({
+          id: String(row.id),
+          name: String(row.name || row.gateway_id || 'Payment Gateway'),
+          gateway_id: String(row.gateway_id || row.id).toLowerCase(),
+          environment: String(row.environment || 'test').toLowerCase(),
+        }));
+
+        setPaymentGateways(gateways);
+
+        if (gateways.length > 0) {
+          setSelectedGatewayId((current) => {
+            const stillExists = gateways.some((gateway) => gateway.id === current);
+            return stillExists ? current : gateways[0].id;
+          });
+
+          setSelectedGatewayEnvironment((current) => {
+            const selected = gateways.find((gateway) => gateway.id === selectedGatewayId);
+            return selected ? selected.environment : gateways[0].environment;
+          });
+
+          const selected = gateways.find((gateway) => gateway.id === selectedGatewayId) || gateways[0];
+          setActiveGatewayName(selected.name);
+        } else {
+          setSelectedGatewayId('');
+          setSelectedGatewayEnvironment('');
+          setActiveGatewayName('Payment Gateway');
         }
       } catch (err) {
-        console.error('Error reading gateway config:', err);
+        console.error('Error reading gateway configs:', err);
       }
     };
+
     if (isCartOpen) {
-      fetchActiveGateway();
+      fetchActiveGateways();
     }
   }, [isCartOpen]);
+
+  useEffect(() => {
+    const selected = paymentGateways.find((gateway) => gateway.id === selectedGatewayId);
+    setSelectedGatewayEnvironment(selected?.environment || '');
+  }, [selectedGatewayId, paymentGateways]);
+
+  const handleSelectPaymentGateway = (gateway: PaymentGateway) => {
+    setSelectedGatewayId(gateway.id);
+    setSelectedGatewayEnvironment(gateway.environment);
+  };
 
   useEffect(() => {
     if (activeStep === 'address' && savedAddresses.length > 0) {
@@ -736,6 +785,12 @@ export default function CartDrawer() {
       return;
     }
 
+    const selectedGateway = paymentGateways.find((gateway) => gateway.id === selectedGatewayId);
+    if (!selectedGateway) {
+      alert('No payment gateway is currently available. Please try again later.');
+      return;
+    }
+
     const currentAddress = savedAddresses.find((a) => a.id === selectedAddressId);
     if (!currentAddress) {
       alert('Selected address not found. Please re-select or add a new address.');
@@ -775,6 +830,9 @@ export default function CartDrawer() {
             customer_name: currentAddress.name,
             customerEmail: resolvedEmail,
             customer_email: resolvedEmail,
+            gatewayId: selectedGateway.gateway_id,
+            gateway_id: selectedGateway.gateway_id,
+            environment: selectedGateway.environment,
           },
         }
       );
@@ -1438,6 +1496,65 @@ export default function CartDrawer() {
           <div
             className="p-5 border-t space-y-3 shrink-0 shadow-lg bg-white border-stone-100"
           >
+            {activeStep === 'address' && paymentGateways.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500">
+                    Payment Method
+                  </span>
+                  <span className="text-[9px] text-stone-400">Secure Checkout</span>
+                </div>
+
+                <div className={`grid gap-2 ${paymentGateways.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+                  {paymentGateways.map((gateway) => {
+                    const isSelected = gateway.id === selectedGatewayId;
+                    const isCashfree = gateway.gateway_id === 'cashfree';
+                    return (
+                      <button
+                        key={gateway.id}
+                        type="button"
+                        onClick={() => handleSelectPaymentGateway(gateway)}
+                        className={`text-left rounded-xl border px-3 py-2.5 transition-all cursor-pointer ${
+                          isSelected
+                            ? hasJewelleryItems
+                              ? 'border-[#D4AF37] bg-amber-50 shadow-sm'
+                              : 'border-[#ff2d85] bg-pink-50 shadow-sm'
+                            : 'border-stone-200 bg-stone-50 hover:border-stone-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? (hasJewelleryItems ? 'bg-amber-100 text-[#b38728]' : 'bg-pink-100 text-[#ff2d85]') : 'bg-white text-stone-500'}`}>
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-[11px] font-bold text-stone-900 truncate">{gateway.name}</div>
+                              <div className="text-[9px] uppercase tracking-wider text-stone-400">
+                                {gateway.environment === 'production' ? 'Production' : 'Test'}
+                              </div>
+                            </div>
+                          </div>
+                          <span className={`w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? (hasJewelleryItems ? 'border-[#D4AF37]' : 'border-[#ff2d85]') : 'border-stone-300'}`}>
+                            {isSelected && <span className={`w-1.5 h-1.5 rounded-full ${hasJewelleryItems ? 'bg-[#D4AF37]' : 'bg-[#ff2d85]'}`} />}
+                          </span>
+                        </div>
+                        {!isCashfree && (
+                          <div className="mt-1.5 text-[9px] text-amber-600">
+                            Gateway checkout adapter pending
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {activeStep === 'address' && paymentGateways.length === 0 && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[10px] text-rose-700">
+                No active payment gateway is configured. Please try again later.
+              </div>
+            )}
             <div className="space-y-1.5 text-xs text-stone-600">
               <div className="flex justify-between">
                 <span>Subtotal</span>
@@ -1494,7 +1611,7 @@ export default function CartDrawer() {
             ) : (
               <button
                 type="button"
-                disabled={!selectedAddressId || isCheckingOut}
+                disabled={!selectedAddressId || isCheckingOut || paymentGateways.length === 0}
                 onClick={handleInstantCheckout}
                 className={`relative w-full py-4 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition-all duration-300 active:scale-98 cursor-pointer text-white disabled:opacity-50 ${
                   hasJewelleryItems
@@ -1510,7 +1627,7 @@ export default function CartDrawer() {
                 <span>
                   {isCheckingOut
                     ? 'Connecting Gateway...'
-                    : `Pay via ${activeGatewayName} • ₹${(subtotal + shippingCharge).toLocaleString('en-IN')}`}
+                    : `Pay via ${paymentGateways.find((gateway) => gateway.id === selectedGatewayId)?.name || 'Payment Gateway'} • ₹${(subtotal + shippingCharge).toLocaleString('en-IN')}`}
                 </span>
                 {!isCheckingOut && <ArrowRight className="w-4 h-4" />}
               </button>
@@ -1518,7 +1635,7 @@ export default function CartDrawer() {
 
             <div className="flex items-center justify-center gap-1.5 text-[10px] text-stone-400 pt-0.5">
               <ShieldCheck className="w-3.5 h-3.5 text-stone-400" />
-              <span>100% Secure Encrypted Checkout with {activeGatewayName}</span>
+              <span>100% Secure Encrypted Checkout{paymentGateways.find((gateway) => gateway.id === selectedGatewayId)?.name ? ` with ${paymentGateways.find((gateway) => gateway.id === selectedGatewayId)?.name}` : ''}</span>
             </div>
           </div>
         )}

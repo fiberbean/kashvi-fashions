@@ -17,6 +17,7 @@ import SubCategoryMasterModal from './admin/components/modals/SubCategoryMasterM
 import ColorMasterModal from './admin/components/modals/ColorMasterModal';
 import SizeMasterModal from './admin/components/modals/SizeMasterModal';
 import SupplierMasterModal from './admin/components/modals/SupplierMasterModal';
+import PaymentGatewayManager from './admin/pages/PaymentGatewayManager';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 
 export type AdminViewType = 
@@ -29,7 +30,8 @@ export type AdminViewType =
   | 'reports' 
   | 'products' 
   | 'product_master'
-  | 'staff';
+  | 'staff'
+  | 'gateways';
 
 export default function AdminApp() {
   const location = useLocation();
@@ -368,6 +370,10 @@ export default function AdminApp() {
 
           {currentView === 'staff' && (
             <AdminStaff currentUser={currentUser} />
+          )}
+
+          {currentView === 'gateways' && (
+            <PaymentGatewayManager currentUser={currentUser} />
           )}
         </main>
       )}
