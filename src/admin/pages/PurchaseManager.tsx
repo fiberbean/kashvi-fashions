@@ -15,6 +15,7 @@ import {
   Layers,
   Palette,
   AlertCircle,
+  Info,
   Lock,
   KeyRound,
   ShieldCheck,
@@ -68,6 +69,7 @@ interface StagedMatrixItem {
   mdp_price: number;
   online_price: number;
   mrp_price: number;
+  queue_group_id?: string;
 }
 
 interface ColourMasterRecord {
@@ -190,6 +192,121 @@ async function recordStockMovement({
   if (error) throw error;
 }
 
+
+type PurchaseDialogKind = 'info' | 'success' | 'warning' | 'error' | 'confirm';
+
+interface PurchaseDialogState {
+  kind: PurchaseDialogKind;
+  title: string;
+  message: string;
+  location: string;
+  reference: string;
+  confirmText?: string;
+  cancelText?: string;
+}
+
+function PurchaseFeedbackDialog({
+  dialog,
+  onClose,
+  onConfirm
+}: {
+  dialog: PurchaseDialogState | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!dialog) return null;
+
+  const kindMeta: Record<PurchaseDialogKind, { label: string; icon: React.ReactNode; box: string; iconBox: string }> = {
+    info: {
+      label: 'INFORMATION',
+      icon: <Info className="w-5 h-5" />,
+      box: 'border-[#00d9ff]/35 bg-[#00d9ff]/[0.06]',
+      iconBox: 'bg-[#00d9ff]/15 text-[#00d9ff]'
+    },
+    success: {
+      label: 'SUCCESS',
+      icon: <CheckCircle2 className="w-5 h-5" />,
+      box: 'border-[#00ff9d]/35 bg-[#00ff9d]/[0.06]',
+      iconBox: 'bg-[#00ff9d]/15 text-[#00ff9d]'
+    },
+    warning: {
+      label: 'WARNING',
+      icon: <AlertCircle className="w-5 h-5" />,
+      box: 'border-[#ffa500]/35 bg-[#ffa500]/[0.06]',
+      iconBox: 'bg-[#ffa500]/15 text-[#ffa500]'
+    },
+    error: {
+      label: 'ERROR',
+      icon: <AlertCircle className="w-5 h-5" />,
+      box: 'border-[#ff6b6b]/35 bg-[#ff6b6b]/[0.06]',
+      iconBox: 'bg-[#ff6b6b]/15 text-[#ff6b6b]'
+    },
+    confirm: {
+      label: 'CONFIRM ACTION',
+      icon: <AlertCircle className="w-5 h-5" />,
+      box: 'border-[#00d9ff]/35 bg-[#00d9ff]/[0.06]',
+      iconBox: 'bg-[#00d9ff]/15 text-[#00d9ff]'
+    }
+  };
+
+  const meta = kindMeta[dialog.kind];
+
+  return (
+    <div className="fixed inset-0 z-[100200] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#101628] shadow-2xl overflow-hidden">
+        <div className={`p-4 border-b ${meta.box}`}>
+          <div className="flex items-start gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${meta.iconBox}`}>
+              {meta.icon}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[9px] font-mono font-bold tracking-[0.18em] text-[#8b9bb4] uppercase">{meta.label}</div>
+              <h3 className="mt-1 text-sm font-extrabold text-white">{dialog.title}</h3>
+            </div>
+            <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-[#8b9bb4] hover:text-white hover:bg-white/10">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div className="rounded-xl bg-[#0a0e17] border border-white/10 p-3">
+            <p className="text-xs leading-5 text-white whitespace-pre-line">{dialog.message}</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="rounded-xl bg-[#0a0e17] border border-white/10 p-2.5 min-w-0">
+              <div className="text-[8px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] mb-1">WHERE</div>
+              <div className="text-[10px] font-semibold text-[#00d9ff] break-words">{dialog.location}</div>
+            </div>
+            <div className="rounded-xl bg-[#0a0e17] border border-white/10 p-2.5 min-w-0">
+              <div className="text-[8px] font-mono font-bold uppercase tracking-wider text-[#8b9bb4] mb-1">REFERENCE</div>
+              <div className="text-[10px] font-semibold text-[#00ff9d] break-words">{dialog.reference}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-4 py-3 border-t border-white/10 flex items-center justify-end gap-2 bg-[#0a0e17]/60">
+          {dialog.kind === 'confirm' && (
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs">
+              {dialog.cancelText || 'Cancel'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={dialog.kind === 'confirm' ? onConfirm : onClose}
+            className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs shadow active:scale-95"
+          >
+            {dialog.kind === 'confirm' ? (dialog.confirmText || 'Continue') : 'OK'}
+          </button>
+        </div>
+      </div>
+
+
+    </div>
+  );
+}
+
 export default function PurchaseManager() {
   const [purchases, setPurchases] = useState<PurchaseRecord[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRecord[]>([]);
@@ -241,6 +358,8 @@ export default function PurchaseManager() {
   const [purchaseDate, setPurchaseDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
   const [supplierBillNo, setSupplierBillNo] = useState<string>('');
+  const [supplierBillCheckStatus, setSupplierBillCheckStatus] = useState<'idle' | 'checking' | 'available' | 'duplicate' | 'error'>('idle');
+  const [supplierBillDuplicatePurchase, setSupplierBillDuplicatePurchase] = useState<string>('');
   const [supplierBillDate, setSupplierBillDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   
   const [billTransportMode, setBillTransportMode] = useState<'amount' | 'percent'>('amount');
@@ -267,6 +386,53 @@ export default function PurchaseManager() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [purchaseCodeLoading, setPurchaseCodeLoading] = useState<boolean>(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+
+  const [purchaseDialog, setPurchaseDialog] = useState<PurchaseDialogState | null>(null);
+  const purchaseDialogResolverRef = useRef<((value: boolean) => void) | null>(null);
+
+  const showPurchaseMessage = (
+    kind: Exclude<PurchaseDialogKind, 'confirm'>,
+    title: string,
+    message: string,
+    location: string,
+    reference: string
+  ) => {
+    setPurchaseDialog({ kind, title, message, location, reference });
+  };
+
+  const askPurchaseConfirmation = (
+    title: string,
+    message: string,
+    location: string,
+    reference: string,
+    confirmText = 'Continue',
+    cancelText = 'Cancel'
+  ) => new Promise<boolean>((resolve) => {
+    purchaseDialogResolverRef.current = resolve;
+    setPurchaseDialog({
+      kind: 'confirm',
+      title,
+      message,
+      location,
+      reference,
+      confirmText,
+      cancelText
+    });
+  });
+
+  const closePurchaseDialog = () => {
+    const resolver = purchaseDialogResolverRef.current;
+    purchaseDialogResolverRef.current = null;
+    setPurchaseDialog(null);
+    resolver?.(false);
+  };
+
+  const confirmPurchaseDialog = () => {
+    const resolver = purchaseDialogResolverRef.current;
+    purchaseDialogResolverRef.current = null;
+    setPurchaseDialog(null);
+    resolver?.(true);
+  };
 
   const currentUser = useMemo(() => {
     try {
@@ -379,6 +545,49 @@ export default function PurchaseManager() {
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [masterColours, selectedBaseFilter]);
 
+  const checkSupplierBillDuplicate = async (billNoValue?: string, supplierIdValue?: string) => {
+    const billNo = String(billNoValue ?? supplierBillNo).trim();
+    const supplierId = String(supplierIdValue ?? selectedSupplierId).trim();
+
+    setSupplierBillDuplicatePurchase('');
+
+    if (!billNo || !supplierId) {
+      setSupplierBillCheckStatus('idle');
+      return false;
+    }
+
+    setSupplierBillCheckStatus('checking');
+
+    try {
+      let query = supabase
+        .from('purchases')
+        .select('id, supplier_bill_no')
+        .eq('supplier_id', supplierId)
+        .ilike('supplier_bill_no', billNo)
+        .limit(1);
+
+      if (editingPurchase?.id) {
+        query = query.neq('id', editingPurchase.id);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setSupplierBillDuplicatePurchase(data[0].id);
+        setSupplierBillCheckStatus('duplicate');
+        return true;
+      }
+
+      setSupplierBillCheckStatus('available');
+      return false;
+    } catch (err) {
+      console.error('Supplier bill duplicate check failed:', err);
+      setSupplierBillCheckStatus('error');
+      return false;
+    }
+  };
+
   const openNewPurchaseModal = () => {
     setEditingPurchase(null);
     setExistingItems([]);
@@ -388,6 +597,8 @@ export default function PurchaseManager() {
     setSupplierBillDate(new Date().toISOString().split('T')[0]);
     setSelectedSupplierId('');
     setSupplierBillNo('');
+    setSupplierBillCheckStatus('idle');
+    setSupplierBillDuplicatePurchase('');
     setBillTransportMode('amount');
     setTransportInputVal(0);
     setNotes('');
@@ -412,6 +623,8 @@ export default function PurchaseManager() {
     setSupplierBillDate(p.supplier_bill_date || new Date().toISOString().split('T')[0]);
     setSelectedSupplierId(p.supplier_id || '');
     setSupplierBillNo(p.supplier_bill_no || '');
+    setSupplierBillCheckStatus('idle');
+    setSupplierBillDuplicatePurchase('');
     setBillTransportMode('amount');
     setTransportInputVal(p.transport_charges || 0);
     setNotes(p.notes || '');
@@ -469,14 +682,21 @@ export default function PurchaseManager() {
       if (error) throw error;
       setViewingItems(data || []);
     } catch (err: any) {
-      alert('Error fetching items: ' + err.message);
+      showPurchaseMessage('error', 'Unable to Load Purchase Items', 'Purchase items load avvaledu. Please try again.', 'Purchase History → View Purchase', `Purchase ${p.id} → ${err.message}`);
     } finally {
       setLoadingItems(false);
     }
   };
 
   const handleDeletePurchase = async (p: PurchaseRecord) => {
-    const confirmDelete = window.confirm(`Permanently delete [${p.id}]? Inward stock will be rolled back from inventory.`);
+    const confirmDelete = await askPurchaseConfirmation(
+      'Delete Purchase?',
+      `Permanently delete [${p.id}]? Inward stock will be rolled back from inventory.`,
+      'Purchase History → Delete Purchase',
+      `Purchase ${p.id} → Inventory Rollback`,
+      'Delete & Roll Back',
+      'Keep Purchase'
+    );
     if (!confirmDelete) return;
 
     try {
@@ -520,9 +740,9 @@ export default function PurchaseManager() {
       if (error) throw error;
 
       setPurchases((prev) => prev.filter((item) => item.id !== p.id));
-      alert(`Purchase [${p.id}] deleted successfully.`);
+      showPurchaseMessage('success', 'Purchase Deleted', `Purchase [${p.id}] successfully deleted and stock rollback applied.`, 'Purchase History → Delete Purchase', `Purchase ${p.id} → Inventory Rollback`);
     } catch (err: any) {
-      alert('Failed to delete: ' + err.message);
+      showPurchaseMessage('error', 'Purchase Delete Failed', err.message, 'Purchase History → Delete Purchase', `Purchase ${p.id} → Delete Operation`);
     }
   };
 
@@ -542,7 +762,40 @@ export default function PurchaseManager() {
       const newQty = Number(editItemQty) || 0;
       const newCost = Number(editItemCost) || 0;
       const qtyDifference = newQty - prevQty;
+      const costDifference = newCost - (Number(editingItemModal.unit_cost) || 0);
       const newTotalCost = newQty * newCost;
+
+      if (qtyDifference !== 0 || costDifference !== 0) {
+        const changes: string[] = [];
+        if (qtyDifference !== 0) {
+          changes.push(`Quantity: ${prevQty} → ${newQty} (${qtyDifference > 0 ? '+' : ''}${qtyDifference})`);
+        }
+        if (costDifference !== 0) {
+          changes.push(`Cost Price: ₹${Number(editingItemModal.unit_cost || 0)} → ₹${newCost}`);
+        }
+        const confirmed = await askPurchaseConfirmation(
+          'Apply Purchase Item Changes?',
+          `Purchase item lo changes cheyyabothunnaru:\n\n${changes.join('\n')}\n\nInventory stock/pricing kuda adjust avutayi. Continue cheyyala?`,
+          'Edit Purchase → Saved Item → Quantity / Cost',
+          `${editingPurchase.id} → ${editingItemModal.product_id} / ${editingItemModal.variant_color} / ${editingItemModal.variant_size}`,
+          'Apply Changes',
+          'Cancel'
+        );
+        if (!confirmed) return;
+      }
+
+      const { data: invForSafety } = await supabase
+        .from('inventory')
+        .select('id, stock_quantity')
+        .eq('product_id', editingItemModal.product_id)
+        .eq('variant_color', editingItemModal.variant_color)
+        .eq('variant_size', editingItemModal.variant_size)
+        .maybeSingle();
+
+      if (qtyDifference < 0 && (!invForSafety || Number(invForSafety.stock_quantity || 0) < Math.abs(qtyDifference))) {
+        showPurchaseMessage('error', 'Stock Safety Blocked', `Stock safe ga reduce cheyyadaniki saripodu. Current stock: ${Number(invForSafety?.stock_quantity || 0)}, required rollback: ${Math.abs(qtyDifference)}.`, 'Edit Purchase → Inventory Safety Check', `${editingPurchase.id} → ${editingItemModal.product_id} / ${editingItemModal.variant_color} / ${editingItemModal.variant_size}`);
+        return;
+      }
 
       const { error: itemErr } = await supabase
         .from('purchase_items')
@@ -614,7 +867,6 @@ export default function PurchaseManager() {
       const updatePayload: any = {
         total_amount: computedTotal,
         transport_charges: Number(actualTransportAmount || 0),
-        balance_amount: computedTotal
       };
 
       let { error: purchUpdErr } = await supabase
@@ -634,7 +886,7 @@ export default function PurchaseManager() {
 
       setEditingItemModal(null);
     } catch (err: any) {
-      alert('Failed to update line item: ' + err.message);
+      showPurchaseMessage('error', 'Line Item Update Failed', err.message, 'Edit Purchase → Saved Item', `${editingPurchase.id} → ${editingItemModal?.product_id || 'Line Item'}`);
     } finally {
       setUpdatingLineItem(false);
     }
@@ -642,18 +894,20 @@ export default function PurchaseManager() {
 
   const handleDeleteExistingItem = async (item: any) => {
     if (!editingPurchase) return;
-    const confirmDel = window.confirm(`Delete "${item.product_id} (${item.variant_color} / ${item.variant_size})" from this bill? Stock will be rolled back.`);
+
+    const confirmDel = await askPurchaseConfirmation(
+      'Delete Purchase Variant?',
+      `Delete this purchase variant?\n\nProduct: ${item.product_id}\nVariant: ${item.variant_color} / ${item.variant_size}\nQty: ${Number(item.quantity) || 0}\n\nPurchase total and Inventory stock will be adjusted accordingly.\n\nContinue?`,
+      'Edit Purchase → Saved Items → Delete Variant',
+      `${editingPurchase.id} → ${item.product_id} / ${item.variant_color} / ${item.variant_size}`,
+      'Delete & Roll Back Stock',
+      'Keep Variant'
+    );
     if (!confirmDel) return;
 
     setDeletingItemId(item.id);
     try {
-      const { error: delErr } = await supabase
-        .from('purchase_items')
-        .delete()
-        .eq('id', item.id);
-      if (delErr) throw delErr;
-
-      const { data: inv } = await supabase
+      const { data: inv, error: invErr } = await supabase
         .from('inventory')
         .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
         .eq('product_id', item.product_id)
@@ -661,45 +915,79 @@ export default function PurchaseManager() {
         .eq('variant_size', item.variant_size)
         .maybeSingle();
 
-      if (inv) {
-        const newQty = Math.max(0, inv.stock_quantity - (item.quantity || 0));
-        await supabase
-          .from('inventory')
-          .update({ stock_quantity: newQty, updated_at: new Date().toISOString() })
-          .eq('id', inv.id);
+      if (invErr) throw invErr;
 
-        await recordStockMovement({
-          productId: item.product_id,
-          inventoryId: inv.id,
-          variantColor: item.variant_color,
-          variantSize: item.variant_size,
-          quantity: -(Number(item.quantity) || 0),
-          movementType: 'PURCHASE_ROLLBACK',
-          referenceId: editingPurchase.id,
-          notes: `Purchase line deleted ${editingPurchase.id}`
-        });
+      const deleteQty = Number(item.quantity) || 0;
+      const currentStock = Number(inv?.stock_quantity || 0);
+      if (!inv) {
+        throw new Error(`Inventory variant not found: ${item.product_id} / ${item.variant_color} / ${item.variant_size}`);
       }
+      if (currentStock < deleteQty) {
+        throw new Error(
+          `Cannot delete this purchase line safely. Current stock is ${currentStock}, but this purchase contributed ${deleteQty}.`
+        );
+      }
+
+      const { error: delErr } = await supabase
+        .from('purchase_items')
+        .delete()
+        .eq('id', item.id);
+      if (delErr) throw delErr;
+
+      const newQty = currentStock - deleteQty;
+      const { error: invUpdateErr } = await supabase
+        .from('inventory')
+        .update({ stock_quantity: newQty, updated_at: new Date().toISOString() })
+        .eq('id', inv.id);
+      if (invUpdateErr) throw invUpdateErr;
+
+      await recordStockMovement({
+        productId: item.product_id,
+        inventoryId: inv.id,
+        variantColor: item.variant_color,
+        variantSize: item.variant_size,
+        quantity: -deleteQty,
+        movementType: 'PURCHASE_ROLLBACK',
+        referenceId: editingPurchase.id,
+        notes: `Purchase line deleted ${editingPurchase.id}`
+      });
 
       const updatedExisting = existingItems.filter((it) => it.id !== item.id);
       setExistingItems(updatedExisting);
 
-      const itemCost = Number(item.total_cost) || (item.quantity * item.unit_cost) || 0;
-      const updatedTotal = Math.max(0, (editingPurchase.total_amount || 0) - itemCost);
+      const itemCost = Number(item.total_cost) || (Number(item.quantity) * Number(item.unit_cost)) || 0;
+      const updatedTotal = Math.max(0, updatedExisting.reduce(
+        (sum, it) => sum + (Number(it.total_cost) || (Number(it.quantity) * Number(it.unit_cost)) || 0),
+        0
+      ) + Number(actualTransportAmount || 0));
 
-      await supabase
+      const { error: purchUpdErr } = await supabase
         .from('purchases')
         .update({
           total_amount: updatedTotal,
-          balance_amount: updatedTotal
+          transport_charges: Number(actualTransportAmount || 0)
         })
         .eq('id', editingPurchase.id);
+
+      if (purchUpdErr && !String(purchUpdErr.message || '').includes('transport_charges')) {
+        throw purchUpdErr;
+      }
+      if (purchUpdErr && String(purchUpdErr.message || '').includes('transport_charges')) {
+        const retry = await supabase
+          .from('purchases')
+          .update({ total_amount: updatedTotal })
+          .eq('id', editingPurchase.id);
+        if (retry.error) throw retry.error;
+      }
 
       setEditingPurchase((prev) => (prev ? { ...prev, total_amount: updatedTotal } : null));
       setPurchases((prev) =>
         prev.map((p) => (p.id === editingPurchase.id ? { ...p, total_amount: updatedTotal } : p))
       );
+
+      showPurchaseMessage('success', 'Variant Deleted', `Purchase total ₹${updatedTotal.toLocaleString('en-IN')} ki update ayyindi and stock ${deleteQty} units reduce ayyindi.`, 'Edit Purchase → Saved Items', `${editingPurchase.id} → ${item.product_id} / ${item.variant_color} / ${item.variant_size}`);
     } catch (err: any) {
-      alert('Failed to delete item: ' + err.message);
+      showPurchaseMessage('error', 'Variant Delete Failed', err.message, 'Edit Purchase → Saved Items', `${editingPurchase.id} → ${item.product_id} / ${item.variant_color} / ${item.variant_size}`);
     } finally {
       setDeletingItemId(null);
     }
@@ -1019,19 +1307,19 @@ export default function PurchaseManager() {
     return calculateSmartPricing(cost, currentTransportPercent);
   }, [unitCost, currentTransportPercent]);
 
-  const handleAddMatrixToStaged = () => {
+  const handleAddMatrixToStaged = async () => {
     if (!activeProduct) {
-      alert('Product select cheyandi.');
+      showPurchaseMessage('warning', 'Product Required', 'First product ni select cheyyandi.', 'New Purchase → Product & Cost Price', 'Product Selection');
       return;
     }
 
     if (activeMatrixColors.length === 0) {
-      alert('Kanisam oka shade card select cheyandi.');
+      showPurchaseMessage('warning', 'Colour Shade Required', 'At least one Colour Shade select cheyyandi.', 'New Purchase → Configure Colours, Sizes & Pricing', 'Colour Shades');
       return;
     }
 
     if (selectedMatrixSizes.length === 0) {
-      alert('Ee purchase ki kavalsina size(s) select cheyandi.');
+      showPurchaseMessage('warning', 'Size Required', 'Ee purchase ki kavalsina size(s) select cheyyandi.', 'New Purchase → Configure Colours, Sizes & Pricing', 'Sizes');
       return;
     }
 
@@ -1073,16 +1361,93 @@ export default function PurchaseManager() {
     });
 
     if (missingCostVariant) {
-      alert(`${missingCostVariant} ki Cost Price enter cheyandi.`);
+      showPurchaseMessage('warning', 'Cost Price Required', `${missingCostVariant} ki Cost Price enter cheyyandi.`, 'New Purchase → Variant Matrix', `Variant ${missingCostVariant} → COST`);
       return;
     }
 
     if (newAdditions.length === 0) {
-      alert('Matrix lo quantity numbers enter cheyandi.');
+      showPurchaseMessage('warning', 'Quantity Required', 'Matrix lo at least one valid quantity enter cheyyandi.', 'New Purchase → Variant Matrix', 'Quantity / QTY');
       return;
     }
 
-    setStagedItems((prev) => [...prev, ...newAdditions]);
+    const sameProductAlreadyQueued = stagedItems.some((item) => item.product_id === activeProduct.id);
+    const exactVariantAlreadyQueued = newAdditions.some((newItem) =>
+      stagedItems.some(
+        (oldItem) =>
+          oldItem.product_id === newItem.product_id &&
+          oldItem.color.trim().toLowerCase() === newItem.color.trim().toLowerCase() &&
+          oldItem.size.trim().toLowerCase() === newItem.size.trim().toLowerCase()
+      )
+    );
+
+    if (exactVariantAlreadyQueued) {
+      const mergeExact = await askPurchaseConfirmation(
+        'Duplicate Variant Found',
+        'Ee same Product + Colour + Size already Matrix Queue lo undi.\n\nExisting entry tho quantity MERGE cheyyala, leka separate entry ga unchala?',
+        'New Purchase → Inward Inventory Breakdown → Matrix Queue',
+        `${activeProduct.id} → ${newAdditions.map((item) => `${item.color} / ${item.size}`).join(', ')}`,
+        'Merge Quantity',
+        'Keep Separate'
+      );
+
+      if (mergeExact) {
+        setStagedItems((prev) => {
+          const next = [...prev];
+          newAdditions.forEach((newItem) => {
+            const existingIndex = next.findIndex(
+              (oldItem) =>
+                oldItem.product_id === newItem.product_id &&
+                oldItem.color.trim().toLowerCase() === newItem.color.trim().toLowerCase() &&
+                oldItem.size.trim().toLowerCase() === newItem.size.trim().toLowerCase()
+            );
+            if (existingIndex >= 0) {
+              const existing = next[existingIndex];
+              const quantity = Number(existing.quantity || 0) + Number(newItem.quantity || 0);
+              next[existingIndex] = {
+                ...existing,
+                quantity,
+                total_cost: quantity * Number(newItem.unit_cost || existing.unit_cost || 0),
+                unit_cost: Number(newItem.unit_cost || existing.unit_cost || 0)
+              };
+            } else {
+              next.push({ ...newItem, queue_group_id: existingIndex >= 0 ? next[existingIndex].queue_group_id : `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` });
+            }
+          });
+          return next;
+        });
+      } else {
+        const separateGroup = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        setStagedItems((prev) => [...prev, ...newAdditions.map((item) => ({ ...item, queue_group_id: separateGroup }))]);
+      }
+    } else if (sameProductAlreadyQueued) {
+      const existingProductItem = stagedItems.find((item) => item.product_id === activeProduct.id);
+      const existingGroup = existingProductItem?.queue_group_id || `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const mergeProduct = await askPurchaseConfirmation(
+        'Existing Product Found',
+        'Ee Product already Matrix Queue lo undi, kani vere Colour/Size variant.\n\nExisting Product grouping lo MERGE cheyyala, leka separate entry ga unchala?',
+        'New Purchase → Inward Inventory Breakdown → Matrix Queue',
+        `${activeProduct.id} → Existing Product + New Colour/Size Variant`,
+        'Merge Product Group',
+        'Keep Separate'
+      );
+
+      if (mergeProduct) {
+        setStagedItems((prev) => [
+          ...prev,
+          ...newAdditions.map((item) => ({ ...item, queue_group_id: existingGroup }))
+        ]);
+      } else {
+        const separateGroup = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        setStagedItems((prev) => [
+          ...prev,
+          ...newAdditions.map((item) => ({ ...item, queue_group_id: separateGroup }))
+        ]);
+      }
+    } else {
+      const newGroup = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      setStagedItems((prev) => [...prev, ...newAdditions.map((item) => ({ ...item, queue_group_id: newGroup }))]);
+    }
+
     setSelectedProductId('');
     setProductSearchTerm('');
     setActiveMatrixColors([]);
@@ -1128,11 +1493,19 @@ export default function PurchaseManager() {
   const handleSavePurchase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSupplierId) {
-      alert('Supplier select cheyandi.');
+      showPurchaseMessage('warning', 'Supplier Required', 'First supplier ni select cheyyandi.', 'Purchase Header → Supplier Name', 'Supplier Selection');
       return;
     }
     if (!supplierBillNo.trim()) {
-      alert('Supplier Bill No enter cheyandi.');
+      showPurchaseMessage('warning', 'Supplier Bill No Required', 'Supplier Bill No enter cheyyandi.', 'Purchase Header → Supplier Bill No', 'Supplier Bill No');
+      return;
+    }
+
+    // The bill number is normally checked immediately on field blur.
+    // This final guard only protects against a missed blur/race condition.
+    const duplicateSupplierBill = await checkSupplierBillDuplicate(supplierBillNo, selectedSupplierId);
+    if (duplicateSupplierBill) {
+      showPurchaseMessage('error', 'Duplicate Supplier Bill', `Ee Supplier Bill No already exists. Existing Purchase: ${supplierBillDuplicatePurchase || 'found'}.`, 'Purchase Header → Supplier Bill No', `Supplier ${selectedSupplierId || 'Unknown'} → Bill ${supplierBillNo}`);
       return;
     }
 
@@ -1149,7 +1522,6 @@ export default function PurchaseManager() {
           purchase_date: purchaseDate,
           total_amount: grandTotalBillAmount,
           transport_charges: Number(actualTransportAmount || 0),
-          balance_amount: grandTotalBillAmount,
           notes: notes.trim() || null
         };
 
@@ -1324,7 +1696,7 @@ export default function PurchaseManager() {
           setIsModalOpen(false);
           setIsChecklistModalOpen(true);
         } else {
-          alert(`Purchase [${editingPurchase.id}] updated successfully with revised transport & pricing!`);
+          showPurchaseMessage('success', 'Purchase Updated', `Purchase [${editingPurchase.id}] updated successfully with revised transport & pricing!`, 'Edit Purchase → Save Bill', `Purchase ${editingPurchase.id} → Stock + Pricing`);
           setIsModalOpen(false);
         }
 
@@ -1333,7 +1705,7 @@ export default function PurchaseManager() {
       }
 
       if (computedStagedItems.length === 0) {
-        alert('Kudivaipu unna Inward Queue lo kanisam oka item aina add cheyandi.');
+        showPurchaseMessage('warning', 'Purchase Items Required', 'Kudivaipu unna Inward Queue lo kanisam oka item aina add cheyandi.', 'Purchase → Inward Inventory Breakdown', 'Newly Added in This Session');
         return;
       }
 
@@ -1348,9 +1720,6 @@ export default function PurchaseManager() {
         total_amount: grandTotalBillAmount,
         transport_charges: Number(actualTransportAmount || 0),
         tax_amount: 0,
-        paid_amount: 0,
-        balance_amount: grandTotalBillAmount,
-        payment_status: 'pending',
         notes: notes.trim() || null
       };
 
@@ -1487,7 +1856,7 @@ export default function PurchaseManager() {
       setIsChecklistModalOpen(true);
       loadData();
     } catch (err: any) {
-      alert('Error: ' + err.message);
+      showPurchaseMessage('error', 'Purchase Save Failed', err.message, 'Purchase → Save Bill', editingPurchase ? `Purchase ${editingPurchase.id}` : `New Purchase ${purchaseNo}`);
     } finally {
       setSubmitting(false);
     }
@@ -1773,9 +2142,32 @@ export default function PurchaseManager() {
                     required
                     placeholder="e.g. BILL-7426"
                     value={supplierBillNo}
-                    onChange={(e) => setSupplierBillNo(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border border-white/15 text-white font-semibold outline-none text-xs focus:border-[#ffa500]"
+                    onChange={(e) => {
+                      setSupplierBillNo(e.target.value);
+                      setSupplierBillCheckStatus('idle');
+                      setSupplierBillDuplicatePurchase('');
+                    }}
+                    onBlur={() => checkSupplierBillDuplicate()}
+                    className={`w-full px-2.5 py-1.5 rounded-xl bg-[#101628] border text-white font-semibold outline-none text-xs focus:border-[#ffa500] ${
+                      supplierBillCheckStatus === 'duplicate'
+                        ? 'border-[#ff6b6b]'
+                        : supplierBillCheckStatus === 'available'
+                          ? 'border-[#00ff9d]'
+                          : 'border-white/15'
+                    }`}
                   />
+                  {supplierBillCheckStatus === 'checking' && (
+                    <div className="mt-1 text-[9px] text-[#ffa500]">Checking existing bills...</div>
+                  )}
+                  {supplierBillCheckStatus === 'available' && (
+                    <div className="mt-1 text-[9px] text-[#00ff9d] font-semibold">✓ Bill No available for this supplier</div>
+                  )}
+                  {supplierBillCheckStatus === 'duplicate' && (
+                    <div className="mt-1 text-[9px] text-[#ff6b6b] font-semibold">✕ Already exists in Purchase {supplierBillDuplicatePurchase}</div>
+                  )}
+                  {supplierBillCheckStatus === 'error' && (
+                    <div className="mt-1 text-[9px] text-[#ffa500]">Could not verify now. Please click outside again.</div>
+                  )}
                 </div>
 
                 <div>
@@ -2076,7 +2468,7 @@ export default function PurchaseManager() {
                             {activeMatrixColors.length > 0 ? (
                               <div className="p-2.5 space-y-2.5">
                                 {selectedMatrixSizes.length > 0 ? (
-                                  <div className="border border-white/10 rounded-xl overflow-hidden bg-[#0a0e17] max-h-72 custom-scrollbar">
+                                  <div className="border border-white/10 rounded-xl overflow-hidden bg-[#0a0e17] max-h-72 overflow-y-auto overflow-x-hidden custom-scrollbar">
                                     <table className="w-full table-fixed text-left border-collapse">
                                       <colgroup>
                                         <col />
@@ -2577,11 +2969,18 @@ export default function PurchaseManager() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIsShadePickerModalOpen(false)}
+                  onClick={() => {
+                    if (activeMatrixColors.length === 0) {
+                      showPurchaseMessage('warning', 'Colour Shade Required', 'At least one Colour Shade select chesaka next step ki vellandi.', 'New Purchase → Configure Colours, Sizes & Pricing', 'Colour Shades → Confirm Shades');
+                      return;
+                    }
+                    setIsShadePickerModalOpen(false);
+                    setIsSizePickerModalOpen(true);
+                  }}
                   className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer active:scale-95"
                 >
                   <Check className="w-4 h-4 stroke-[3]" />
-                  <span>Confirm Shades & Build Matrix (OK)</span>
+                  <span>Confirm Shades & Continue to Sizes</span>
                 </button>
               </div>
             </div>
@@ -3079,6 +3478,8 @@ export default function PurchaseManager() {
           />
         </div>
       )}
+
+      <PurchaseFeedbackDialog dialog={purchaseDialog} onClose={closePurchaseDialog} onConfirm={confirmPurchaseDialog} />
 
     </div>
   );
