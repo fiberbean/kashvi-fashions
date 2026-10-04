@@ -136,7 +136,6 @@ export default function CartDrawer() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [paymentGateways, setPaymentGateways] = useState<PaymentGateway[]>([]);
   const [selectedGatewayId, setSelectedGatewayId] = useState<string>('');
-  const [selectedGatewayEnvironment, setSelectedGatewayEnvironment] = useState<string>('');
   const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderInfo | null>(null);
   const [paymentResult, setPaymentResult] = useState<PaymentStatusState | null>(null);
 
@@ -352,16 +351,10 @@ export default function CartDrawer() {
             return stillExists ? current : gateways[0].id;
           });
 
-          setSelectedGatewayEnvironment((current) => {
-            const selected = gateways.find((gateway) => gateway.id === selectedGatewayId);
-            return selected ? selected.environment : gateways[0].environment;
-          });
-
           const selected = gateways.find((gateway) => gateway.id === selectedGatewayId) || gateways[0];
           setActiveGatewayName(selected.name);
         } else {
           setSelectedGatewayId('');
-          setSelectedGatewayEnvironment('');
           setActiveGatewayName('Payment Gateway');
         }
       } catch (err) {
@@ -373,11 +366,6 @@ export default function CartDrawer() {
       fetchActiveGateways();
     }
   }, [isCartOpen]);
-
-  useEffect(() => {
-    const selected = paymentGateways.find((gateway) => gateway.id === selectedGatewayId);
-    setSelectedGatewayEnvironment(selected?.environment || '');
-  }, [selectedGatewayId, paymentGateways]);
 
   const handleSelectPaymentGateway = (gateway: PaymentGateway) => {
     setSelectedGatewayId(gateway.id);
@@ -830,9 +818,11 @@ export default function CartDrawer() {
             customer_name: currentAddress.name,
             customerEmail: resolvedEmail,
             customer_email: resolvedEmail,
+            // Environment is intentionally NOT sent from the browser.
+            // The Edge Function reads the currently active TEST/PRODUCTION
+            // configuration from payment_gateway_configs.
             gatewayId: selectedGateway.gateway_id,
             gateway_id: selectedGateway.gateway_id,
-            environment: selectedGateway.environment,
           },
         }
       );

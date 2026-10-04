@@ -18,6 +18,9 @@ import ColorMasterModal from './admin/components/modals/ColorMasterModal';
 import SizeMasterModal from './admin/components/modals/SizeMasterModal';
 import SupplierMasterModal from './admin/components/modals/SupplierMasterModal';
 import PaymentGatewayManager from './admin/pages/PaymentGatewayManager';
+import PaymentVoucherManager from './admin/components/modals/PaymentVoucherManager';
+import SupplierLedgerManager from './admin/components/modals/SupplierLedgerManager';
+import ExpensesManager from './admin/components/modals/ExpensesManager';
 import { OrderRecord, AdminStaffUser } from './admin/types';
 import { supabase } from './lib/supabase';
 
@@ -27,6 +30,8 @@ export type AdminViewType =
   | 'inventory' 
   | 'sales' 
   | 'purchase' 
+  | 'payment_vouchers'
+  | 'supplier_ledger'
   | 'expenses' 
   | 'reports' 
   | 'products' 
@@ -504,16 +509,16 @@ export default function AdminApp() {
             <SalesManager currentUser={currentUser} />
           )}
 
+          {currentView === 'payment_vouchers' && canAccess('payment_vouchers') && (
+            <PaymentVoucherManager currentUser={currentUser} />
+          )}
+
+          {currentView === 'supplier_ledger' && canAccess('supplier_ledger') && (
+            <SupplierLedgerManager currentUser={currentUser} />
+          )}
+
           {currentView === 'expenses' && canAccess('expenses') && (
-            <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
-              <div className="w-14 h-14 rounded-2xl bg-[#ff6b6b]/10 text-[#ff6b6b] border border-[#ff6b6b]/20 flex items-center justify-center mx-auto shadow-lg">
-                <Receipt className="w-7 h-7" />
-              </div>
-              <h2 className="text-lg font-bold text-white">Operating Expenses Tracker</h2>
-              <p className="text-xs text-[#8b9bb4] max-w-md mx-auto leading-relaxed">
-                Store rent, staff salaries, electricity bills, packaging, transport and everyday operational costs.
-              </p>
-            </div>
+            <ExpensesManager currentUser={currentUser} />
           )}
 
           {currentView === 'reports' && canAccess('reports') && (

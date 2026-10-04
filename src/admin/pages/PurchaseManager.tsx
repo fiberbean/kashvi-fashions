@@ -193,6 +193,140 @@ async function recordStockMovement({
 }
 
 
+async function applySupplierLedgerEntry({
+  supplierId,
+  purchaseId,
+  amount,
+  transactionType,
+  description
+}: {
+  supplierId: string;
+  purchaseId?: string | null;
+  amount: number;
+  transactionType: string;
+  description: string;
+}) {
+  const normalizedSupplierId = String(supplierId || '').trim();
+  const delta = Number(amount) || 0;
+
+  if (!normalizedSupplierId || delta === 0) return;
+
+  const { data: supplier, error: supplierErr } = await supabase
+    .from('suppliers')
+    .select('id, balance_due')
+    .eq('id', normalizedSupplierId)
+    .maybeSingle();
+
+  if (supplierErr) throw supplierErr;
+  if (!supplier) throw new Error(`Supplier not found: ${normalizedSupplierId}`);
+
+  const oldBalance = Number(supplier.balance_due || 0);
+  const newBalance = oldBalance + delta;
+
+  if (newBalance < 0) {
+    throw new Error(
+      `Supplier outstanding cannot become negative. Current outstanding: ₹${oldBalance.toLocaleString('en-IN')}, adjustment: ₹${delta.toLocaleString('en-IN')}.`
+    );
+  }
+
+  const ledgerId = `led_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+
+  const { error: ledgerErr } = await supabase
+    .from('supplier_ledger')
+    .insert([{
+      id: ledgerId,
+      supplier_id: normalizedSupplierId,
+      purchase_id: purchaseId || null,
+      transaction_type: transactionType,
+      amount: delta,
+      balance_after: newBalance,
+      description
+    }]);
+
+  if (ledgerErr) throw ledgerErr;
+
+  const { error: balanceErr } = await supabase
+    .from('suppliers')
+    .update({ balance_due: newBalance })
+    .eq('id', normalizedSupplierId);
+
+  if (balanceErr) {
+    await supabase.from('supplier_ledger').delete().eq('id', ledgerId);
+    throw balanceErr;
+  }
+}
+
+
+async function applySupplierPurchaseEditLedger({
+  oldSupplierId,
+  oldTotal,
+  newSupplierId,
+  newTotal,
+  purchaseId
+}: {
+  oldSupplierId: string;
+  oldTotal: number;
+  newSupplierId: string;
+  newTotal: number;
+  purchaseId: string;
+}) {
+  const oldSupplier = String(oldSupplierId || '').trim();
+  const newSupplier = String(newSupplierId || '').trim();
+  const previousTotal = Number(oldTotal) || 0;
+  const currentTotal = Number(newTotal) || 0;
+
+  if (!oldSupplier || !newSupplier) {
+    throw new Error('Supplier ID missing. Supplier ledger update cannot be completed safely.');
+  }
+
+  if (oldSupplier === newSupplier) {
+    const delta = currentTotal - previousTotal;
+    if (delta !== 0) {
+      await applySupplierLedgerEntry({
+        supplierId: newSupplier,
+        purchaseId,
+        amount: delta,
+        transactionType: 'PURCHASE_ADJUSTMENT',
+        description: `Purchase amount adjustment ${purchaseId}: ₹${previousTotal.toLocaleString('en-IN')} → ₹${currentTotal.toLocaleString('en-IN')}`
+      });
+    }
+    return;
+  }
+
+  if (previousTotal > 0) {
+    await applySupplierLedgerEntry({
+      supplierId: oldSupplier,
+      purchaseId,
+      amount: -previousTotal,
+      transactionType: 'PURCHASE_SUPPLIER_CHANGE',
+      description: `Purchase supplier change reversal ${purchaseId}`
+    });
+  }
+
+  try {
+    if (currentTotal > 0) {
+      await applySupplierLedgerEntry({
+        supplierId: newSupplier,
+        purchaseId,
+        amount: currentTotal,
+        transactionType: 'PURCHASE_SUPPLIER_CHANGE',
+        description: `Purchase supplier change inward ${purchaseId}`
+      });
+    }
+  } catch (err) {
+    if (previousTotal > 0) {
+      await applySupplierLedgerEntry({
+        supplierId: oldSupplier,
+        purchaseId,
+        amount: previousTotal,
+        transactionType: 'PURCHASE_SUPPLIER_CHANGE_ROLLBACK',
+        description: `Rollback supplier change after failure ${purchaseId}`
+      });
+    }
+    throw err;
+  }
+}
+
 type PurchaseDialogKind = 'info' | 'success' | 'warning' | 'error' | 'confirm';
 
 interface PurchaseDialogState {
@@ -691,15 +825,40 @@ export default function PurchaseManager() {
   const handleDeletePurchase = async (p: PurchaseRecord) => {
     const confirmDelete = await askPurchaseConfirmation(
       'Delete Purchase?',
-      `Permanently delete [${p.id}]? Inward stock will be rolled back from inventory.`,
+      `Permanently delete [${p.id}]? Inward stock will be rolled back from inventory and supplier outstanding will be reduced by ₹${Number(p.total_amount || 0).toLocaleString('en-IN')}.`,
       'Purchase History → Delete Purchase',
-      `Purchase ${p.id} → Inventory Rollback`,
+      `Purchase ${p.id} → Inventory + Supplier Ledger Rollback`,
       'Delete & Roll Back',
       'Keep Purchase'
     );
     if (!confirmDelete) return;
 
     try {
+      const purchaseAmount = Number(p.total_amount || 0);
+      const supplierId = String(p.supplier_id || '').trim();
+
+      if (!supplierId) {
+        throw new Error(`Supplier ID missing for purchase ${p.id}. Supplier ledger rollback cannot be completed safely.`);
+      }
+
+      if (purchaseAmount > 0) {
+        const { data: supplier, error: supplierErr } = await supabase
+          .from('suppliers')
+          .select('balance_due')
+          .eq('id', supplierId)
+          .maybeSingle();
+
+        if (supplierErr) throw supplierErr;
+        if (!supplier) throw new Error(`Supplier not found: ${supplierId}`);
+
+        const currentOutstanding = Number(supplier.balance_due || 0);
+        if (currentOutstanding < purchaseAmount) {
+          throw new Error(
+            `Purchase delete blocked for safety. Supplier outstanding is ₹${currentOutstanding.toLocaleString('en-IN')}, but this purchase is ₹${purchaseAmount.toLocaleString('en-IN')}.`
+          );
+        }
+      }
+
       const { data: lineItems } = await supabase
         .from('purchase_items')
         .select('*')
@@ -716,10 +875,18 @@ export default function PurchaseManager() {
             .maybeSingle();
 
           if (inv) {
-            const rollbackQty = Math.max(0, inv.stock_quantity - (item.quantity || 0));
+            const currentStock = Number(inv.stock_quantity || 0);
+            const rollbackQty = Number(item.quantity || 0);
+
+            if (currentStock < rollbackQty) {
+              throw new Error(
+                `Cannot delete purchase safely. Current stock for ${item.product_id} / ${item.variant_color} / ${item.variant_size} is ${currentStock}, but rollback requires ${rollbackQty}.`
+              );
+            }
+
             await supabase
               .from('inventory')
-              .update({ stock_quantity: rollbackQty, updated_at: new Date().toISOString() })
+              .update({ stock_quantity: currentStock - rollbackQty, updated_at: new Date().toISOString() })
               .eq('id', inv.id);
 
             await recordStockMovement({
@@ -727,7 +894,7 @@ export default function PurchaseManager() {
               inventoryId: inv.id,
               variantColor: item.variant_color,
               variantSize: item.variant_size,
-              quantity: -(Number(item.quantity) || 0),
+              quantity: -rollbackQty,
               movementType: 'PURCHASE_ROLLBACK',
               referenceId: p.id,
               notes: `Purchase deletion rollback ${p.id}`
@@ -736,11 +903,42 @@ export default function PurchaseManager() {
         }
       }
 
+      // Reverse supplier outstanding before deleting the purchase.
+      let supplierLedgerReversed = false;
+
+      if (purchaseAmount > 0) {
+        await applySupplierLedgerEntry({
+          supplierId,
+          purchaseId: p.id,
+          amount: -purchaseAmount,
+          transactionType: 'PURCHASE_DELETE',
+          description: `Purchase deletion reversal ${p.id}`
+        });
+        supplierLedgerReversed = true;
+      }
+
       const { error } = await supabase.from('purchases').delete().eq('id', p.id);
-      if (error) throw error;
+      if (error) {
+        if (supplierLedgerReversed) {
+          await applySupplierLedgerEntry({
+            supplierId,
+            purchaseId: p.id,
+            amount: purchaseAmount,
+            transactionType: 'PURCHASE_DELETE_ROLLBACK',
+            description: `Purchase delete rollback after failed delete ${p.id}`
+          });
+        }
+        throw error;
+      }
 
       setPurchases((prev) => prev.filter((item) => item.id !== p.id));
-      showPurchaseMessage('success', 'Purchase Deleted', `Purchase [${p.id}] successfully deleted and stock rollback applied.`, 'Purchase History → Delete Purchase', `Purchase ${p.id} → Inventory Rollback`);
+      showPurchaseMessage(
+        'success',
+        'Purchase Deleted',
+        `Purchase [${p.id}] successfully deleted. Stock rollback and supplier outstanding rollback applied.`,
+        'Purchase History → Delete Purchase',
+        `Purchase ${p.id} → Inventory + Supplier Ledger`
+      );
     } catch (err: any) {
       showPurchaseMessage('error', 'Purchase Delete Failed', err.message, 'Purchase History → Delete Purchase', `Purchase ${p.id} → Delete Operation`);
     }
@@ -879,6 +1077,19 @@ export default function PurchaseManager() {
         await supabase.from('purchases').update(updatePayload).eq('id', editingPurchase.id);
       }
 
+      const purchaseTotalBeforeLineEdit = Number(editingPurchase.total_amount || 0);
+      const lineTotalLedgerDelta = computedTotal - purchaseTotalBeforeLineEdit;
+
+      if (lineTotalLedgerDelta !== 0) {
+        await applySupplierLedgerEntry({
+          supplierId: String(editingPurchase.supplier_id || '').trim(),
+          purchaseId: editingPurchase.id,
+          amount: lineTotalLedgerDelta,
+          transactionType: 'PURCHASE_ADJUSTMENT',
+          description: `Purchase line edit amount adjustment ${editingPurchase.id}: ₹${purchaseTotalBeforeLineEdit.toLocaleString('en-IN')} → ₹${computedTotal.toLocaleString('en-IN')}`
+        });
+      }
+
       setEditingPurchase((prev) => (prev ? { ...prev, total_amount: computedTotal } : null));
       setPurchases((prev) =>
         prev.map((p) => (p.id === editingPurchase.id ? { ...p, total_amount: computedTotal } : p))
@@ -978,6 +1189,19 @@ export default function PurchaseManager() {
           .update({ total_amount: updatedTotal })
           .eq('id', editingPurchase.id);
         if (retry.error) throw retry.error;
+      }
+
+      const purchaseTotalBeforeVariantDelete = Number(editingPurchase.total_amount || 0);
+      const variantDeleteLedgerDelta = updatedTotal - purchaseTotalBeforeVariantDelete;
+
+      if (variantDeleteLedgerDelta !== 0) {
+        await applySupplierLedgerEntry({
+          supplierId: String(editingPurchase.supplier_id || '').trim(),
+          purchaseId: editingPurchase.id,
+          amount: variantDeleteLedgerDelta,
+          transactionType: 'PURCHASE_ADJUSTMENT',
+          description: `Purchase variant delete amount adjustment ${editingPurchase.id}: ₹${purchaseTotalBeforeVariantDelete.toLocaleString('en-IN')} → ₹${updatedTotal.toLocaleString('en-IN')}`
+        });
       }
 
       setEditingPurchase((prev) => (prev ? { ...prev, total_amount: updatedTotal } : null));
@@ -1514,6 +1738,8 @@ export default function PurchaseManager() {
 
     try {
       if (editingPurchase) {
+        const previousSupplierId = String(editingPurchase.supplier_id || '').trim();
+        const previousPurchaseTotal = Number(editingPurchase.total_amount || 0);
         const updatePayload: any = {
           supplier_id: supplierObj?.id || null,
           supplier_name: supplierObj?.name || 'Unknown Supplier',
@@ -1536,6 +1762,27 @@ export default function PurchaseManager() {
           updateErr = retry.error;
         }
         if (updateErr) throw updateErr;
+
+        try {
+          await applySupplierPurchaseEditLedger({
+            oldSupplierId: previousSupplierId,
+            oldTotal: previousPurchaseTotal,
+            newSupplierId: String(supplierObj?.id || '').trim(),
+            newTotal: grandTotalBillAmount,
+            purchaseId: editingPurchase.id
+          });
+        } catch (ledgerErr) {
+          // Keep the purchase header consistent if supplier ledger update fails.
+          await supabase
+            .from('purchases')
+            .update({
+              supplier_id: previousSupplierId || null,
+              supplier_name: editingPurchase.supplier_name,
+              total_amount: previousPurchaseTotal
+            })
+            .eq('id', editingPurchase.id);
+          throw ledgerErr;
+        }
 
         // IMPORTANT: Recalculate pricing for ALL already-saved purchase variants
         // from fresh DB data. Do not depend on stale React state or the old
@@ -1561,44 +1808,48 @@ export default function PurchaseManager() {
             ? (currentTransportAmountForPricing / fullBillBaseTotal) * 100
             : 0;
 
-        for (const it of freshItems) {
-          const itemCost = Number(it.unit_cost) || 0;
-          const revisedPricing = calculateSmartPricing(itemCost, effectiveTransportPercentForPricing);
+        // These variant price updates are independent. Run them in parallel
+        // instead of waiting for every Supabase request one-by-one.
+        await Promise.all(
+          freshItems.map(async (it: any) => {
+            const itemCost = Number(it.unit_cost) || 0;
+            const revisedPricing = calculateSmartPricing(itemCost, effectiveTransportPercentForPricing);
 
-          const { data: existingInv, error: existingInvErr } = await supabase
-            .from('inventory')
-            .select('id')
-            .eq('product_id', it.product_id)
-            .eq('variant_color', it.variant_color)
-            .eq('variant_size', it.variant_size)
-            .maybeSingle();
+            const { data: existingInv, error: existingInvErr } = await supabase
+              .from('inventory')
+              .select('id')
+              .eq('product_id', it.product_id)
+              .eq('variant_color', it.variant_color)
+              .eq('variant_size', it.variant_size)
+              .maybeSingle();
 
-          if (existingInvErr) throw existingInvErr;
+            if (existingInvErr) throw existingInvErr;
 
-          if (!existingInv) {
-            throw new Error(
-              `Inventory variant not found: ${it.product_id} / ${it.variant_color} / ${it.variant_size}`
-            );
-          }
+            if (!existingInv) {
+              throw new Error(
+                `Inventory variant not found: ${it.product_id} / ${it.variant_color} / ${it.variant_size}`
+              );
+            }
 
-          const { data: verifiedInv, error: priceErr } = await supabase
-            .from('inventory')
-            .update({
-              cost_price: itemCost,
-              store_price: revisedPricing.storePrice,
-              online_price: revisedPricing.onlinePrice,
-              mrp: revisedPricing.mrpPrice,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', existingInv.id)
-            .select('id, cost_price, store_price, online_price, mrp')
-            .maybeSingle();
+            const { data: verifiedInv, error: priceErr } = await supabase
+              .from('inventory')
+              .update({
+                cost_price: itemCost,
+                store_price: revisedPricing.storePrice,
+                online_price: revisedPricing.onlinePrice,
+                mrp: revisedPricing.mrpPrice,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingInv.id)
+              .select('id, cost_price, store_price, online_price, mrp')
+              .maybeSingle();
 
-          if (priceErr) throw priceErr;
-          if (!verifiedInv) {
-            throw new Error(`Inventory price update failed for ${it.product_id} / ${it.variant_color} / ${it.variant_size}`);
-          }
-        }
+            if (priceErr) throw priceErr;
+            if (!verifiedInv) {
+              throw new Error(`Inventory price update failed for ${it.product_id} / ${it.variant_color} / ${it.variant_size}`);
+            }
+          })
+        );
 
         if (computedStagedItems.length > 0) {
           const linePayloads = computedStagedItems.map((it, idx) => ({
@@ -1730,6 +1981,19 @@ export default function PurchaseManager() {
         purErr = retry.error;
       }
       if (purErr) throw purErr;
+
+      try {
+        await applySupplierLedgerEntry({
+          supplierId: String(supplierObj?.id || '').trim(),
+          purchaseId: purchaseNo.trim(),
+          amount: Number(grandTotalBillAmount || 0),
+          transactionType: 'PURCHASE',
+          description: `Purchase inward ${purchaseNo.trim()}`
+        });
+      } catch (ledgerErr) {
+        await supabase.from('purchases').delete().eq('id', purchaseNo.trim());
+        throw ledgerErr;
+      }
 
       const linePayloads = computedStagedItems.map((it, idx) => ({
         id: `pi_${purchaseNo.trim()}_${Date.now()}_${idx}`,

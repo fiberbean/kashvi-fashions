@@ -17,7 +17,7 @@ export const hasPermission = (role: AdminRole | string | null | undefined, actio
 export const canAccessView = (role: AdminRole | string | null | undefined, view: string) => {
   const normalized = String(role || '').toLowerCase().trim() as AdminRole;
   if (normalized === 'admin' || normalized === 'manager' || normalized === 'operations') {
-    return ['dashboard', 'orders', 'inventory', 'sales', 'purchase', 'expenses', 'reports', 'products', 'product_master'].includes(view);
+    return ['dashboard', 'orders', 'inventory', 'sales', 'purchase', 'purchase_returns', 'expenses', 'reports', 'products', 'product_master'].includes(view);
   }
   if (normalized === 'sales') {
     return view === 'orders' || view === 'sales';

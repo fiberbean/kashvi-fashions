@@ -41,30 +41,23 @@ serve(async (req) => {
       body.gatewayId || body.gateway_id || 'cashfree'
     ).trim().toLowerCase();
 
-    const requestedEnvironment = String(
-      body.environment || ''
-    ).trim().toLowerCase();
-
     let gatewayId = requestedGatewayId || 'cashfree';
     let gatewayDisplayName = 'Cashfree Payments';
     let appId = '';
     let secretKey = '';
     let env = 'test';
 
-    const configQuery = supabase
+    // IMPORTANT: TEST / PRODUCTION is controlled only by the Admin Gateway
+    // configuration. Never trust an environment value sent by the browser.
+    // The currently ACTIVE configuration is the single source of truth.
+    const { data: activeConfigs, error: configError } = await supabase
       .from('payment_gateway_configs')
       .select(
-        'id,name,gateway_id,is_active,environment,app_id,secret_key,webhook_secret'
+        'id,name,gateway_id,is_active,environment,app_id,secret_key,webhook_secret,updated_at'
       )
       .eq('gateway_id', gatewayId)
-      .eq('is_active', true);
-
-    if (requestedEnvironment) {
-      configQuery.eq('environment', requestedEnvironment);
-    }
-
-    const { data: activeConfigs, error: configError } = await configQuery
-      .order('environment', { ascending: true })
+      .eq('is_active', true)
+      .order('updated_at', { ascending: false })
       .limit(2);
 
     if (configError) {
@@ -72,6 +65,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Unable to read payment gateway configuration.' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if ((activeConfigs || []).length > 1) {
+      console.error('Multiple active environments found for gateway:', gatewayId);
+      return new Response(
+        JSON.stringify({
+          error: `Multiple active environments found for gateway: ${gatewayId}. Please keep only TEST or PRODUCTION active.`,
+        }),
+        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -90,7 +93,16 @@ serve(async (req) => {
     gatewayDisplayName = config.name || gatewayDisplayName;
     appId = String(config.app_id || '').trim();
     secretKey = String(config.secret_key || '').trim();
-    env = String(config.environment || 'test').trim().toLowerCase();
+    env = String(config.environment || '').trim().toLowerCase();
+
+    if (env !== 'test' && env !== 'production') {
+      return new Response(
+        JSON.stringify({
+          error: `${gatewayDisplayName} has an invalid active environment configuration.`,
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     if (!appId || !secretKey) {
       return new Response(
@@ -116,6 +128,7 @@ serve(async (req) => {
       );
     }
 
+    // Active DB environment directly controls Cashfree API environment.
     const cashfreeEnvironment = env === 'production' ? 'production' : 'sandbox';
 
     const baseUrl = cashfreeEnvironment === 'production'

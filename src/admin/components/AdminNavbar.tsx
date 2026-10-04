@@ -23,7 +23,8 @@ import {
   Film,
   MousePointerClick,
   Settings,
-  CreditCard
+  CreditCard,
+  BookOpen
 } from 'lucide-react';
 import { AdminStaffUser } from '../types';
 import { AdminViewType } from '../../AdminApp';
@@ -55,12 +56,7 @@ export default function AdminNavbar({
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
 
-  const role = String(currentUser?.role || 'operations').toLowerCase().trim();
-  const isAdmin = role === 'admin';
-  const isSales = role === 'sales';
-  const canSeeGeneral = !isSales;
-  const canSeeSettings = isAdmin;
-  const canSeeStudio = isAdmin;
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -143,7 +139,7 @@ export default function AdminNavbar({
 
             <div className="flex items-center gap-1 text-[11.5px] font-semibold flex-wrap">
               {/* DASHBOARD */}
-              {canSeeGeneral && <button
+              <button
                 type="button"
                 onClick={() => handleSelectView('dashboard')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
@@ -154,10 +150,10 @@ export default function AdminNavbar({
               >
                 <LayoutDashboard className="w-3.5 h-3.5" />
                 <span>Dashboard</span>
-              </button>}
+              </button>
 
               {/* MASTERS */}
-              {canSeeGeneral && <div className="relative shrink-0">
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('masters')}
@@ -204,7 +200,7 @@ export default function AdminNavbar({
                     </button>
                   </div>
                 )}
-              </div>}
+              </div>
 
               {/* SALES */}
               <div className="relative shrink-0">
@@ -236,7 +232,7 @@ export default function AdminNavbar({
               </div>
 
               {/* INVENTORY */}
-              {canSeeGeneral && <div className="relative shrink-0">
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('inventory')}
@@ -264,15 +260,15 @@ export default function AdminNavbar({
                     <div className="px-4 py-2 text-[9px] font-mono uppercase tracking-wider text-[#64748b]">Stock movements can be accessed from Inventory</div>
                   </div>
                 )}
-              </div>}
+              </div>
 
               {/* ACCOUNTS */}
-              {canSeeGeneral && <div className="relative shrink-0">
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('accounts')}
                   className={`flex items-center gap-1 px-3 py-1.5 rounded-xl transition-all cursor-pointer border ${
-                    currentView === 'expenses' || openDropdown === 'accounts'
+                    currentView === 'expenses' || currentView === 'payment_vouchers' || currentView === 'supplier_ledger' || openDropdown === 'accounts'
                       ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white border-white/20 shadow-[0_4px_16px_rgba(109,74,255,0.35)] font-bold'
                       : 'text-[#8b9bb4] border-transparent hover:text-white hover:bg-white/5'
                   }`}
@@ -283,22 +279,25 @@ export default function AdminNavbar({
                 </button>
                 {openDropdown === 'accounts' && (
                   <div className="absolute top-full left-0 mt-2 w-52 bg-[#101628]/98 backdrop-blur-2xl rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.8),0_0_20px_rgba(109,74,255,0.25)] border border-white/15 py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-4 py-2.5 flex items-center gap-2.5 text-xs text-[#64748b]">
-                      <CreditCard className="w-4 h-4" />
-                      <span className="font-semibold">Payments</span>
-                      <span className="ml-auto text-[8px] font-mono uppercase tracking-wider">Soon</span>
-                    </div>
+                    <button type="button" onClick={() => handleSelectView('payment_vouchers')} className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group">
+                      <CreditCard className="w-4 h-4 text-[#00d9ff] group-hover:text-white transition-colors" />
+                      <span className="font-semibold">Supplier Payment Voucher</span>
+                    </button>
                     <button type="button" onClick={() => handleSelectView('expenses')} className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group">
                       <Receipt className="w-4 h-4 text-[#ff6b6b] group-hover:text-white transition-colors" />
                       <span className="font-semibold">Expenses</span>
                     </button>
+                    <button type="button" onClick={() => handleSelectView('supplier_ledger')} className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-xs text-[#8b9bb4] hover:text-white hover:bg-white/10 transition-colors cursor-pointer group">
+                      <BookOpen className="w-4 h-4 text-[#a78bfa] group-hover:text-white transition-colors" />
+                      <span className="font-semibold">Supplier Ledger</span>
+                    </button>
                     <div className="px-4 pt-2 pb-1 text-[9px] font-mono uppercase tracking-wider text-[#64748b]">More accounts modules can be added here</div>
                   </div>
                 )}
-              </div>}
+              </div>
 
               {/* STUDIO */}
-              {canSeeStudio && <div className="relative shrink-0">
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('studio')}
@@ -323,10 +322,10 @@ export default function AdminNavbar({
                     </button>
                   </div>
                 )}
-              </div>}
+              </div>
 
               {/* REPORTS */}
-              {canSeeGeneral && <button
+              <button
                 type="button"
                 onClick={() => handleSelectView('reports')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
@@ -337,10 +336,10 @@ export default function AdminNavbar({
               >
                 <BarChart3 className="w-3.5 h-3.5 text-[#a78bfa]" />
                 <span>Reports</span>
-              </button>}
+              </button>
 
               {/* SETTINGS */}
-              {canSeeSettings && <div className="relative shrink-0">
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('settings')}
@@ -370,7 +369,7 @@ export default function AdminNavbar({
                     <div className="px-4 py-2 text-[9px] font-mono uppercase tracking-wider text-[#64748b]">Store & system settings can be added here</div>
                   </div>
                 )}
-              </div>}
+              </div>
             </div>
           </div>
 
