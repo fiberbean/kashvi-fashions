@@ -19,6 +19,7 @@ import SizeMasterModal from './admin/components/modals/SizeMasterModal';
 import SupplierMasterModal from './admin/components/modals/SupplierMasterModal';
 import PaymentGatewayManager from './admin/pages/PaymentGatewayManager';
 import { OrderRecord, AdminStaffUser } from './admin/types';
+import { supabase } from './lib/supabase';
 
 export type AdminViewType = 
   | 'dashboard' 
@@ -40,6 +41,7 @@ export default function AdminApp() {
   const [activeAlerts, setActiveAlerts] = useState<OrderRecord[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [syncTrigger, setSyncTrigger] = useState<number>(0);
+  const salesAudioContextRef = useRef<AudioContext | null>(null);
 
   const [currentView, setCurrentView] = useState<AdminViewType>('dashboard');
   const [selectedMasterSection, setSelectedMasterSection] = useState<MasterSectionType | null>(null);
@@ -120,15 +122,179 @@ export default function AdminApp() {
     };
   }, [currentUser]);
 
-  if (!location.pathname.startsWith('/kfmama')) {
-    return <Navigate to="/" replace />;
-  }
+  // Keep every hook above the conditional returns below.
+  // React requires hooks to run in the same order on every render.
+  const normalizedRole = String(currentUser?.role || 'operations').toLowerCase().trim();
+  const isAdmin = normalizedRole === 'admin';
+  const isManager = normalizedRole === 'manager';
+  const isOperations = normalizedRole === 'operations';
+  const isSales = normalizedRole === 'sales';
+  const canAccess = (view: AdminViewType) => {
+    if (isAdmin) return true;
+    if (isSales) return view === 'orders' || view === 'sales';
+    if (isManager || isOperations) return !['staff', 'gateways'].includes(view);
+    return false;
+  };
 
   useEffect(() => {
     document.title = currentUser
       ? `Kashvi Command Deck — ${currentUser.role.toUpperCase()}`
       : 'Kashvi Studio OS — Secure Staff Gateway';
   }, [currentUser]);
+
+  useEffect(() => {
+    if (isSales && !canAccess(currentView)) {
+      setCurrentView('sales');
+    }
+  }, [isSales, currentView]);
+
+  // Sales role should always open directly on the Walk-In Store billing screen
+  // after login instead of the Online Orders screen.
+  useEffect(() => {
+    if (isSales) {
+      setSelectedMasterSection(null);
+      setCurrentView('sales');
+    }
+  }, [isSales]);
+
+  // Sales role must receive online-order alerts even though Sales cannot access Dashboard.
+  // Keep a reusable AudioContext and unlock it from a real user gesture so browser
+  // autoplay policy does not block the alert sound when a realtime order arrives.
+  useEffect(() => {
+    if (!isSales) return;
+
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => undefined);
+    }
+
+    const getAudioContext = () => {
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (!AudioContextClass) return null;
+
+        if (!salesAudioContextRef.current) {
+          salesAudioContextRef.current = new AudioContextClass();
+        }
+
+        return salesAudioContextRef.current;
+      } catch (e) {
+        console.warn('Sales audio context unavailable:', e);
+        return null;
+      }
+    };
+
+    // IMPORTANT: create the AudioContext INSIDE the real user gesture.
+    // Creating it earlier and only calling resume() later can leave Chrome's
+    // autoplay policy blocking realtime sounds until the user clicks again.
+    const unlockSalesAudio = async () => {
+      const ctx = getAudioContext();
+      if (!ctx) return;
+
+      try {
+        if (ctx.state !== 'running') {
+          await ctx.resume();
+        }
+
+        // Prime the audio output during the user gesture with an inaudible
+        // oscillator. This makes subsequent realtime alert sounds eligible
+        // to play without requiring another click.
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, now);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.01);
+      } catch (e) {
+        console.warn('Sales audio unlock unavailable:', e);
+      }
+    };
+
+    const gestureEvents = ['pointerdown', 'mousedown', 'keydown', 'touchstart'];
+    gestureEvents.forEach((eventName) => {
+      window.addEventListener(eventName, unlockSalesAudio, { passive: true });
+    });
+
+    const playSalesOrderAlert = () => {
+      const ctx = salesAudioContextRef.current;
+      if (!ctx || ctx.state !== 'running') return;
+
+      try {
+        const now = ctx.currentTime;
+
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'triangle';
+        osc1.frequency.setValueAtTime(587.33, now);
+        osc1.frequency.exponentialRampToValueAtTime(880, now + 0.15);
+        gain1.gain.setValueAtTime(0.38, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.4);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1174.66, now + 0.18);
+        gain2.gain.setValueAtTime(0.28, now + 0.18);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.72);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.18);
+        osc2.stop(now + 0.72);
+      } catch (e) {
+        console.warn('Sales order alert sound unavailable:', e);
+      }
+    };
+
+    const channel = supabase
+      .channel('kfmama-sales-online-order-alerts')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders' },
+        (payload) => {
+          const newOrder = payload.new as OrderRecord;
+          if (!newOrder?.id?.toUpperCase().startsWith('KFOD')) return;
+
+          playSalesOrderAlert();
+          setActiveAlerts((prev) => {
+            if (prev.some((order) => order.id === newOrder.id)) return prev;
+            return [newOrder, ...prev];
+          });
+
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              const items = Array.isArray(newOrder.items) ? newOrder.items : [];
+              const firstItem = items[0] as any;
+              const itemName = firstItem?.name || 'New Online Order';
+              const qty = firstItem?.qty || firstItem?.quantity || 1;
+              new Notification(`🚨 NEW ORDER: ${itemName}`, {
+                body: `Qty: ${qty} • ${newOrder.customer_name || 'Customer'} • ${newOrder.id}`,
+                icon: firstItem?.image || '/favicon.ico',
+                requireInteraction: true
+              });
+            } catch (e) {
+              console.warn('Sales browser notification failed:', e);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      gestureEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, unlockSalesAudio);
+      });
+    };
+  }, [isSales]);
+
+  if (!location.pathname.startsWith('/kfmama')) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleNewOrderAlert = (ord: OrderRecord) => {
     setActiveAlerts((prev) => [ord, ...prev]);
@@ -162,8 +328,6 @@ export default function AdminApp() {
   if (!currentUser) {
     return <AdminLoginScreen onLoginSuccess={(user) => setCurrentUser(user)} />;
   }
-
-  const normalizedRole = (currentUser.role || 'operations').toLowerCase().trim();
 
   const normalizedSection = selectedMasterSection ? String(selectedMasterSection).toLowerCase().trim() : '';
   const isCategorySection = normalizedSection === 'category' || normalizedSection === 'categories';
@@ -312,7 +476,7 @@ export default function AdminApp() {
         !isSupplierSection
       )) && (
         <main className="flex-1 w-full max-w-[1600px] mx-auto p-3 sm:p-5 relative z-10">
-          {currentView === 'dashboard' && (
+          {currentView === 'dashboard' && canAccess('dashboard') && (
             <AdminDashboard
               currentUser={currentUser}
               onNewOrderNotice={handleNewOrderAlert}
@@ -320,27 +484,27 @@ export default function AdminApp() {
             />
           )}
 
-          {currentView === 'orders' && (
-            <OrdersManager />
+          {currentView === 'orders' && canAccess('orders') && (
+            <OrdersManager currentUser={currentUser} />
           )}
 
-          {currentView === 'inventory' && (
+          {currentView === 'inventory' && canAccess('inventory') && (
             <InventoryManager currentUser={currentUser} />
           )}
 
-          {currentView === 'product_master' && (
+          {currentView === 'product_master' && canAccess('product_master') && (
             <ProductMasterManager />
           )}
 
-          {currentView === 'purchase' && (
+          {currentView === 'purchase' && canAccess('purchase') && (
             <PurchaseManager currentUser={currentUser} />
           )}
 
-          {currentView === 'sales' && (
+          {currentView === 'sales' && canAccess('sales') && (
             <SalesManager currentUser={currentUser} />
           )}
 
-          {currentView === 'expenses' && (
+          {currentView === 'expenses' && canAccess('expenses') && (
             <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
               <div className="w-14 h-14 rounded-2xl bg-[#ff6b6b]/10 text-[#ff6b6b] border border-[#ff6b6b]/20 flex items-center justify-center mx-auto shadow-lg">
                 <Receipt className="w-7 h-7" />
@@ -352,7 +516,7 @@ export default function AdminApp() {
             </div>
           )}
 
-          {currentView === 'reports' && (
+          {currentView === 'reports' && canAccess('reports') && (
             <div className="p-8 rounded-3xl bg-[#101628]/90 border border-white/10 shadow-2xl backdrop-blur-xl text-center space-y-3 animate-in fade-in">
               <div className="w-14 h-14 rounded-2xl bg-[#a78bfa]/10 text-[#a78bfa] border border-[#a78bfa]/20 flex items-center justify-center mx-auto shadow-lg">
                 <BarChart3 className="w-7 h-7" />
@@ -364,15 +528,15 @@ export default function AdminApp() {
             </div>
           )}
 
-          {currentView === 'products' && (
+          {currentView === 'products' && canAccess('products') && (
             <AdminProducts currentUser={currentUser} />
           )}
 
-          {currentView === 'staff' && (
+          {currentView === 'staff' && canAccess('staff') && (
             <AdminStaff currentUser={currentUser} />
           )}
 
-          {currentView === 'gateways' && (
+          {currentView === 'gateways' && canAccess('gateways') && (
             <PaymentGatewayManager currentUser={currentUser} />
           )}
         </main>

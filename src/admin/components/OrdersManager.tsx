@@ -137,7 +137,18 @@ function getStageRank(statusKey: string = ''): number {
   return stage ? stage.order : 99;
 }
 
-export default function OrdersManager() {
+interface OrdersManagerProps {
+  currentUser?: { role?: string } | null;
+}
+
+export default function OrdersManager({ currentUser }: OrdersManagerProps) {
+  const activeRole = String(
+    currentUser?.role || sessionStorage.getItem('kfmama_auth_role') || 'admin'
+  ).toLowerCase().trim();
+  const canManageOrderStatus =
+    activeRole === 'admin' || activeRole === 'manager' || activeRole === 'sales';
+  const canCancelRefund = activeRole === 'admin' || activeRole === 'manager';
+  const canDeleteOrder = activeRole === 'admin';
   const [orders, setOrders] = useState<OrderRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -280,6 +291,11 @@ export default function OrdersManager() {
   };
 
   const handleStageSelectChange = (orderId: string, targetStatus: string, currentStatus: string) => {
+    if (!canManageOrderStatus) return;
+    if (targetStatus === 'cancelled' && !canCancelRefund) {
+      alert('You do not have permission to cancel/refund online orders.');
+      return;
+    }
     if (currentStatus === targetStatus) return;
 
     setConfirmStageChange({
@@ -290,9 +306,14 @@ export default function OrdersManager() {
   };
 
   const handleProceedStageChange = async () => {
-    if (!confirmStageChange) return;
+    if (!confirmStageChange || !canManageOrderStatus) return;
 
     const { orderId, targetStatus, currentStatus } = confirmStageChange;
+    if (targetStatus === 'cancelled' && !canCancelRefund) {
+      setConfirmStageChange(null);
+      alert('You do not have permission to cancel/refund online orders.');
+      return;
+    }
     setConfirmStageChange(null);
 
     const currentRank = getStageRank(currentStatus);
@@ -357,6 +378,12 @@ export default function OrdersManager() {
 
   const handleConfirmRefund = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCancelRefund) {
+      setRefundOrderId(null);
+      setRefundUtr('');
+      alert('You do not have permission to cancel/refund online orders.');
+      return;
+    }
     if (!refundOrderId || !refundUtr.trim()) return;
 
     const targetOrder = orders.find((o) => o.id === refundOrderId);
@@ -426,7 +453,10 @@ export default function OrdersManager() {
   };
 
   const handleDeleteOrderFromModal = async (order: OrderRecord) => {
-    if (deletingOrderId) return;
+    if (!canDeleteOrder || deletingOrderId) {
+      if (!canDeleteOrder) alert('Only Admin can delete online orders.');
+      return;
+    }
 
     const confirmed = window.confirm(
       `Permanently delete order ${order.id}?\n\n` +

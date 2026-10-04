@@ -55,7 +55,12 @@ export default function AdminNavbar({
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const navRef = useRef<HTMLDivElement>(null);
 
-  const isAdmin = currentUser?.role === 'admin';
+  const role = String(currentUser?.role || 'operations').toLowerCase().trim();
+  const isAdmin = role === 'admin';
+  const isSales = role === 'sales';
+  const canSeeGeneral = !isSales;
+  const canSeeSettings = isAdmin;
+  const canSeeStudio = isAdmin;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -138,7 +143,7 @@ export default function AdminNavbar({
 
             <div className="flex items-center gap-1 text-[11.5px] font-semibold flex-wrap">
               {/* DASHBOARD */}
-              <button
+              {canSeeGeneral && <button
                 type="button"
                 onClick={() => handleSelectView('dashboard')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
@@ -149,10 +154,10 @@ export default function AdminNavbar({
               >
                 <LayoutDashboard className="w-3.5 h-3.5" />
                 <span>Dashboard</span>
-              </button>
+              </button>}
 
               {/* MASTERS */}
-              <div className="relative shrink-0">
+              {canSeeGeneral && <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('masters')}
@@ -199,7 +204,7 @@ export default function AdminNavbar({
                     </button>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* SALES */}
               <div className="relative shrink-0">
@@ -231,7 +236,7 @@ export default function AdminNavbar({
               </div>
 
               {/* INVENTORY */}
-              <div className="relative shrink-0">
+              {canSeeGeneral && <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('inventory')}
@@ -259,10 +264,10 @@ export default function AdminNavbar({
                     <div className="px-4 py-2 text-[9px] font-mono uppercase tracking-wider text-[#64748b]">Stock movements can be accessed from Inventory</div>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* ACCOUNTS */}
-              <div className="relative shrink-0">
+              {canSeeGeneral && <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('accounts')}
@@ -290,10 +295,10 @@ export default function AdminNavbar({
                     <div className="px-4 pt-2 pb-1 text-[9px] font-mono uppercase tracking-wider text-[#64748b]">More accounts modules can be added here</div>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* STUDIO */}
-              <div className="relative shrink-0">
+              {canSeeStudio && <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('studio')}
@@ -318,10 +323,10 @@ export default function AdminNavbar({
                     </button>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* REPORTS */}
-              <button
+              {canSeeGeneral && <button
                 type="button"
                 onClick={() => handleSelectView('reports')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
@@ -332,10 +337,10 @@ export default function AdminNavbar({
               >
                 <BarChart3 className="w-3.5 h-3.5 text-[#a78bfa]" />
                 <span>Reports</span>
-              </button>
+              </button>}
 
               {/* SETTINGS */}
-              <div className="relative shrink-0">
+              {canSeeSettings && <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => toggleDropdown('settings')}
@@ -365,7 +370,7 @@ export default function AdminNavbar({
                     <div className="px-4 py-2 text-[9px] font-mono uppercase tracking-wider text-[#64748b]">Store & system settings can be added here</div>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
           </div>
 

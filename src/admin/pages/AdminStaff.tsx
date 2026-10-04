@@ -194,6 +194,8 @@ export default function AdminStaff({ currentUser }: AdminStaffProps) {
         return 'bg-[#00d9ff]/15 text-[#00d9ff] border-[#00d9ff]/30';
       case 'operations':
         return 'bg-[#ffa500]/15 text-[#ffa500] border-[#ffa500]/30';
+      case 'sales':
+        return 'bg-[#00ff9d]/15 text-[#00ff9d] border-[#00ff9d]/30';
       default:
         return 'bg-white/10 text-white border-white/20';
     }
@@ -437,6 +439,7 @@ export default function AdminStaff({ currentUser }: AdminStaffProps) {
                   >
                     <option value="operations">Operations: Create & View Only</option>
                     <option value="manager">Manager: Create, Edit & View</option>
+                    <option value="sales">Sales: Online Orders + Walk-In Sales Only</option>
                     <option value="admin">Admin: Full Access</option>
                   </select>
                 </div>

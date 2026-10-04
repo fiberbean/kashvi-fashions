@@ -182,7 +182,9 @@ async function recordStockMovement({
     quantity,
     movement_type: movementType,
     reference_id: referenceId || null,
-    notes: notes || null
+    notes: notes || null,
+    stock_delta: quantity,
+    reserved_delta: 0
   }]);
 
   if (error) throw error;
@@ -1740,7 +1742,7 @@ export default function PurchaseManager() {
               </div>
             </div>
 
-            <form onSubmit={handleSavePurchase} className="p-3 sm:p-4 overflow-y-auto space-y-3 custom-scrollbar text-xs">
+            <form onSubmit={handleSavePurchase} className="flex-1 min-h-0 p-3 sm:p-4 overflow-y-auto overscroll-contain space-y-3 custom-scrollbar text-xs">
               
               <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 p-3 rounded-2xl bg-[#0a0e17]/90 border border-white/10 items-center">
                 <div>
@@ -1853,10 +1855,10 @@ export default function PurchaseManager() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start min-h-0">
                 
                 {/* Left Column */}
-                <div className="lg:col-span-6 space-y-2.5">
+                <div className="lg:col-span-6 space-y-2.5 min-w-0">
                   {editingPurchase && !isEditProductUnlocked ? (
                     <div className="p-4 rounded-2xl bg-[#6d4aff]/10 border border-[#6d4aff]/30 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2.5">
@@ -2173,8 +2175,8 @@ export default function PurchaseManager() {
                 </div>
 
                 {/* Right Column */}
-                <div className="lg:col-span-6 space-y-2.5">
-                  <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col">
+                <div className="lg:col-span-6 space-y-2.5 min-w-0 min-h-0">
+                  <div className="border border-white/10 rounded-2xl overflow-hidden bg-[#0a0e17] shadow-xl flex flex-col min-h-0">
                     <div className="px-4 py-2.5 bg-[#101628] border-b border-white/10 flex items-center justify-between text-xs font-mono">
                       <span className="font-bold text-[#00ff9d] uppercase flex items-center gap-1.5">
                         <ReceiptText className="w-4 h-4" /> Inward Inventory Breakdown
@@ -2182,7 +2184,7 @@ export default function PurchaseManager() {
                       <span className="text-white font-bold">{totalInwardQuantity} Total Units</span>
                     </div>
 
-                    <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2.5 space-y-2.5">
+                    <div className="min-h-0 max-h-[340px] overflow-y-auto overscroll-contain custom-scrollbar p-2.5 space-y-2.5">
                       {editingPurchase && existingItems.length > 0 && (
                         <div className="p-2.5 rounded-2xl bg-[#00d9ff]/5 border border-[#00d9ff]/30 space-y-1.5">
                           <div className="flex items-center justify-between text-xs font-mono">
@@ -2831,7 +2833,7 @@ export default function PurchaseManager() {
       {/* 7. EDIT SAVED PURCHASE LINE ITEM MODAL */}
       {editingItemModal && (
         <div className="fixed inset-0 z-[100010] p-4 flex items-center justify-center bg-black/85 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-4 shadow-2xl space-y-3 font-mono">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-sm w-full p-4 shadow-2xl space-y-3 font-mono max-h-[calc(100vh-2rem)] overflow-y-auto custom-scrollbar">
             <div className="flex items-center justify-between border-b border-white/10 pb-2">
               <div>
                 <h4 className="text-xs font-bold text-white uppercase">Edit Saved Item</h4>
