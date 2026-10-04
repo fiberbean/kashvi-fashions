@@ -260,12 +260,24 @@ async function applySupplierLedgerEntry({
   if (supplierErr) throw supplierErr;
   if (!supplier) throw new Error(`Supplier not found: ${normalizedSupplierId}`);
 
-  const oldBalance = Number(supplier.balance_due || 0);
-  const projectedBalance = oldBalance + delta;
+  // supplier_ledger is the source of truth for outstanding. Do not trust the
+  // cached suppliers.balance_due value here because older data may be stale.
+  const { data: supplierLedgerRows, error: supplierLedgerReadError } = await supabase
+    .from('supplier_ledger')
+    .select('amount')
+    .eq('supplier_id', normalizedSupplierId);
+
+  if (supplierLedgerReadError) throw supplierLedgerReadError;
+
+  const ledgerBalance = (supplierLedgerRows || []).reduce(
+    (sum: number, row: any) => sum + Number(row.amount || 0),
+    0
+  );
+  const projectedBalance = ledgerBalance + delta;
 
   if (projectedBalance < 0) {
     throw new Error(
-      `Supplier outstanding cannot become negative. Current outstanding: ₹${oldBalance.toLocaleString('en-IN')}, adjustment: ₹${delta.toLocaleString('en-IN')}.`
+      `Supplier outstanding cannot become negative. Ledger outstanding: ₹${ledgerBalance.toLocaleString('en-IN')}, adjustment: ₹${delta.toLocaleString('en-IN')}.`
     );
   }
 
@@ -889,9 +901,10 @@ export default function PurchaseManager() {
   };
 
   const handleDeletePurchase = async (p: PurchaseRecord) => {
+    const purchaseAmount = Number(p.total_amount || 0);
     const confirmDelete = await askPurchaseConfirmation(
       'Delete Purchase?',
-      `Permanently delete [${p.id}]? Inward stock will be rolled back from inventory and supplier outstanding will be reduced by ₹${Number(p.total_amount || 0).toLocaleString('en-IN')}.`,
+      `Permanently delete [${p.id}]? Inward stock will be rolled back from inventory and the supplier ledger will be reversed only for the amount actually recorded against this purchase.`,
       'Purchase History → Delete Purchase',
       `Purchase ${p.id} → Inventory + Supplier Ledger Rollback`,
       'Delete & Roll Back',
@@ -900,45 +913,45 @@ export default function PurchaseManager() {
     if (!confirmDelete) return;
 
     try {
-      const purchaseAmount = Number(p.total_amount || 0);
       const supplierId = String(p.supplier_id || '').trim();
 
       if (!supplierId) {
         throw new Error(`Supplier ID missing for purchase ${p.id}. Supplier ledger rollback cannot be completed safely.`);
       }
 
-      if (purchaseAmount > 0) {
-        const { data: supplier, error: supplierErr } = await supabase
-          .from('suppliers')
-          .select('balance_due')
-          .eq('id', supplierId)
-          .maybeSingle();
+      // Determine the purchase's actual financial contribution from the ledger.
+      // This avoids blocking deletion when the cached supplier balance is stale
+      // and prevents reversing an amount that was never recorded in the ledger.
+      const { data: purchaseLedgerRows, error: purchaseLedgerError } = await supabase
+        .from('supplier_ledger')
+        .select('id, amount, transaction_type')
+        .eq('purchase_id', p.id);
 
-        if (supplierErr) throw supplierErr;
-        if (!supplier) throw new Error(`Supplier not found: ${supplierId}`);
+      if (purchaseLedgerError) throw purchaseLedgerError;
 
-        const currentOutstanding = Number(supplier.balance_due || 0);
-        if (currentOutstanding < purchaseAmount) {
-          throw new Error(
-            `Purchase delete blocked for safety. Supplier outstanding is ₹${currentOutstanding.toLocaleString('en-IN')}, but this purchase is ₹${purchaseAmount.toLocaleString('en-IN')}.`
-          );
-        }
-      }
+      const purchaseLedgerNet = (purchaseLedgerRows || []).reduce(
+        (sum: number, row: any) => sum + Number(row.amount || 0),
+        0
+      );
 
-      const { data: lineItems } = await supabase
+      const { data: lineItems, error: lineItemsError } = await supabase
         .from('purchase_items')
         .select('*')
         .eq('purchase_id', p.id);
 
+      if (lineItemsError) throw lineItemsError;
+
       if (lineItems && lineItems.length > 0) {
         for (const item of lineItems) {
-          const { data: inv } = await supabase
+          const { data: inv, error: invError } = await supabase
             .from('inventory')
             .select('id, stock_quantity, cost_price, store_price, online_price, mrp')
             .eq('product_id', item.product_id)
             .eq('variant_color', item.variant_color)
             .eq('variant_size', item.variant_size)
             .maybeSingle();
+
+          if (invError) throw invError;
 
           if (inv) {
             const currentStock = Number(inv.stock_quantity || 0);
@@ -950,10 +963,15 @@ export default function PurchaseManager() {
               );
             }
 
-            await supabase
+            const { error: stockUpdateError } = await supabase
               .from('inventory')
-              .update({ stock_quantity: currentStock - rollbackQty, updated_at: new Date().toISOString() })
+              .update({
+                stock_quantity: currentStock - rollbackQty,
+                updated_at: new Date().toISOString()
+              })
               .eq('id', inv.id);
+
+            if (stockUpdateError) throw stockUpdateError;
 
             await recordStockMovement({
               productId: item.product_id,
@@ -969,27 +987,30 @@ export default function PurchaseManager() {
         }
       }
 
-      // Reverse supplier outstanding before deleting the purchase.
+      // Reverse only the net amount that this purchase actually contributed
+      // to the supplier ledger. If the purchase has no ledger entry (legacy
+      // data), do not invent a financial transaction during deletion.
       let supplierLedgerReversed = false;
 
-      if (purchaseAmount > 0) {
+      if (purchaseLedgerNet !== 0) {
         await applySupplierLedgerEntry({
           supplierId,
           purchaseId: p.id,
-          amount: -purchaseAmount,
+          amount: -purchaseLedgerNet,
           transactionType: 'PURCHASE_DELETE',
-          description: `Purchase deletion reversal ${p.id}`
+          description: `Purchase deletion reversal ${p.id} (ledger net ₹${purchaseLedgerNet.toLocaleString('en-IN')})`
         });
         supplierLedgerReversed = true;
       }
 
       const { error } = await supabase.from('purchases').delete().eq('id', p.id);
+
       if (error) {
         if (supplierLedgerReversed) {
           await applySupplierLedgerEntry({
             supplierId,
             purchaseId: p.id,
-            amount: purchaseAmount,
+            amount: purchaseLedgerNet,
             transactionType: 'PURCHASE_DELETE_ROLLBACK',
             description: `Purchase delete rollback after failed delete ${p.id}`
           });
@@ -998,15 +1019,27 @@ export default function PurchaseManager() {
       }
 
       setPurchases((prev) => prev.filter((item) => item.id !== p.id));
+
+      const supplierMessage =
+        purchaseLedgerNet !== 0
+          ? `Supplier outstanding reversed by ₹${Math.abs(purchaseLedgerNet).toLocaleString('en-IN')}.`
+          : 'No linked supplier ledger entry existed for this purchase, so no supplier balance was invented or changed.';
+
       showPurchaseMessage(
         'success',
         'Purchase Deleted',
-        `Purchase [${p.id}] successfully deleted. Stock rollback and supplier outstanding rollback applied.`,
+        `Purchase [${p.id}] successfully deleted. Stock rollback applied. ${supplierMessage}`,
         'Purchase History → Delete Purchase',
-        `Purchase ${p.id} → Inventory + Supplier Ledger`
+        `Purchase ${p.id} → Inventory + Supplier Ledger Rollback`
       );
     } catch (err: any) {
-      showPurchaseMessage('error', 'Purchase Delete Failed', err.message, 'Purchase History → Delete Purchase', `Purchase ${p.id} → Delete Operation`);
+      showPurchaseMessage(
+        'error',
+        'Purchase Delete Failed',
+        err.message,
+        'Purchase History → Delete Purchase',
+        `Purchase ${p.id} → Delete Operation`
+      );
     }
   };
 
