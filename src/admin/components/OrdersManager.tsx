@@ -90,6 +90,7 @@ export interface OrderRecord {
     date?: string;
   } | null;
   is_refunded?: boolean;
+  stock_verified?: boolean;
 }
 
 interface StoreSettingsData {
@@ -359,19 +360,69 @@ export default function OrdersManager() {
     if (!refundOrderId || !refundUtr.trim()) return;
 
     const targetOrder = orders.find((o) => o.id === refundOrderId);
+    if (!targetOrder) {
+      alert('Order not found. Please refresh the orders list and try again.');
+      return;
+    }
+
     const updatedRefund = {
-      ...(targetOrder?.refund || {}),
-      utr: refundUtr.trim(),
+      ...(targetOrder.refund || {}),
+      utr: refundUtr.trim().toUpperCase(),
       date: new Date().toISOString()
     };
 
-    await updateOrderStatus(refundOrderId, 'cancelled', {
-      is_refunded: true,
-      refund: updatedRefund,
-      payment_status: 'refunded'
-    });
-    setRefundOrderId(null);
-    setRefundUtr('');
+    try {
+      // Cancellation/refund must restore the exact online-sale variants.
+      // The database function performs the stock restore and order update
+      // atomically, and is idempotent so a second cancellation cannot
+      // restore the same stock twice.
+      const { error } = await supabase.rpc(
+        'cancel_order_with_inventory_restore',
+        {
+          order_id: refundOrderId,
+          refund_utr: updatedRefund.utr
+        }
+      );
+
+      if (error) throw error;
+
+      const updatedFields = {
+        status: 'cancelled',
+        order_status: 'cancelled',
+        is_refunded: true,
+        refund: updatedRefund,
+        payment_status: 'refunded',
+        stock_verified: false
+      };
+
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === refundOrderId ? { ...o, ...updatedFields } : o
+        )
+      );
+
+      if (selectedOrder?.id === refundOrderId) {
+        setSelectedOrder((prev) =>
+          prev ? { ...prev, ...updatedFields } : null
+        );
+      }
+
+      setRefundOrderId(null);
+      setRefundUtr('');
+
+      alert(
+        `Order ${refundOrderId} cancelled successfully.\n\n` +
+        `Refund UTR: ${updatedRefund.utr}\n` +
+        `Exact product + colour + size stock was restored.`
+      );
+    } catch (err: any) {
+      console.error('Order cancel / stock rollback failed:', err);
+      alert(
+        `Order ${refundOrderId} was NOT cancelled.\n\n` +
+        `Stock was not intentionally changed if the database transaction failed.\n\n` +
+        `Error: ${err?.message || 'Unknown error'}`
+      );
+    }
   };
 
   const handleDeleteOrderFromModal = async (order: OrderRecord) => {
