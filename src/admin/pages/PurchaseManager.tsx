@@ -94,7 +94,7 @@ interface TaggingChecklistItem {
   mdp_price: number;
   online_price: number;
   mrp_price: number;
-  is_completed: boolean;
+  is_labeled: boolean;
 }
 
 function getContrastTextColor(hexColor: string | null | undefined): string {
@@ -1334,13 +1334,60 @@ export default function PurchaseManager() {
   const productSizes: string[] = useMemo(() => {
     if (!activeProduct) return [];
 
+    // Keep the actual source of sizes unchanged, but always present them in a
+    // natural size order in the picker/matrix. Numeric sizes come first in
+    // ascending order (28, 30, 32...), followed by alpha sizes (XS, S, M,
+    // L, XL, XXL...), with labels such as Free Size at the end.
+    const sortSizes = (sizes: any[]): string[] => {
+      const alphaOrder: Record<string, number> = {
+        'xxxs': 0,
+        'xxs': 1,
+        'xs': 2,
+        's': 3,
+        'm': 4,
+        'l': 5,
+        'xl': 6,
+        'xxl': 7,
+        '2xl': 7,
+        'xxxl': 8,
+        '3xl': 8,
+        '4xl': 9,
+        '5xl': 10,
+        'free size': 999
+      };
+
+      return Array.from(
+        new Set(
+          sizes
+            .map((size) => String(size ?? '').trim())
+            .filter(Boolean)
+        )
+      ).sort((a, b) => {
+        const aText = a.toLowerCase();
+        const bText = b.toLowerCase();
+        const aNum = Number(aText.match(/^(\d+(?:\.\d+)?)/)?.[1]);
+        const bNum = Number(bText.match(/^(\d+(?:\.\d+)?)/)?.[1]);
+        const aHasNum = Number.isFinite(aNum);
+        const bHasNum = Number.isFinite(bNum);
+
+        if (aHasNum && bHasNum && aNum !== bNum) return aNum - bNum;
+        if (aHasNum !== bHasNum) return aHasNum ? -1 : 1;
+
+        const aAlpha = alphaOrder[aText] ?? 100;
+        const bAlpha = alphaOrder[bText] ?? 100;
+        if (aAlpha !== bAlpha) return aAlpha - bAlpha;
+
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    };
+
     let vars = activeProduct.variants;
     if (typeof vars === 'string') {
       try { vars = JSON.parse(vars); } catch { vars = null; }
     }
 
     if (vars && Array.isArray(vars.sizes) && vars.sizes.length > 0) {
-      return vars.sizes;
+      return sortSizes(vars.sizes);
     }
 
     const subCatId = activeProduct.sub_category_id;
@@ -1352,24 +1399,31 @@ export default function PurchaseManager() {
       const directMatches = allSizes.filter(
         (sz) => sz.sub_category_id && String(sz.sub_category_id) === String(subCatObj.id)
       );
-      if (directMatches.length > 0) return directMatches.map((s) => s.name);
+      if (directMatches.length > 0) return sortSizes(directMatches.map((s) => s.name));
 
       if (subCatObj.size_group) {
         const groupMatches = allSizes.filter(
           (sz) => (sz.size_group || '').toLowerCase().trim() === subCatObj.size_group.toLowerCase().trim()
         );
-        if (groupMatches.length > 0) return groupMatches.map((s) => s.name);
+        if (groupMatches.length > 0) return sortSizes(groupMatches.map((s) => s.name));
       }
     }
 
     if (activeProduct.size) {
-      return typeof activeProduct.size === 'string'
-        ? activeProduct.size.split(',').map((s: string) => s.trim())
-        : activeProduct.size;
+      return sortSizes(
+        typeof activeProduct.size === 'string'
+          ? activeProduct.size.split(',').map((s: string) => s.trim())
+          : activeProduct.size
+      );
     }
 
     return ['Free Size'];
   }, [activeProduct, subCategories, allSizes]);
+
+  const orderedSelectedMatrixSizes = useMemo(() => {
+    const selected = new Set(selectedMatrixSizes);
+    return productSizes.filter((size) => selected.has(size));
+  }, [productSizes, selectedMatrixSizes]);
 
   useEffect(() => {
     if (!activeProduct) return;
@@ -2024,27 +2078,8 @@ export default function PurchaseManager() {
             });
           }
 
-          const checklistData: TaggingChecklistItem[] = computedStagedItems.map((it, idx) => ({
-            id: `chk_${idx}_${Date.now()}`,
-            product_id: it.product_id,
-            product_code: it.product_code,
-            product_name: it.product_name,
-            variant_color: it.color,
-            variant_size: it.size,
-            quantity: it.quantity,
-            unit_cost: it.unit_cost,
-            landed_cost: it.landed_cost,
-            store_price: it.store_price,
-            mdp_price: it.mdp_price,
-            online_price: it.online_price,
-            mrp_price: it.mrp_price,
-            is_completed: false
-          }));
-
-          setChecklistItems(checklistData);
-          setCurrentBillReference(editingPurchase.id);
           setIsModalOpen(false);
-          setIsChecklistModalOpen(true);
+          await handleOpenLabeling(editingPurchase.id);
         } else {
           showPurchaseMessage('success', 'Purchase Updated', `Purchase [${editingPurchase.id}] updated successfully with revised transport & pricing!`, 'Edit Purchase → Save Bill', `Purchase ${editingPurchase.id} → Stock + Pricing`);
           setIsModalOpen(false);
@@ -2196,27 +2231,8 @@ export default function PurchaseManager() {
         }
       }
 
-      const checklistData: TaggingChecklistItem[] = computedStagedItems.map((it, idx) => ({
-        id: `chk_${idx}_${Date.now()}`,
-        product_id: it.product_id,
-        product_code: it.product_code,
-        product_name: it.product_name,
-        variant_color: it.color,
-        variant_size: it.size,
-        quantity: it.quantity,
-        unit_cost: it.unit_cost,
-        landed_cost: it.landed_cost,
-        store_price: it.store_price,
-        mdp_price: it.mdp_price,
-        online_price: it.online_price,
-        mrp_price: it.mrp_price,
-        is_completed: false
-      }));
-
-      setChecklistItems(checklistData);
-      setCurrentBillReference(purchaseNo.trim());
       setIsModalOpen(false);
-      setIsChecklistModalOpen(true);
+      await handleOpenLabeling(purchaseNo.trim());
       loadData();
     } catch (err: any) {
       showPurchaseMessage('error', 'Purchase Save Failed', err.message, 'Purchase → Save Bill', editingPurchase ? `Purchase ${editingPurchase.id}` : `New Purchase ${purchaseNo}`);
@@ -2225,14 +2241,128 @@ export default function PurchaseManager() {
     }
   };
 
-  const handleToggleChecklistDone = (id: string) => {
+  const handleOpenLabeling = async (purchaseId: string) => {
+    setChecklistItems([]);
+    setCurrentBillReference(purchaseId);
+    setIsChecklistModalOpen(true);
+
+    try {
+      const { data: purchaseData, error: purchaseError } = await supabase
+        .from('purchases')
+        .select('id, total_amount, transport_charges')
+        .eq('id', purchaseId)
+        .maybeSingle();
+
+      if (purchaseError) throw purchaseError;
+      if (!purchaseData) throw new Error(`Purchase ${purchaseId} not found.`);
+
+      const { data: purchaseItems, error: purchaseItemsError } = await supabase
+        .from('purchase_items')
+        .select('id, product_id, variant_color, variant_size, quantity, unit_cost, total_cost, is_labeled')
+        .eq('purchase_id', purchaseId)
+        .order('created_at', { ascending: true });
+
+      if (purchaseItemsError) throw purchaseItemsError;
+
+      const items = purchaseItems || [];
+      const baseTotal = items.reduce(
+        (sum: number, item: any) =>
+          sum + (Number(item.total_cost) || ((Number(item.quantity) || 0) * (Number(item.unit_cost) || 0))),
+        0
+      );
+      const transportAmount = Number(purchaseData.transport_charges || 0);
+      const transportPercent = baseTotal > 0 ? (transportAmount / baseTotal) * 100 : 0;
+
+      const checklistData: TaggingChecklistItem[] = items
+        .map((item: any) => {
+          const product = productsList.find((prod: any) => String(prod.id) === String(item.product_id));
+          const pricing = calculateSmartPricing(Number(item.unit_cost) || 0, transportPercent);
+
+          return {
+            id: String(item.id),
+            product_id: String(item.product_id),
+            product_code: String(product?.id || item.product_id),
+            product_name: String(product?.name || item.product_id),
+            variant_color: String(item.variant_color || ''),
+            variant_size: String(item.variant_size || ''),
+            quantity: Number(item.quantity) || 0,
+            unit_cost: Number(item.unit_cost) || 0,
+            landed_cost: pricing.landedCost,
+            store_price: pricing.storePrice,
+            mdp_price: pricing.mdpPrice,
+            online_price: pricing.onlinePrice,
+            mrp_price: pricing.mrpPrice,
+            is_labeled: Boolean(item.is_labeled)
+          };
+        })
+        .sort((a, b) => {
+          const productCodeOrder = a.product_code.localeCompare(
+            b.product_code,
+            undefined,
+            { numeric: true, sensitivity: 'base' }
+          );
+          if (productCodeOrder !== 0) return productCodeOrder;
+
+          const colorOrder = a.variant_color.localeCompare(
+            b.variant_color,
+            undefined,
+            { numeric: true, sensitivity: 'base' }
+          );
+          if (colorOrder !== 0) return colorOrder;
+
+          return a.variant_size.localeCompare(
+            b.variant_size,
+            undefined,
+            { numeric: true, sensitivity: 'base' }
+          );
+        });
+
+      setChecklistItems(checklistData);
+    } catch (err: any) {
+      setChecklistItems([]);
+      setIsChecklistModalOpen(false);
+      showPurchaseMessage(
+        'error',
+        'Unable to Open Labeling',
+        err.message || 'Purchase labeling checklist load avvaledu. Please try again.',
+        'Purchase History → Labeling',
+        `Purchase ${purchaseId} → Labeling Checklist`
+      );
+    }
+  };
+
+  const handleToggleChecklistDone = async (id: string) => {
+    const currentItem = checklistItems.find((item) => item.id === id);
+    if (!currentItem) return;
+
+    const nextLabeledStatus = !currentItem.is_labeled;
+
+    const { error } = await supabase
+      .from('purchase_items')
+      .update({ is_labeled: nextLabeledStatus })
+      .eq('id', id)
+      .eq('purchase_id', currentBillReference);
+
+    if (error) {
+      showPurchaseMessage(
+        'error',
+        'Label Status Update Failed',
+        error.message || 'Label status update avvaledu. Please try again.',
+        'Purchase Labeling → Mark Done',
+        `${currentBillReference} → ${id}`
+      );
+      return;
+    }
+
     setChecklistItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, is_completed: !item.is_completed } : item))
+      prev.map((item) =>
+        item.id === id ? { ...item, is_labeled: nextLabeledStatus } : item
+      )
     );
   };
 
   const completedChecklistCount = useMemo(() => {
-    return checklistItems.filter((it) => it.is_completed).length;
+    return checklistItems.filter((it) => it.is_labeled).length;
   }, [checklistItems]);
 
   const calcEffectiveTransportPercent = useMemo(() => {
@@ -2412,6 +2542,14 @@ export default function PurchaseManager() {
                             title="View Inward Breakdown"
                           >
                             <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenLabeling(p.id)}
+                            className="p-1.5 rounded-lg bg-white/5 hover:bg-[#00ff9d]/20 text-[#8b9bb4] hover:text-[#00ff9d]"
+                            title="Open Price Sticker Labeling"
+                          >
+                            <Tag className="w-3.5 h-3.5" />
                           </button>
                           <button
                             type="button"
@@ -2817,8 +2955,7 @@ export default function PurchaseManager() {
                                   </div>
                                   <button
                                     type="button"
-                                    onClick={() => setIsSizePickerModalOpen(true)}
-                                    disabled={activeMatrixColors.length === 0}
+                                    onClick={() => setIsShadePickerModalOpen(true)}
                                     className="shrink-0 px-2.5 py-2 rounded-xl bg-gradient-to-r from-[#6d4aff] to-[#00d9ff] text-white font-bold text-[9px] flex items-center gap-1 cursor-pointer shadow-md shadow-[#6d4aff]/30 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed"
                                   >
                                     <Layers className="w-3.5 h-3.5" />
@@ -2854,7 +2991,7 @@ export default function PurchaseManager() {
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-white/5">
-                                        {activeMatrixColors.flatMap((clr) => selectedMatrixSizes.map((sz) => {
+                                        {activeMatrixColors.flatMap((clr) => orderedSelectedMatrixSizes.map((sz) => {
                                           const key = `${clr}:::${sz}`;
                                           if (excludedMatrixVariants[key]) return null;
                                           const variantCost = Number(matrixCostMap[key]) || 0;
@@ -3131,201 +3268,199 @@ export default function PurchaseManager() {
         </div>
       )}
 
-      {/* 4. DEDICATED POPUP FOR SIZE SELECTION */}
-      {isSizePickerModalOpen && activeProduct && (
-        <div className="fixed inset-0 z-[100010] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-2xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
-              <div>
-                <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#00d9ff]" />
-                  <span>Select Sizes for [{activeProduct.id}] {activeProduct.name}</span>
-                </h4>
-                <span className="text-xs text-[#8b9bb4]">
-                  Select only the sizes required for this purchase. Unselected sizes will not appear in the variant matrix.
-                </span>
-              </div>
-              <button type="button" onClick={() => setIsSizePickerModalOpen(false)} className="text-[#8b9bb4] hover:text-white p-1">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
-              {productSizes.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-[#0a0e17] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
-                  No sizes are available for this product.
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {productSizes.map((size) => {
-                    const isSelected = selectedMatrixSizes.includes(size);
-                    return (
-                      <button
-                        key={size}
-                        type="button"
-                        onClick={() => handleToggleSizeSelection(size)}
-                        className={`min-h-[72px] p-3 rounded-2xl cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-2 shadow-lg border-2 ${
-                          isSelected
-                            ? 'bg-[#00d9ff]/15 border-[#00d9ff] shadow-[0_0_20px_rgba(0,217,255,0.25)] ring-2 ring-[#00d9ff]/30 scale-[1.02]'
-                            : 'bg-[#0a0e17] border-white/10 text-[#8b9bb4] hover:text-white hover:border-white/30'
-                        }`}
-                      >
-                        <span className={`text-sm font-extrabold font-mono ${isSelected ? 'text-[#00d9ff]' : 'text-white'}`}>{size}</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[8px] font-mono font-bold uppercase tracking-wider ${isSelected ? 'bg-[#00d9ff] text-neutral-950' : 'bg-white/5 text-[#8b9bb4]'}`}>
-                          {isSelected ? 'SELECTED' : 'SELECT'}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-white/10 shrink-0">
-              <span className="font-mono text-xs text-[#00ff9d] font-bold">Selected: {selectedMatrixSizes.length} Size(s)</span>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setIsSizePickerModalOpen(false)} className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs cursor-pointer">Cancel</button>
-                <button type="button" onClick={() => setIsSizePickerModalOpen(false)} className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer active:scale-95">
-                  <Check className="w-4 h-4 stroke-[3]" />
-                  <span>Confirm Sizes (OK)</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 4. DEDICATED POPUP FOR SHADE SELECTION */}
+      {/* 4. COMBINED COLOUR + SIZE SELECTION POPUP */}
       {isShadePickerModalOpen && activeProduct && (
-        <div className="fixed inset-0 z-[100000] pt-[76px] pb-6 px-3 sm:px-6 flex items-start justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
-          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-4xl w-full p-4 sm:p-5 shadow-2xl space-y-4 max-h-[calc(100vh-100px)] flex flex-col my-auto">
+        <div className="fixed inset-0 z-[100000] p-3 sm:p-5 flex items-center justify-center bg-black/85 backdrop-blur-md overflow-y-auto select-none">
+          <div className="bg-[#101628] border border-white/20 rounded-3xl max-w-5xl w-full p-4 sm:p-5 shadow-2xl space-y-3 max-h-[calc(100vh-32px)] flex flex-col">
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
-              <div>
+              <div className="min-w-0">
                 <h4 className="text-sm font-bold text-white flex items-center gap-2">
                   <Palette className="w-4 h-4 text-[#00d9ff]" />
-                  <span>Select Color Shades for [{activeProduct.id}] {activeProduct.name}</span>
+                  <span className="truncate">Select Colours & Sizes for [{activeProduct.id}] {activeProduct.name}</span>
                 </h4>
-                <span className="text-xs text-[#8b9bb4]">
-                  Alphabetically sorted (A to Z) • Click base color to switch palette • Selected shades show Baby Pink Border
+                <span className="text-[10px] text-[#8b9bb4]">
+                  Select required colour shades and sizes together. Click OK to create the variant matrix.
                 </span>
               </div>
               <button
                 type="button"
-                onClick={() => setIsShadePickerModalOpen(false)}
-                className="text-[#8b9bb4] hover:text-white p-1"
+                onClick={() => {
+                  setIsShadePickerModalOpen(false);
+                  setIsSizePickerModalOpen(false);
+                }}
+                className="text-[#8b9bb4] hover:text-white p-1 shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-2 shrink-0">
-              <span className="text-[10px] font-mono font-bold text-[#8b9bb4] uppercase block">
-                1. Pick Base Color Family (A-Z):
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {availableBaseFamilies.map((fam) => {
-                  const isSelected = selectedBaseFilter.toLowerCase() === fam.toLowerCase();
-                  const famColor = BASE_FAMILY_PALETTE[fam.toLowerCase()] || '#6d4aff';
-                  const textColor = getContrastTextColor(famColor);
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 flex-1 min-h-0">
+              {/* Colours */}
+              <div className="rounded-2xl bg-[#0a0e17] border border-white/10 overflow-hidden flex flex-col min-h-0">
+                <div className="px-3 py-2.5 border-b border-white/10 shrink-0">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-[#ffa500] uppercase block">
+                        1. Colour Shades
+                      </span>
+                      <span className="text-[8.5px] text-[#8b9bb4] font-mono">
+                        Pick base family, then shades
+                      </span>
+                    </div>
+                    <span className="px-2 py-1 rounded-lg bg-[#FF69B4]/15 border border-[#FF69B4]/30 text-[#FF69B4] text-[9px] font-mono font-bold shrink-0">
+                      {activeMatrixColors.length} PICKED
+                    </span>
+                  </div>
 
-                  return (
-                    <button
-                      key={fam}
-                      type="button"
-                      onClick={() => setSelectedBaseFilter(fam)}
-                      style={
-                        isSelected
-                          ? {
-                              backgroundColor: famColor,
-                              color: textColor,
-                              borderColor: famColor
-                            }
-                          : {}
-                      }
-                      className={`px-3 py-1.5 rounded-xl text-xs font-mono font-bold capitalize transition-all cursor-pointer border ${
-                        isSelected
-                          ? 'shadow-lg scale-105 ring-2 ring-white/30'
-                          : 'bg-[#0a0e17] text-[#8b9bb4] hover:text-white border-white/10'
-                      }`}
-                    >
-                      {fam}
-                    </button>
-                  );
-                })}
+                  <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto custom-scrollbar pr-1">
+                    {availableBaseFamilies.map((fam) => {
+                      const isSelected = selectedBaseFilter.toLowerCase() === fam.toLowerCase();
+                      const famColor = BASE_FAMILY_PALETTE[fam.toLowerCase()] || '#6d4aff';
+                      const textColor = getContrastTextColor(famColor);
+
+                      return (
+                        <button
+                          key={fam}
+                          type="button"
+                          onClick={() => setSelectedBaseFilter(fam)}
+                          style={
+                            isSelected
+                              ? {
+                                  backgroundColor: famColor,
+                                  color: textColor,
+                                  borderColor: famColor
+                                }
+                              : {}
+                          }
+                          className={`px-2 py-1 rounded-lg text-[9px] font-mono font-bold capitalize transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'shadow scale-105 ring-1 ring-white/30'
+                              : 'bg-[#101628] text-[#8b9bb4] hover:text-white border-white/10'
+                          }`}
+                        >
+                          {fam}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 min-h-0">
+                  {selectableShadesForFamily.length === 0 ? (
+                    <div className="p-6 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-[10px]">
+                      No active shades found for &quot;{selectedBaseFilter}&quot;.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
+                      {selectableShadesForFamily.map((shade) => {
+                        const isSelected = activeMatrixColors.includes(shade.name);
+                        const cardBg = shade.hex_code || '#006400';
+                        const textColor = getContrastTextColor(cardBg);
+
+                        return (
+                          <button
+                            key={shade.id}
+                            type="button"
+                            onClick={() => handleToggleShadeSelection(shade.name)}
+                            style={{ backgroundColor: cardBg }}
+                            className={`min-h-[58px] p-2 rounded-xl cursor-pointer transition-all duration-150 flex flex-col justify-between text-left ${
+                              isSelected
+                                ? 'border-2 border-[#FFB6C1] shadow-[0_0_12px_rgba(255,182,193,0.7)] ring-1 ring-[#FF69B4] scale-[1.01]'
+                                : 'border border-black/25 opacity-85 hover:opacity-100 hover:border-white/40'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span
+                                style={{
+                                  backgroundColor: isSelected ? '#FF69B4' : 'rgba(0,0,0,0.55)',
+                                  color: isSelected ? '#000000' : '#FFFFFF'
+                                }}
+                                className="px-1.5 py-0.5 rounded-full text-[7px] font-mono font-bold uppercase tracking-wider"
+                              >
+                                {isSelected ? 'PICKED' : 'SELECT'}
+                              </span>
+                              <span style={{ color: textColor }} className="text-[7.5px] font-mono font-bold uppercase truncate">
+                                {shade.hex_code}
+                              </span>
+                            </div>
+                            <span
+                              style={{ color: textColor }}
+                              className="font-extrabold text-[10px] block truncate pt-1 drop-shadow-md"
+                            >
+                              {shade.name}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Sizes */}
+              <div className="rounded-2xl bg-[#0a0e17] border border-white/10 overflow-hidden flex flex-col min-h-0">
+                <div className="px-3 py-2.5 border-b border-white/10 shrink-0 flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-mono font-bold text-[#00d9ff] uppercase block">
+                      2. Sizes
+                    </span>
+                    <span className="text-[8.5px] text-[#8b9bb4] font-mono">
+                      Select required sizes for this purchase
+                    </span>
+                  </div>
+                  <span className="px-2 py-1 rounded-lg bg-[#00d9ff]/10 border border-[#00d9ff]/30 text-[#00d9ff] text-[9px] font-mono font-bold shrink-0">
+                    {selectedMatrixSizes.length} PICKED
+                  </span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-2.5 min-h-0">
+                  {productSizes.length === 0 ? (
+                    <div className="p-6 rounded-xl bg-[#101628] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-[10px]">
+                      No sizes are available for this product.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5">
+                      {productSizes.map((size) => {
+                        const isSelected = selectedMatrixSizes.includes(size);
+                        return (
+                          <button
+                            key={size}
+                            type="button"
+                            onClick={() => handleToggleSizeSelection(size)}
+                            className={`h-[58px] px-2 py-1.5 rounded-xl cursor-pointer transition-all duration-150 flex flex-col items-center justify-center gap-1 shadow ${
+                              isSelected
+                                ? 'bg-[#00d9ff]/15 border-2 border-[#00d9ff] shadow-[0_0_12px_rgba(0,217,255,0.25)] ring-1 ring-[#00d9ff]/30 scale-[1.01]'
+                                : 'bg-[#101628] border border-white/10 text-[#8b9bb4] hover:text-white hover:border-white/30'
+                            }`}
+                          >
+                            <span className={`text-xs font-extrabold font-mono ${isSelected ? 'text-[#00d9ff]' : 'text-white'}`}>
+                              {size}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded-full text-[7px] font-mono font-bold uppercase tracking-wider ${isSelected ? 'bg-[#00d9ff] text-neutral-950' : 'bg-white/5 text-[#8b9bb4]'}`}>
+                              {isSelected ? 'SELECTED' : 'SELECT'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2 flex-1 overflow-y-auto custom-scrollbar p-1">
-              <div className="flex items-center justify-between text-xs sticky top-0 bg-[#101628] py-1 z-10">
-                <span className="font-mono text-[#8b9bb4]">
-                  Active Shades for <strong className="text-white uppercase">{selectedBaseFilter}</strong> ({selectableShadesForFamily.length} in A-Z Order):
-                </span>
-                <span className="text-[10px] text-[#FF69B4] font-mono font-bold">
-                  {activeMatrixColors.length} Shades Picked
-                </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-white/10 shrink-0">
+              <div className="flex items-center gap-3 font-mono text-[10px] font-bold">
+                <span className="text-[#00ff9d]">Colours: {activeMatrixColors.length}</span>
+                <span className="text-[#00d9ff]">Sizes: {selectedMatrixSizes.length}</span>
               </div>
-
-              {selectableShadesForFamily.length === 0 ? (
-                <div className="p-8 rounded-2xl bg-[#0a0e17] border border-dashed border-white/10 text-center text-[#8b9bb4] italic text-xs">
-                  No active shades found for &quot;{selectedBaseFilter}&quot;. Open Colour Master to activate shades.
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {selectableShadesForFamily.map((shade) => {
-                    const isSelected = activeMatrixColors.includes(shade.name);
-                    const cardBg = shade.hex_code || '#006400';
-                    const textColor = getContrastTextColor(cardBg);
-
-                    return (
-                      <div
-                        key={shade.id}
-                        onClick={() => handleToggleShadeSelection(shade.name)}
-                        style={{ backgroundColor: cardBg }}
-                        className={`p-3.5 rounded-2xl cursor-pointer transition-all duration-150 flex flex-col justify-between min-h-[96px] shadow-lg ${
-                          isSelected
-                            ? 'border-4 border-[#FFB6C1] shadow-[0_0_22px_rgba(255,182,193,0.95)] ring-2 ring-[#FF69B4] scale-[1.03] z-10'
-                            : 'border-2 border-black/25 opacity-80 hover:opacity-100 hover:border-white/40'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span
-                            style={{
-                              backgroundColor: isSelected ? '#FF69B4' : 'rgba(0,0,0,0.55)',
-                              color: isSelected ? '#000000' : '#FFFFFF'
-                            }}
-                            className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider"
-                          >
-                            {isSelected ? 'PICKED' : '+ SELECT'}
-                          </span>
-                          <span style={{ color: textColor }} className="text-[10px] font-mono font-bold uppercase">
-                            {shade.hex_code}
-                          </span>
-                        </div>
-
-                        <div>
-                          <span
-                            style={{ color: textColor }}
-                            className="font-extrabold text-xs block truncate pt-2 drop-shadow-md"
-                          >
-                            {shade.name}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-3 border-t border-white/10 shrink-0">
-              <span className="font-mono text-xs text-[#00ff9d] font-bold">
-                Selected: {activeMatrixColors.length} Shade(s)
-              </span>
 
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsShadePickerModalOpen(false)}
+                  onClick={() => {
+                    setIsShadePickerModalOpen(false);
+                    setIsSizePickerModalOpen(false);
+                  }}
                   className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs cursor-pointer"
                 >
                   Cancel
@@ -3334,16 +3469,20 @@ export default function PurchaseManager() {
                   type="button"
                   onClick={() => {
                     if (activeMatrixColors.length === 0) {
-                      showPurchaseMessage('warning', 'Colour Shade Required', 'At least one Colour Shade select chesaka next step ki vellandi.', 'New Purchase → Configure Colours, Sizes & Pricing', 'Colour Shades → Confirm Shades');
+                      showPurchaseMessage('warning', 'Colour Shade Required', 'At least one Colour Shade select cheyyandi.', 'New Purchase → Configure Colours & Sizes', 'Colour Shades');
+                      return;
+                    }
+                    if (selectedMatrixSizes.length === 0) {
+                      showPurchaseMessage('warning', 'Size Required', 'At least one Size select cheyyandi.', 'New Purchase → Configure Colours & Sizes', 'Sizes');
                       return;
                     }
                     setIsShadePickerModalOpen(false);
-                    setIsSizePickerModalOpen(true);
+                    setIsSizePickerModalOpen(false);
                   }}
                   className="px-6 py-2 rounded-xl bg-gradient-to-r from-[#00d9ff] to-[#00ff9d] text-neutral-950 font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer active:scale-95"
                 >
                   <Check className="w-4 h-4 stroke-[3]" />
-                  <span>Confirm Shades & Continue to Sizes</span>
+                  <span>OK — Create Matrix</span>
                 </button>
               </div>
             </div>
@@ -3368,7 +3507,7 @@ export default function PurchaseManager() {
                     </span>
                   </h3>
                   <span className="text-[10px] text-[#8b9bb4]">
-                    Store Price raasi product ki antinchagaane &quot;Mark Done&quot; kotti checklist check cheyandi.
+                    Store Price raasi product ki antinchagaane &quot;Mark Done&quot; kotti label status save cheyandi.
                   </span>
                 </div>
               </div>
@@ -3404,7 +3543,7 @@ export default function PurchaseManager() {
                 <div
                   key={item.id}
                   className={`p-3 rounded-2xl border transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
-                    item.is_completed
+                    item.is_labeled
                       ? 'bg-[#00ff9d]/5 border-[#00ff9d]/30 opacity-60'
                       : 'bg-[#0a0e17] border-white/10 hover:border-white/20'
                   }`}
@@ -3414,7 +3553,7 @@ export default function PurchaseManager() {
                       <span className="font-mono font-extrabold text-[#00ff9d] text-xs">
                         [{item.product_code || item.product_id}]
                       </span>
-                      <span className={`font-bold text-xs uppercase ${item.is_completed ? 'line-through text-[#8b9bb4]' : 'text-white'}`}>
+                      <span className={`font-bold text-xs uppercase ${item.is_labeled ? 'line-through text-[#8b9bb4]' : 'text-white'}`}>
                         {item.product_name}
                       </span>
                       <span className="px-2 py-0.2 rounded bg-white/10 text-white font-mono text-[10px] font-bold">
@@ -3452,13 +3591,13 @@ export default function PurchaseManager() {
                       type="button"
                       onClick={() => handleToggleChecklistDone(item.id)}
                       className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 uppercase ${
-                        item.is_completed
+                        item.is_labeled
                           ? 'bg-[#00ff9d] text-neutral-950 shadow-md font-extrabold'
                           : 'bg-white/10 text-white hover:bg-white/20'
                       }`}
                     >
                       <CheckCircle2 className="w-4 h-4" />
-                      <span>{item.is_completed ? 'LABELED' : 'MARK DONE'}</span>
+                      <span>{item.is_labeled ? 'LABELED' : 'MARK DONE'}</span>
                     </button>
                   </div>
                 </div>
