@@ -89,6 +89,8 @@ interface TaggingChecklistItem {
   variant_size: string;
   quantity: number;
   unit_cost: number;
+  transport_per_unit: number;
+  transport_total: number;
   landed_cost: number;
   store_price: number;
   mdp_price: number;
@@ -108,6 +110,11 @@ function getContrastTextColor(hexColor: string | null | undefined): string {
   const b = parseInt(hex.substring(4, 6), 16) || 0;
   const yiq = (r * 299 + g * 587 + b * 114) / 1000;
   return yiq >= 140 ? '#0B0F19' : '#FFFFFF';
+}
+
+function formatTransportPrice(value: number | string | null | undefined): string {
+  const amount = Number(value) || 0;
+  return amount.toFixed(2);
 }
 
 const BASE_FAMILY_PALETTE: { [key: string]: string } = {
@@ -2287,6 +2294,12 @@ export default function PurchaseManager() {
             variant_size: String(item.variant_size || ''),
             quantity: Number(item.quantity) || 0,
             unit_cost: Number(item.unit_cost) || 0,
+            transport_per_unit: Math.round(
+              Math.max(0, pricing.landedCost - (Number(item.unit_cost) || 0)) * 100
+            ) / 100,
+            transport_total: Math.round(
+              Math.max(0, (pricing.landedCost - (Number(item.unit_cost) || 0)) * (Number(item.quantity) || 0)) * 100
+            ) / 100,
             landed_cost: pricing.landedCost,
             store_price: pricing.storePrice,
             mdp_price: pricing.mdpPrice,
@@ -3493,7 +3506,7 @@ export default function PurchaseManager() {
       {/* 5. STICKER TAGGING CHECKLIST MODAL */}
       {isChecklistModalOpen && (
         <div className="fixed inset-0 z-[100020] p-3 sm:p-5 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in select-none">
-          <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-4xl w-full p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 max-h-[90vh] flex flex-col">
+          <div className="bg-[#101628] border-2 border-[#00d9ff]/30 rounded-3xl max-w-[1400px] w-[96vw] p-5 shadow-[0_0_40px_rgba(0,217,255,0.2)] space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-white/10 pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#00ff9d] to-[#00d9ff] text-neutral-950 flex items-center justify-center font-bold shadow">
@@ -3566,7 +3579,22 @@ export default function PurchaseManager() {
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-3 font-mono">
+                  <div className="flex items-center gap-2.5 font-mono flex-wrap justify-end">
+                    <div className="px-2.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-center">
+                      <span className="text-[8.5px] text-[#8b9bb4] block uppercase font-bold">COST PRICE</span>
+                      <strong className="text-xs font-black text-white">₹{item.unit_cost}</strong>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 rounded-xl bg-[#ff9f43]/10 border border-[#ff9f43]/25 text-center">
+                      <span className="text-[8.5px] text-[#ff9f43] block uppercase font-bold">TRANSPORT</span>
+                      <strong className="text-xs font-black text-[#ff9f43]">₹{formatTransportPrice(item.transport_per_unit)}</strong>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 rounded-xl bg-[#00d9ff]/10 border border-[#00d9ff]/20 text-center">
+                      <span className="text-[8.5px] text-[#00d9ff] block uppercase font-bold">LANDED PRICE</span>
+                      <strong className="text-xs font-black text-[#00d9ff]">₹{Math.round(Number(item.landed_cost) || 0)}</strong>
+                    </div>
+
                     <div className="px-3 py-1.5 rounded-xl bg-[#ffa500]/10 border border-[#ffa500]/30 text-center">
                       <span className="text-[8.5px] text-[#ffa500] block uppercase font-bold">STORE</span>
                       <strong className="text-sm font-black text-[#ffa500]">₹{item.store_price}</strong>
